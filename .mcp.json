@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-server-filesystem"],
+      "env": {
+        "ALLOWED_PATHS": "c:/11.gitlab/CadToolOnline,c:/11.gitlab/CADToolbox"
+      }
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-server-git"],
+      "env": {
+        "GIT_DIR": "c:/11.gitlab/CadToolOnline"
+      }
+    }
+  }
+}

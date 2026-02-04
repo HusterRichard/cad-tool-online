@@ -1,0 +1,17 @@
+{
+  "model": "claude-sonnet-4-5-20251101",
+  "timeout": 120000,
+  "max_tokens": 8192,
+  "temperature": 0.3,
+  "project": {
+    "name": "CadToolOnline",
+    "type": "vscode-extension"
+  },
+  "ignore_patterns": [
+    "node_modules/**",
+    "dist/**",
+    "wasm/**",
+    "**/*.wasm",
+    ".git/**"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "hooks": [
+    {
+      "event": "PreToolUse",
+      "matcher": {
+        "tool": "Write",
+        "path": "**/*.wasm"
+      },
+      "action": "block",
+      "message": "禁止直接写入 WASM 文件，请使用 pnpm build:wasm 命令"
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": {
+        "tool": "Write",
+        "path": ".claude/settings.json"
+      },
+      "action": "block",
+      "message": "settings.json 包含敏感信息，请手动编辑"
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": {
+        "tool": "Bash",
+        "command": "*sysplorer*"
+      },
+      "action": "block",
+      "message": "禁止引入 Sysplorer SDK 依赖"
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": {
+        "tool": "Write",
+        "path": "packages/chili-geo/cpp/**/*.cpp"
+      },
+      "action": "notify",
+      "message": "C++ 文件已修改，记得运行 pnpm build:wasm 重新编译"
+    },
+    {
+      "event": "Stop",
+      "action": "run",
+      "command": "echo '会话结束，记得提交代码'"
+    }
+  ]
+}
