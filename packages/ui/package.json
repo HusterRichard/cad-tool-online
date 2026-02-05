@@ -1,0 +1,29 @@
+{
+  "name": "@cadtool-online/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UI components for CadToolOnline",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@cadtool-online/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  }
+}

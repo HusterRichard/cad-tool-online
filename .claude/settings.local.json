@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(pnpm --filter @cadtool-online/vscode run compile:*)",
+      "Bash(pnpm --filter @cadtool-online/vscode run build:extension:*)"
+    ]
+  }
+}

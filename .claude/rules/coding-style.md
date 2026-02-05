@@ -20,6 +20,9 @@
 | 常量 | UPPER_SNAKE | `OCCT_MIN_ACCURACY` |
 | 文件 | kebab-case | `mbs-group.ts` |
 
+## 禁止规则
+- **禁止使用 `chili` 前缀**：文件名、目录名、包名均不允许使用 `chili-` 或 `chili` 前缀
+
 ## 注释
 - 只在"为什么"不明显时写注释，不解释"是什么"
 - 公共 API 必须有 JSDoc/Doxygen
