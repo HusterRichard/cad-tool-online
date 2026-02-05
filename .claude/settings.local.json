@@ -4,7 +4,18 @@
       "Bash(dir:*)",
       "Bash(findstr:*)",
       "Bash(pnpm --filter @cadtool-online/vscode run compile:*)",
-      "Bash(pnpm --filter @cadtool-online/vscode run build:extension:*)"
+      "Bash(pnpm --filter @cadtool-online/vscode run build:extension:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh repo view:*)",
+      "Bash(gh api:*)",
+      "Bash(curl:*)",
+      "Bash(more:*)",
+      "Bash(pnpm build:wasm:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(git add:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\11.gitlab\\CadToolOnline"
     ]
   }
 }

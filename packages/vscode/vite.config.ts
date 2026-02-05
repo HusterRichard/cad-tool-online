@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { copyFileSync, mkdirSync, existsSync } from 'fs';
+
+const wasmDir = resolve(__dirname, '../geo/wasm');
+const distWasmDir = resolve(__dirname, 'dist/wasm');
 
 export default defineConfig({
     build: {
@@ -17,7 +21,8 @@ export default defineConfig({
             }
         },
         sourcemap: true,
-        minify: 'esbuild'
+        minify: 'esbuild',
+        emptyOutDir: false
     },
     resolve: {
         alias: {
@@ -26,5 +31,24 @@ export default defineConfig({
             '@cadtool-online/three': resolve(__dirname, '../three/src'),
             '@cadtool-online/ui': resolve(__dirname, '../ui/src')
         }
-    }
+    },
+    plugins: [
+        {
+            name: 'copy-wasm',
+            closeBundle() {
+                if (!existsSync(distWasmDir)) {
+                    mkdirSync(distWasmDir, { recursive: true });
+                }
+                const wasmFiles = ['cad-geo.js', 'cad-geo.wasm', 'cad-geo.d.ts'];
+                for (const file of wasmFiles) {
+                    const src = resolve(wasmDir, file);
+                    const dest = resolve(distWasmDir, file);
+                    if (existsSync(src)) {
+                        copyFileSync(src, dest);
+                        console.log(`Copied ${file} to dist/wasm/`);
+                    }
+                }
+            }
+        }
+    ]
 });

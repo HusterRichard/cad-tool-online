@@ -1,43 +1,43 @@
 #!/bin/bash
-# Build script for chili-geo WASM module
-# Prerequisites: Emscripten SDK installed and activated
+# Build script for cad-geo WASM module
+# Prerequisites: Run setup_wasm_deps.mjs first
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
-OUTPUT_DIR="${SCRIPT_DIR}/../wasm"
+EMSDK_DIR="${BUILD_DIR}/emsdk"
 
-echo "=== Building chili-geo WASM module ==="
+echo "=== Building cad-geo WASM module ==="
 
-# Check Emscripten
-if ! command -v emcc &> /dev/null; then
-    echo "Error: Emscripten not found. Please install and activate emsdk first."
-    echo "  git clone https://github.com/emscripten-core/emsdk.git"
-    echo "  cd emsdk && ./emsdk install latest && ./emsdk activate latest"
-    echo "  source ./emsdk_env.sh"
+# Check if dependencies are set up
+if [ ! -d "${EMSDK_DIR}" ]; then
+    echo "Error: Emscripten SDK not found. Please run setup first:"
+    echo "  pnpm setup:wasm"
     exit 1
 fi
 
-# Create build directory
-mkdir -p "${BUILD_DIR}"
-cd "${BUILD_DIR}"
+if [ ! -d "${BUILD_DIR}/occt" ]; then
+    echo "Error: OCCT not found. Please run setup first:"
+    echo "  pnpm setup:wasm"
+    exit 1
+fi
 
-# Configure with CMake
-echo "Configuring..."
-emcmake cmake .. \
-    -DCMAKE_BUILD_TYPE=Release
+# Activate Emscripten
+echo "Activating Emscripten..."
+source "${EMSDK_DIR}/emsdk_env.sh"
 
-# Build
-echo "Building..."
-emmake make -j$(nproc 2>/dev/null || echo 4)
+cd "${SCRIPT_DIR}"
 
-# Copy output
-echo "Copying output files..."
-mkdir -p "${OUTPUT_DIR}"
-cp chili-geo.js chili-geo.wasm "${OUTPUT_DIR}/"
+# Build type (default: release)
+BUILD_TYPE="${1:-release}"
+
+echo "Building ${BUILD_TYPE} configuration..."
+
+# Configure and build using CMake presets
+cmake --preset "${BUILD_TYPE}"
+cmake --build --preset "${BUILD_TYPE}"
 
 echo "=== Build completed ==="
-echo "Output files:"
-echo "  ${OUTPUT_DIR}/chili-geo.js"
-echo "  ${OUTPUT_DIR}/chili-geo.wasm"
+echo "Output files in: ${SCRIPT_DIR}/../wasm/"
+ls -la "${SCRIPT_DIR}/../wasm/"

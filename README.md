@@ -34,8 +34,9 @@ CadToolOnline/
 ### WASM 编译（可选）
 
 如需重新编译 OCCT WASM 模块：
-- Emscripten SDK (emsdk)
-- CMake >= 3.20
+- CMake >= 3.30
+- Ninja 构建系统
+- Git
 
 ## 快速开始
 
@@ -97,37 +98,58 @@ pnpm --filter cadtool-online package
 
 ## WASM 模块编译
 
-几何计算模块使用 OpenCASCADE 编译为 WebAssembly。
+几何计算模块使用 OpenCASCADE V8_0_0_rc3 编译为 WebAssembly。
 
-### 1. 安装 Emscripten
-
-```bash
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk
-./emsdk install latest
-./emsdk activate latest
-source ./emsdk_env.sh  # Windows: emsdk_env.bat
-```
-
-### 2. 安装 WASM 依赖
+### 1. 安装 WASM 依赖
 
 ```bash
-pnpm run setup:wasm-deps
+pnpm setup:wasm
 ```
 
-### 3. 编译 WASM
+此命令会自动：
+1. 克隆 Emscripten SDK (v4.0.8)
+2. 克隆 OCCT V8_0_0_rc3 源码
+3. 安装并激活 Emscripten
+
+### 2. 编译 WASM
+
+**Release 构建（推荐）：**
+```bash
+pnpm build:wasm
+```
+
+**Debug 构建：**
+```bash
+pnpm build:wasm:debug
+```
+
+**或使用构建脚本：**
 
 ```bash
 cd packages/geo/cpp
 
 # Linux/macOS
-./build_wasm.sh
+./build_wasm.sh release
 
 # Windows
-build_wasm.bat
+build_wasm.bat release
 ```
 
-编译产物将输出到 `packages/geo/wasm/` 目录。
+### 3. 编译产物
+
+编译产物输出到 `packages/geo/wasm/` 目录：
+- `cad-geo.js` - ES6 模块加载器
+- `cad-geo.wasm` - WebAssembly 二进制
+- `cad-geo.d.ts` - TypeScript 类型定义
+
+### 4. 包含的 OCCT 模块
+
+- **FoundationClasses**: TKernel, TKMath
+- **ModelingData**: TKG2d, TKG3d, TKGeomBase, TKBRep
+- **ModelingAlgorithms**: TKGeomAlgo, TKTopAlgo, TKPrim, TKBO, TKBool, TKHLR, TKFillet, TKOffset, TKFeat, TKMesh, TKShHealing
+- **Visualization**: TKService, TKV3d
+- **ApplicationFramework**: TKCDF, TKLCAF, TKCAF, TKStdL, TKStd, TKVCAF, TKBin, TKBinL
+- **DataExchange**: TKDE, TKXSBase, TKXCAF, TKDESTEP, TKDEIGES, TKDESTL
 
 ## VSCode 插件使用
 

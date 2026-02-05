@@ -10,7 +10,9 @@
     "lint": "eslint packages --ext .ts,.tsx",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",
     "clean": "pnpm -r clean",
-    "setup:wasm-deps": "node scripts/setup_wasm_deps.mjs"
+    "setup:wasm": "node scripts/setup_wasm_deps.mjs",
+    "build:wasm": "cd packages/geo/cpp && cmake --preset release && cmake --build --preset release",
+    "build:wasm:debug": "cd packages/geo/cpp && cmake --preset debug && cmake --build --preset debug"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

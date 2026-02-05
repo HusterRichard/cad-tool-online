@@ -27,7 +27,7 @@
     "dev": "tsc --watch",
     "clean": "rimraf dist",
     "vscode:prepublish": "pnpm run build",
-    "package": "vsce package --no-dependencies"
+    "package": "pnpm run build && vsce package --no-dependencies"
   },
   "dependencies": {
     "@cadtool-online/core": "workspace:*",

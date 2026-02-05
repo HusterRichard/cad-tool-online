@@ -1,7 +1,6 @@
 node_modules
 dist
-wasm
-*.wasm
 .vscode
 .git
 *.vsix
+packages/geo/cpp/build/
