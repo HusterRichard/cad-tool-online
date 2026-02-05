@@ -53,7 +53,10 @@ pnpm install
 ### 2. 构建项目
 
 ```bash
-# 构建所有模块
+# 全量构建（WASM + TypeScript，首次构建或 WASM 有变更时使用）
+pnpm build:all
+
+# 仅构建 TypeScript 模块（WASM 无变更时使用）
 pnpm build
 
 # 或单独构建某个模块
