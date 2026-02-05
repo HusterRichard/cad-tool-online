@@ -111,6 +111,11 @@ interface EmbindModule {
   hasShape(_0: EmbindString): boolean;
   clearShapes(): void;
   getShapeCount(): number;
+  readStepFromBuffer(_0: EmbindString, _1: EmbindString): string;
+  meshShape(_0: EmbindString, _1: number, _2: number): string;
+  meshShapeDefault(_0: EmbindString): string;
+  calculateMassProperties(_0: EmbindString, _1: number): string;
+  calculateMassPropertiesDefault(_0: EmbindString): string;
 }
 
 export type MainModule = WasmModule & EmbindModule;
