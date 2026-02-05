@@ -1,5 +1,5 @@
 {
-  "name": "@cadtool-online/vscode",
+  "name": "cadtool-online",
   "version": "0.1.0",
   "private": true,
   "displayName": "CadToolOnline",
