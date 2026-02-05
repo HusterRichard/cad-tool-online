@@ -22,6 +22,7 @@ const vscode = acquireVsCodeApi();
 
 let viewer: ThreeViewer | null = null;
 let occt: OcctWrapper | null = null;
+let occtInitPromise: Promise<void> | null = null;
 let isInitialized = false;
 
 // Loaded shapes tracking
@@ -66,6 +67,27 @@ function hideLoading(): void {
     const overlay = document.getElementById('loading-overlay');
     if (overlay) {
         overlay.classList.add('hidden');
+    }
+    // Reset progress bar
+    const progressContainer = document.getElementById('progress-container');
+    if (progressContainer) {
+        progressContainer.style.display = 'none';
+    }
+}
+
+function showProgress(percent: number, text?: string): void {
+    const progressContainer = document.getElementById('progress-container');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+    }
+    if (progressFill) {
+        progressFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+    }
+    if (progressText) {
+        progressText.textContent = text || `${Math.round(percent)}%`;
     }
 }
 
@@ -195,9 +217,16 @@ function selectShape(shapeId: string): void {
 async function initOcct(): Promise<void> {
     if (occt && occt.isInitialized()) return;
 
+    // If initialization is already in progress, wait for it
+    if (occtInitPromise) {
+        await occtInitPromise;
+        return;
+    }
+
     setStatus('Initializing OCCT...');
     occt = new OcctWrapper();
-    await occt.initialize();
+    occtInitPromise = occt.initialize();
+    await occtInitPromise;
     setStatus('Ready');
 }
 
@@ -206,12 +235,19 @@ async function initOcct(): Promise<void> {
 // ============================================================================
 
 async function loadStepFile(fileName: string, base64Content: string): Promise<void> {
-    if (!occt) {
-        await initOcct();
-    }
+    console.log('[loadStepFile] Starting to load:', fileName);
+
+    // Always wait for OCCT to be fully initialized
+    await initOcct();
+    console.log('[loadStepFile] OCCT initialized');
 
     showLoading(`Loading ${fileName}...`);
+    showProgress(0, 'Decoding file...');
     setStatus(`Loading ${fileName}...`);
+
+    // Yield to allow UI to update
+    await new Promise(resolve => setTimeout(resolve, 10));
+    console.log('[loadStepFile] UI updated, starting decode');
 
     try {
         // Decode base64 to ArrayBuffer
@@ -221,20 +257,33 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
             bytes[i] = binaryString.charCodeAt(i);
         }
         const arrayBuffer = bytes.buffer;
+        console.log('[loadStepFile] Decoded base64, size:', arrayBuffer.byteLength);
+
+        showProgress(10, 'Parsing STEP file...');
+        // Yield to allow UI to update before heavy WASM call
+        await new Promise(resolve => setTimeout(resolve, 10));
+        console.log('[loadStepFile] Calling readStep...');
 
         // Read STEP file
         const baseId = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_');
         const result: StepReadResult = await occt!.readStep(arrayBuffer, baseId);
+        console.log('[loadStepFile] readStep result:', result);
 
         if (!result.success) {
             throw new Error(result.error || 'Failed to read STEP file');
         }
 
-        setStatus(`Generating mesh for ${result.shapeIds.length} shapes...`);
+        showProgress(30, `Generating mesh (0/${result.shapes.length})...`);
+        setStatus(`Generating mesh for ${result.shapes.length} shapes...`);
+        // Yield to allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 10));
+        console.log('[loadStepFile] Starting mesh generation for', result.shapes.length, 'shapes');
 
         // Generate meshes and add to viewer
         let addedCount = 0;
-        for (const shapeId of result.shapeIds) {
+        const totalShapes = result.shapes.length;
+        for (let i = 0; i < totalShapes; i++) {
+            const shapeId = result.shapes[i];
             const meshData = occt!.getMesh(shapeId);
             if (meshData && meshData.vertices.length > 0) {
                 // Add to viewer
@@ -251,7 +300,18 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
 
                 addedCount++;
             }
+
+            // Update progress (30% to 90% for mesh generation)
+            const meshProgress = 30 + ((i + 1) / totalShapes) * 60;
+            showProgress(meshProgress, `Generating mesh (${i + 1}/${totalShapes})...`);
+
+            // Yield to UI thread periodically
+            if (i % 10 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
+
+        showProgress(95, 'Finalizing...');
 
         // Fit view to show all shapes
         if (viewer && addedCount > 0) {
@@ -260,12 +320,13 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
 
         // Update UI
         updateModelTree();
+        showProgress(100, 'Complete');
         setStatus('Ready');
         setStatusInfo(`${addedCount} shapes loaded`);
 
         // Select first shape
-        if (result.shapeIds.length > 0) {
-            selectShape(result.shapeIds[0]);
+        if (result.shapes.length > 0) {
+            selectShape(result.shapes[0]);
         }
 
         vscode.postMessage({

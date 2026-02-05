@@ -175,7 +175,7 @@ export class CadEditorPanel {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src ${webview.cspSource} data:; connect-src ${webview.cspSource};">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src ${webview.cspSource} data:; connect-src ${webview.cspSource};">
     <title>CAD Editor</title>
     <style>
         * {
@@ -350,6 +350,29 @@ export class CadEditorPanel {
             margin-top: 12px;
             color: #cccccc;
         }
+        .progress-container {
+            width: 200px;
+            margin-top: 12px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #3c3c3c;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007acc;
+            border-radius: 3px;
+            transition: width 0.2s ease;
+            width: 0%;
+        }
+        .progress-text {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #808080;
+        }
     </style>
 </head>
 <body>
@@ -379,6 +402,12 @@ export class CadEditorPanel {
                 <div style="text-align: center;">
                     <div class="loading-spinner"></div>
                     <div class="loading-text" id="loading-text">Loading...</div>
+                    <div class="progress-container" id="progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">0%</div>
+                    </div>
                 </div>
             </div>
             <div class="status-bar">

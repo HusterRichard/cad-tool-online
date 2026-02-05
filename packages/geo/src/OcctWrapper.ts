@@ -60,7 +60,22 @@ export class OcctWrapper implements IOcctWrapper {
             // Dynamic import of WASM module
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const CadGeoFactory = (await import('../wasm/cad-geo.js' as any)).default;
-            wasmModule = await CadGeoFactory();
+
+            // Configure WASM file location for VSCode webview
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const wasmBaseUrl = (globalThis as any).WASM_BASE_URL;
+            const moduleConfig: Record<string, unknown> = {};
+
+            if (wasmBaseUrl) {
+                moduleConfig.locateFile = (path: string) => {
+                    if (path.endsWith('.wasm')) {
+                        return `${wasmBaseUrl}/${path}`;
+                    }
+                    return path;
+                };
+            }
+
+            wasmModule = await CadGeoFactory(moduleConfig);
             this.initialized = true;
         } catch (error) {
             console.error('Failed to initialize OCCT WASM module:', error);
