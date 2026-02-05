@@ -1,54 +1,55 @@
 @echo off
-REM Build script for chili-geo WASM module (Windows)
-REM Prerequisites: Emscripten SDK installed and activated
+REM Build script for cad-geo WASM module (Windows)
+REM Prerequisites: Run setup_wasm_deps.mjs first
 
 setlocal enabledelayedexpansion
 
 set SCRIPT_DIR=%~dp0
 set BUILD_DIR=%SCRIPT_DIR%build
-set OUTPUT_DIR=%SCRIPT_DIR%..\wasm
+set EMSDK_DIR=%BUILD_DIR%\emsdk
 
-echo === Building chili-geo WASM module ===
+echo === Building cad-geo WASM module ===
 
-REM Check Emscripten
-where emcc >nul 2>nul
-if %errorlevel% neq 0 (
-    echo Error: Emscripten not found. Please install and activate emsdk first.
-    echo   git clone https://github.com/emscripten-core/emsdk.git
-    echo   cd emsdk ^&^& emsdk install latest ^&^& emsdk activate latest
-    echo   emsdk_env.bat
+REM Check if dependencies are set up
+if not exist "%EMSDK_DIR%" (
+    echo Error: Emscripten SDK not found. Please run setup first:
+    echo   pnpm setup:wasm
     exit /b 1
 )
 
-REM Create build directory
-if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
-cd /d "%BUILD_DIR%"
+if not exist "%BUILD_DIR%\occt" (
+    echo Error: OCCT not found. Please run setup first:
+    echo   pnpm setup:wasm
+    exit /b 1
+)
 
-REM Configure with CMake
-echo Configuring...
-call emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+REM Activate Emscripten
+echo Activating Emscripten...
+call "%EMSDK_DIR%\emsdk_env.bat"
+
+cd /d "%SCRIPT_DIR%"
+
+REM Build type (default: release)
+set BUILD_TYPE=%1
+if "%BUILD_TYPE%"=="" set BUILD_TYPE=release
+
+echo Building %BUILD_TYPE% configuration...
+
+REM Configure and build using CMake presets
+cmake --preset %BUILD_TYPE%
 if %errorlevel% neq 0 (
     echo CMake configuration failed
     exit /b 1
 )
 
-REM Build
-echo Building...
-call emmake mingw32-make -j4
+cmake --build --preset %BUILD_TYPE%
 if %errorlevel% neq 0 (
     echo Build failed
     exit /b 1
 )
 
-REM Copy output
-echo Copying output files...
-if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
-copy /y chili-geo.js "%OUTPUT_DIR%\"
-copy /y chili-geo.wasm "%OUTPUT_DIR%\"
-
 echo === Build completed ===
-echo Output files:
-echo   %OUTPUT_DIR%\chili-geo.js
-echo   %OUTPUT_DIR%\chili-geo.wasm
+echo Output files in: %SCRIPT_DIR%..\wasm\
+dir "%SCRIPT_DIR%..\wasm\"
 
 endlocal

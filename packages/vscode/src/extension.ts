@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CadEditorPanel } from './webview/CadEditorPanel';
+import { CadEditorPanel } from './panels/CadEditorPanel';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('CadToolOnline extension is now active');

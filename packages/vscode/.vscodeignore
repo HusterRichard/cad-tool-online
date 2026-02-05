@@ -1,0 +1,27 @@
+# Exclude source files
+src/**
+*.ts
+!*.d.ts
+tsconfig.json
+
+# Exclude build config
+vite.config.ts
+
+# Exclude dev dependencies
+node_modules/**
+
+# Exclude test files
+**/*.spec.ts
+**/*.test.ts
+
+# Exclude git
+.git/**
+.gitignore
+
+# Include dist folder (extension + webview + wasm)
+!dist/**
+
+# Exclude unnecessary files
+*.map
+.eslintrc*
+.prettierrc*
