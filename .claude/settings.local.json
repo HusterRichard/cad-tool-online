@@ -12,7 +12,11 @@
       "Bash(more:*)",
       "Bash(pnpm build:wasm:*)",
       "Bash(pnpm run build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(pnpm run build:ts:*)",
+      "Bash(grep:*)",
+      "Bash(Select-Object -First 50)",
+      "Bash(pnpm build:*)"
     ],
     "additionalDirectories": [
       "c:\\11.gitlab\\CadToolOnline"

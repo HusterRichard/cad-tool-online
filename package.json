@@ -6,6 +6,7 @@
   "description": "Online CAD tool for multi-body dynamics design",
   "scripts": {
     "build": "pnpm -r build",
+    "build:all": "pnpm build:wasm && pnpm build",
     "dev": "pnpm -r --parallel dev",
     "lint": "eslint packages --ext .ts,.tsx",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",

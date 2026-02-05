@@ -1,10 +1,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MeshData } from '@cadtool-online/core';
+import { SelectionManager, type SelectionCallback, type SelectionOptions } from './SelectionManager';
+import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
+import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
 
 export interface ThreeViewerOptions {
     backgroundColor?: number;
     antialias?: boolean;
+    enableSelection?: boolean;
+    selectionOptions?: SelectionOptions;
+    frameOptions?: FrameVisualizerOptions;
+    jointOptions?: JointVisualizerOptions;
 }
 
 export class ThreeViewer {
@@ -14,6 +21,11 @@ export class ThreeViewer {
     private controls: OrbitControls;
     private container: HTMLElement;
     private meshes: Map<string, THREE.Mesh> = new Map();
+
+    // MBS 可视化组件
+    private selectionManager: SelectionManager | null = null;
+    private frameVisualizer: FrameVisualizer;
+    private jointVisualizer: JointVisualizer;
 
     constructor(container: HTMLElement, options: ThreeViewerOptions = {}) {
         this.container = container;
@@ -41,6 +53,19 @@ export class ThreeViewer {
 
         this.setupLights();
         this.setupGrid();
+
+        // MBS 可视化组件
+        if (options.enableSelection !== false) {
+            this.selectionManager = new SelectionManager(
+                this.scene,
+                this.camera,
+                this.renderer.domElement,
+                options.selectionOptions
+            );
+        }
+        this.frameVisualizer = new FrameVisualizer(this.scene, options.frameOptions);
+        this.jointVisualizer = new JointVisualizer(this.scene, options.jointOptions);
+
         this.animate();
 
         // Handle resize
@@ -99,12 +124,22 @@ export class ThreeViewer {
         this.scene.add(mesh);
         this.meshes.set(id, mesh);
 
+        // 注册到选择管理器
+        if (this.selectionManager) {
+            this.selectionManager.registerObject(id, mesh);
+        }
+
         return mesh;
     }
 
     removeMesh(id: string): void {
         const mesh = this.meshes.get(id);
         if (mesh) {
+            // 从选择管理器注销
+            if (this.selectionManager) {
+                this.selectionManager.unregisterObject(id);
+            }
+
             this.scene.remove(mesh);
             mesh.geometry.dispose();
             if (mesh.material instanceof THREE.Material) {
@@ -142,7 +177,152 @@ export class ThreeViewer {
     dispose(): void {
         window.removeEventListener('resize', this.onResize.bind(this));
         this.meshes.forEach((_mesh, id) => this.removeMesh(id));
+        this.selectionManager?.dispose();
+        this.frameVisualizer.dispose();
+        this.jointVisualizer.dispose();
         this.renderer.dispose();
         this.controls.dispose();
+    }
+
+    // ========================================================================
+    // 选择管理 API
+    // ========================================================================
+
+    /**
+     * 选择对象
+     */
+    select(id: string): void {
+        this.selectionManager?.select(id);
+    }
+
+    /**
+     * 取消选择
+     */
+    deselect(id: string): void {
+        this.selectionManager?.deselect(id);
+    }
+
+    /**
+     * 清除所有选择
+     */
+    clearSelection(): void {
+        this.selectionManager?.clearSelection();
+    }
+
+    /**
+     * 获取选中的对象 ID
+     */
+    getSelectedIds(): string[] {
+        return this.selectionManager?.getSelectedIds() ?? [];
+    }
+
+    /**
+     * 监听选择变化
+     */
+    onSelectionChange(callback: SelectionCallback): void {
+        this.selectionManager?.onSelectionChange(callback);
+    }
+
+    // ========================================================================
+    // 标架可视化 API
+    // ========================================================================
+
+    /**
+     * 添加标架
+     */
+    addFrame(data: FrameData): THREE.Group {
+        return this.frameVisualizer.addFrame(data);
+    }
+
+    /**
+     * 更新标架
+     */
+    updateFrame(data: FrameData): void {
+        this.frameVisualizer.updateFrame(data);
+    }
+
+    /**
+     * 移除标架
+     */
+    removeFrame(id: string): void {
+        this.frameVisualizer.removeFrame(id);
+    }
+
+    /**
+     * 设置标架可见性
+     */
+    setFrameVisible(id: string, visible: boolean): void {
+        this.frameVisualizer.setFrameVisible(id, visible);
+    }
+
+    /**
+     * 设置所有标架可见性
+     */
+    setAllFramesVisible(visible: boolean): void {
+        this.frameVisualizer.setAllFramesVisible(visible);
+    }
+
+    // ========================================================================
+    // 关节可视化 API
+    // ========================================================================
+
+    /**
+     * 添加关节
+     */
+    addJoint(data: JointData): THREE.Group {
+        return this.jointVisualizer.addJoint(data);
+    }
+
+    /**
+     * 更新关节
+     */
+    updateJoint(data: JointData): void {
+        this.jointVisualizer.updateJoint(data);
+    }
+
+    /**
+     * 移除关节
+     */
+    removeJoint(id: string): void {
+        this.jointVisualizer.removeJoint(id);
+    }
+
+    /**
+     * 设置关节可见性
+     */
+    setJointVisible(id: string, visible: boolean): void {
+        this.jointVisualizer.setJointVisible(id, visible);
+    }
+
+    /**
+     * 设置所有关节可见性
+     */
+    setAllJointsVisible(visible: boolean): void {
+        this.jointVisualizer.setAllJointsVisible(visible);
+    }
+
+    // ========================================================================
+    // 场景访问
+    // ========================================================================
+
+    /**
+     * 获取 Three.js 场景
+     */
+    getScene(): THREE.Scene {
+        return this.scene;
+    }
+
+    /**
+     * 获取相机
+     */
+    getCamera(): THREE.PerspectiveCamera {
+        return this.camera;
+    }
+
+    /**
+     * 获取渲染器
+     */
+    getRenderer(): THREE.WebGLRenderer {
+        return this.renderer;
     }
 }
