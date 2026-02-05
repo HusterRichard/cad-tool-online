@@ -27,7 +27,7 @@ CadToolOnline/
 
 ## 环境要求
 
-- Node.js >= 18.0.0
+- Node.js >= 20.0.0
 - pnpm >= 8.0.0
 - VSCode >= 1.85.0
 
@@ -75,6 +75,25 @@ pnpm lint
 # Prettier 格式化
 pnpm format
 ```
+
+### 5. 调试插件
+
+1. 在 VSCode 中打开本项目
+2. 按 `F5` 启动调试（或点击"运行和调试"面板中的"Run Extension"）
+3. 将自动打开一个新的 VSCode 窗口（Extension Development Host）
+4. 在新窗口中按 `Ctrl+Shift+P`，输入 `CadToolOnline: Open CAD Editor` 启动插件
+
+### 6. 打包 VSIX
+
+```bash
+pnpm --filter cadtool-online package
+```
+
+打包完成后，将在 `packages/vscode/` 目录生成 `cadtool-online-x.x.x.vsix` 文件。
+
+安装 VSIX 文件：
+- 方式一：在 VSCode 中按 `Ctrl+Shift+P`，输入 `Extensions: Install from VSIX...`，选择生成的 .vsix 文件
+- 方式二：命令行执行 `code --install-extension cadtool-online-x.x.x.vsix`
 
 ## WASM 模块编译
 
