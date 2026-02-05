@@ -1,0 +1,45 @@
+{
+  "name": "@cadtool-online/vscode",
+  "version": "0.1.0",
+  "private": true,
+  "displayName": "CadToolOnline",
+  "description": "Online CAD tool for multi-body dynamics design",
+  "publisher": "cadtool",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cadtool-online.openEditor",
+        "title": "Open CAD Editor",
+        "category": "CadToolOnline"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc && vite build",
+    "build:extension": "tsc",
+    "build:webview": "vite build",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist",
+    "vscode:prepublish": "pnpm run build",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@cadtool-online/core": "workspace:*",
+    "@cadtool-online/geo": "workspace:*",
+    "@cadtool-online/three": "workspace:*",
+    "@cadtool-online/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0",
+    "vite": "^5.4.0"
+  }
+}

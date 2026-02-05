@@ -1,92 +1,182 @@
 # CadToolOnline
 
+基于 Web 技术的在线 CAD 工具，专注于多体动力学（MBS）设计与仿真。作为 VSCode 插件运行，提供 STEP 文件导入、3D 可视化、刚体组定义、运动副创建等功能。
 
+## 项目特性
 
-## Getting started
+- **STEP 文件导入**: 基于 OpenCASCADE WASM 实现浏览器端 STEP 文件解析
+- **3D 可视化**: 使用 Three.js 进行高性能 3D 渲染
+- **多体动力学建模**: 支持刚体组、运动副、驱动等 MBS 元素定义
+- **VSCode 集成**: 作为 VSCode 插件运行，与 Modelica 开发环境无缝集成
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## 项目结构
 
 ```
-cd existing_repo
-git remote add origin https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline.git
-git branch -M main
-git push -uf origin main
+CadToolOnline/
+├── packages/
+│   ├── core/                 # 核心数据模型和类型定义
+│   ├── geo/                  # 几何计算模块 (OCCT WASM)
+│   ├── three/                # Three.js 渲染模块
+│   ├── ui/                   # UI 组件
+│   └── vscode/               # VSCode 插件入口
+├── scripts/                  # 构建脚本
+├── package.json
+├── pnpm-workspace.yaml
+└── tsconfig.json
 ```
 
-## Integrate with your tools
+## 环境要求
 
-- [ ] [Set up project integrations](https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/settings/integrations)
+- Node.js >= 18.0.0
+- pnpm >= 8.0.0
+- VSCode >= 1.85.0
 
-## Collaborate with your team
+### WASM 编译（可选）
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+如需重新编译 OCCT WASM 模块：
+- Emscripten SDK (emsdk)
+- CMake >= 3.20
 
-## Test and Deploy
+## 快速开始
 
-Use the built-in continuous integration in GitLab.
+### 1. 安装依赖
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```bash
+# 安装 pnpm（如未安装）
+npm install -g pnpm
 
-***
+# 安装项目依赖
+pnpm install
+```
 
-# Editing this README
+### 2. 构建项目
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+# 构建所有模块
+pnpm build
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+# 或单独构建某个模块
+pnpm --filter @cadtool-online/core build
+```
 
-## Name
-Choose a self-explaining name for your project.
+### 3. 开发模式
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```bash
+# 启动所有模块的监听模式
+pnpm dev
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### 4. 代码检查与格式化
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```bash
+# ESLint 检查
+pnpm lint
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+# Prettier 格式化
+pnpm format
+```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## WASM 模块编译
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+几何计算模块使用 OpenCASCADE 编译为 WebAssembly。
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### 1. 安装 Emscripten
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+git clone https://github.com/emscripten-core/emsdk.git
+cd emsdk
+./emsdk install latest
+./emsdk activate latest
+source ./emsdk_env.sh  # Windows: emsdk_env.bat
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+### 2. 安装 WASM 依赖
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+pnpm run setup:wasm-deps
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### 3. 编译 WASM
 
-## License
-For open source projects, say how it is licensed.
+```bash
+cd packages/geo/cpp
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+# Linux/macOS
+./build_wasm.sh
+
+# Windows
+build_wasm.bat
+```
+
+编译产物将输出到 `packages/geo/wasm/` 目录。
+
+## VSCode 插件使用
+
+1. 在 VSCode 中打开项目
+2. 按 `F5` 启动调试
+3. 在新窗口中按 `Ctrl+Shift+P`，输入 `CadToolOnline: Open CAD Editor`
+
+## 模块说明
+
+### core
+
+核心数据模型，包含：
+- `MbsGroup`: 刚体组定义
+- `MbsFrame` / `MbsMarker`: 坐标系和标记点
+- `MbsJoint`: 运动副（转动副、移动副、圆柱副等）
+- `MbsMotion`: 驱动定义
+
+### geo
+
+几何计算模块，封装 OpenCASCADE WASM：
+- STEP 文件读取
+- 网格生成（三角化）
+- 质量属性计算（质量、质心、惯性矩阵）
+
+### three
+
+Three.js 渲染模块：
+- 3D 场景管理
+- 网格渲染
+- 相机控制（OrbitControls）
+
+### ui
+
+UI 组件：
+- 模型树面板
+- 属性面板
+- 工具栏
+
+### vscode
+
+VSCode 插件：
+- WebView 面板管理
+- 与 VSCode API 交互
+- 文件系统访问
+
+## 技术栈
+
+- **语言**: TypeScript
+- **构建工具**: Vite, tsc
+- **包管理**: pnpm (monorepo)
+- **3D 渲染**: Three.js
+- **几何内核**: OpenCASCADE (WASM)
+- **IDE 集成**: VSCode Extension API
+
+## 开发路线
+
+- [x] 阶段一：基础设施搭建
+- [ ] 阶段二：OCCT WASM 编译与集成
+- [ ] 阶段三：核心功能实现
+- [ ] 阶段四：VSCode 插件完善
+- [ ] 阶段五：测试与优化
+
+## 许可证
+
+内部项目，仅供内部使用。
+
+## 相关项目
+
+- [chili3d](https://github.com/nicholasdavies/chili3d) - 参考项目
+- [OpenCASCADE](https://www.opencascade.com/) - 几何内核
+- [Three.js](https://threejs.org/) - 3D 渲染库
