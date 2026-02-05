@@ -76,3 +76,6 @@ export class PropertyPanel extends Panel {
         this.element.classList.add('property-panel');
     }
 }
+
+// MBS Panels
+export * from './MbsPanels';
