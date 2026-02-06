@@ -333,6 +333,7 @@ export class CadEditorPanel {
             flex: 1;
             width: 100%;
             position: relative;
+            background: linear-gradient(to bottom, #96a0aa 0%, #dce1e6 100%);
         }
         /* Ribbon Bar Styles */
         .ribbon-bar {
@@ -466,6 +467,9 @@ export class CadEditorPanel {
             opacity: 0.8;
         }
         /* Model tree styles */
+        .tree-node-container {
+            display: block;
+        }
         .tree-node {
             padding: 4px 8px;
             cursor: pointer;
@@ -478,6 +482,34 @@ export class CadEditorPanel {
         }
         .tree-node.selected {
             background-color: #094771;
+        }
+        .tree-node .expand-btn {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: pointer;
+            user-select: none;
+            color: #888;
+        }
+        .tree-node .expand-btn:hover {
+            color: #ccc;
+        }
+        .tree-node .visibility-btn {
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+            opacity: 0.7;
+        }
+        .tree-node .visibility-btn:hover {
+            opacity: 1;
         }
         .tree-node .icon {
             width: 16px;
@@ -492,6 +524,12 @@ export class CadEditorPanel {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+        .tree-children {
+            display: none;
+        }
+        .tree-children.expanded {
+            display: block;
         }
         /* Properties styles */
         .property-row {

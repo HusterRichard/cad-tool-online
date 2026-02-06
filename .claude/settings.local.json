@@ -22,7 +22,7 @@
       "Bash(pnpm -r build:*)"
     ],
     "additionalDirectories": [
-      "c:\\11.gitlab\\CadToolOnline"
+      "E:\\04.work_code\\CadToolOnline"
     ]
   }
 }

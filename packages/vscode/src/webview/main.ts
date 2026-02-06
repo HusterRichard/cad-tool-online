@@ -25,13 +25,21 @@ let occt: OcctWrapper | null = null;
 let occtInitPromise: Promise<void> | null = null;
 let isInitialized = false;
 
-// Loaded shapes tracking
+// Loaded shapes tracking with hierarchy support
 interface LoadedShape {
     id: string;
     name: string;
+    type: 'assembly' | 'part' | 'solid';
+    shapeId?: string;
+    meshId?: string;
     meshData?: MeshData;
+    color?: string;
+    children?: LoadedShape[];
+    visible: boolean;
+    parent?: LoadedShape;
 }
 const loadedShapes: Map<string, LoadedShape> = new Map();
+const rootShapes: LoadedShape[] = [];
 let selectedShapeId: string | null = null;
 
 // ============================================================================
@@ -95,35 +103,179 @@ function updateModelTree(): void {
     const treeEl = document.getElementById('model-tree');
     if (!treeEl) return;
 
-    if (loadedShapes.size === 0) {
+    if (rootShapes.length === 0) {
         treeEl.innerHTML = '<div style="color: #808080; font-style: italic;">No model loaded</div>';
         return;
     }
 
     treeEl.innerHTML = '';
-    loadedShapes.forEach((shape, id) => {
-        const node = document.createElement('div');
-        node.className = 'tree-node';
-        if (id === selectedShapeId) {
-            node.classList.add('selected');
-        }
-        node.dataset.shapeId = id;
-
-        const icon = document.createElement('span');
-        icon.className = 'icon';
-        icon.textContent = '📦';
-
-        const name = document.createElement('span');
-        name.className = 'name';
-        name.textContent = shape.name;
-
-        node.appendChild(icon);
-        node.appendChild(name);
-
-        node.addEventListener('click', () => selectShape(id));
-
-        treeEl.appendChild(node);
+    rootShapes.forEach(shape => {
+        const nodeEl = createTreeNode(shape, 0);
+        treeEl.appendChild(nodeEl);
     });
+}
+
+function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'tree-node-container';
+    container.style.marginLeft = `${level * 16}px`;
+
+    const node = document.createElement('div');
+    node.className = 'tree-node';
+    if (shape.id === selectedShapeId) {
+        node.classList.add('selected');
+    }
+    node.dataset.shapeId = shape.id;
+
+    // Expand/collapse button for assemblies
+    if (shape.children && shape.children.length > 0) {
+        const expandBtn = document.createElement('span');
+        expandBtn.className = 'expand-btn';
+        expandBtn.textContent = '▶';
+        expandBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleNodeExpand(container);
+        });
+        node.appendChild(expandBtn);
+    } else {
+        const spacer = document.createElement('span');
+        spacer.style.width = '16px';
+        spacer.style.display = 'inline-block';
+        node.appendChild(spacer);
+    }
+
+    // Visibility toggle
+    const visibilityBtn = document.createElement('span');
+    visibilityBtn.className = 'visibility-btn';
+    visibilityBtn.textContent = shape.visible ? '👁' : '👁‍🗨';
+    visibilityBtn.title = shape.visible ? 'Hide' : 'Show';
+    visibilityBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleVisibility(shape.id);
+    });
+    node.appendChild(visibilityBtn);
+
+    // Icon based on type
+    const icon = document.createElement('span');
+    icon.className = 'icon';
+    icon.textContent = shape.type === 'assembly' ? '📁' : (shape.type === 'part' ? '🔧' : '📦');
+    node.appendChild(icon);
+
+    // Name
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = shape.name;
+    node.appendChild(name);
+
+    node.addEventListener('click', () => selectShape(shape.id));
+
+    container.appendChild(node);
+
+    // Children
+    if (shape.children && shape.children.length > 0) {
+        const childrenContainer = document.createElement('div');
+        childrenContainer.className = 'tree-children';
+        childrenContainer.style.display = 'none'; // Initially collapsed
+
+        shape.children.forEach(child => {
+            const childNode = createTreeNode(child, level + 1);
+            childrenContainer.appendChild(childNode);
+        });
+
+        container.appendChild(childrenContainer);
+    }
+
+    return container;
+}
+
+function toggleNodeExpand(container: HTMLElement): void {
+    const expandBtn = container.querySelector('.expand-btn');
+    const childrenContainer = container.querySelector('.tree-children') as HTMLElement;
+
+    if (expandBtn && childrenContainer) {
+        const isExpanded = childrenContainer.style.display !== 'none';
+        childrenContainer.style.display = isExpanded ? 'none' : 'block';
+        expandBtn.textContent = isExpanded ? '▶' : '▼';
+    }
+}
+
+function toggleVisibility(shapeId: string): void {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) return;
+
+    shape.visible = !shape.visible;
+
+    // Update viewer
+    if (viewer && shape.meshId) {
+        viewer.setVisibility(shape.meshId, shape.visible);
+    }
+
+    // Recursively update children
+    if (shape.children) {
+        shape.children.forEach(child => {
+            setVisibilityRecursive(child, shape.visible);
+        });
+    }
+
+    updateModelTree();
+}
+
+function setVisibilityRecursive(shape: LoadedShape, visible: boolean): void {
+    shape.visible = visible;
+    if (viewer && shape.meshId) {
+        viewer.setVisibility(shape.meshId, visible);
+    }
+    if (shape.children) {
+        shape.children.forEach(child => setVisibilityRecursive(child, visible));
+    }
+}
+
+function showColorPicker(shapeId: string): void {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) return;
+
+    // Create a simple color picker using HTML5 input
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = shape.color || '#808080';
+    input.style.position = 'absolute';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+
+    input.addEventListener('change', (e) => {
+        const newColor = (e.target as HTMLInputElement).value;
+        changeShapeColor(shapeId, newColor);
+        document.body.removeChild(input);
+    });
+
+    input.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (document.body.contains(input)) {
+                document.body.removeChild(input);
+            }
+        }, 100);
+    });
+
+    input.click();
+}
+
+function changeShapeColor(shapeId: string, newColor: string): void {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) return;
+
+    // Update shape color
+    shape.color = newColor;
+
+    // Apply to viewer
+    if (viewer && shape.meshId) {
+        const colorHex = parseInt(newColor.replace('#', ''), 16);
+        viewer.setMeshColor(shape.meshId, colorHex);
+    }
+
+    // Update properties panel if this shape is selected
+    if (selectedShapeId === shapeId) {
+        updatePropertiesPanel(shapeId);
+    }
 }
 
 function updatePropertiesPanel(shapeId: string | null): void {
@@ -146,6 +298,19 @@ function updatePropertiesPanel(shapeId: string | null): void {
     // Basic info
     html += createPropertyRow('ID', shape.id);
     html += createPropertyRow('Name', shape.name);
+    html += createPropertyRow('Type', shape.type);
+
+    // Color info with preview
+    if (shape.color) {
+        html += `<div class="property-row">
+            <span class="property-label">Color</span>
+            <span class="property-value" style="display: flex; align-items: center; gap: 8px;">
+                <span style="display: inline-block; width: 20px; height: 20px; background: ${shape.color}; border: 1px solid #666; border-radius: 3px;"></span>
+                <span>${shape.color}</span>
+                <button class="color-change-btn" data-shape-id="${shapeId}" style="margin-left: auto; padding: 2px 8px; background: #007acc; border: none; color: white; border-radius: 3px; cursor: pointer; font-size: 11px;">Change</button>
+            </span>
+        </div>`;
+    }
 
     // Mesh info
     if (shape.meshData) {
@@ -156,9 +321,9 @@ function updatePropertiesPanel(shapeId: string | null): void {
     }
 
     // Try to get mass properties
-    if (occt && occt.hasShape(shapeId)) {
+    if (occt && shape.shapeId && occt.hasShape(shape.shapeId)) {
         try {
-            const massProps = occt.getMassProperties(shapeId);
+            const massProps = occt.getMassProperties(shape.shapeId);
             if (massProps) {
                 html += '<div style="margin-top: 8px; font-weight: bold; color: #9cdcfe;">Mass Properties</div>';
                 html += createPropertyRow('Volume', `${massProps.volume.toFixed(6)} mm³`);
@@ -174,6 +339,16 @@ function updatePropertiesPanel(shapeId: string | null): void {
     }
 
     propsEl.innerHTML = html;
+
+    // Add event listeners for color change buttons
+    propsEl.querySelectorAll('.color-change-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const targetShapeId = (e.target as HTMLElement).dataset.shapeId;
+            if (targetShapeId) {
+                showColorPicker(targetShapeId);
+            }
+        });
+    });
 }
 
 function createPropertyRow(label: string, value: string): string {
@@ -273,66 +448,193 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
             throw new Error(result.error || 'Failed to read STEP file');
         }
 
-        showProgress(30, `Generating mesh (0/${result.shapes.length})...`);
-        setStatus(`Generating mesh for ${result.shapes.length} shapes...`);
-        // Yield to allow UI to update
+        showProgress(30, 'Building hierarchy...');
+        setStatus('Building model hierarchy...');
         await new Promise(resolve => setTimeout(resolve, 10));
-        console.log('[loadStepFile] Starting mesh generation for', result.shapes.length, 'shapes');
 
-        // Generate meshes and add to viewer
-        let addedCount = 0;
-        const totalShapes = result.shapes.length;
-        for (let i = 0; i < totalShapes; i++) {
-            const shapeId = result.shapes[i];
-            const meshData = occt!.getMesh(shapeId);
-            if (meshData && meshData.vertices.length > 0) {
-                // Add to viewer
-                if (viewer) {
-                    viewer.addMeshFromData(shapeId, meshData);
+        // Build hierarchy from rootNodes if available
+        if (result.rootNodes && result.rootNodes.length > 0) {
+            console.log('[loadStepFile] Building hierarchy from', result.rootNodes.length, 'root nodes');
+
+            // Collect all shapes that need meshing
+            const shapesToMesh: Array<{node: any, path: string}> = [];
+            const collectShapes = (node: any, path: string) => {
+                if (node.shapeId) {
+                    shapesToMesh.push({node, path});
+                }
+                if (node.children) {
+                    node.children.forEach((child: any, idx: number) => {
+                        collectShapes(child, `${path}/${child.name || idx}`);
+                    });
+                }
+            };
+            result.rootNodes.forEach((root, idx) => collectShapes(root, root.name || `Root${idx}`));
+
+            showProgress(40, `Generating meshes (0/${shapesToMesh.length})...`);
+            console.log('[loadStepFile] Total shapes to mesh:', shapesToMesh.length);
+
+            // Generate meshes for all shapes
+            for (let i = 0; i < shapesToMesh.length; i++) {
+                const {node} = shapesToMesh[i];
+                if (node.shapeId && occt!.hasShape(node.shapeId)) {
+                    const meshData = occt!.getMesh(node.shapeId);
+                    if (meshData && meshData.vertices.length > 0) {
+                        node._meshData = meshData;
+                    }
                 }
 
-                // Track loaded shape
-                loadedShapes.set(shapeId, {
-                    id: shapeId,
-                    name: shapeId,
-                    meshData
-                });
+                // Update progress (40% to 80% for mesh generation)
+                const meshProgress = 40 + ((i + 1) / shapesToMesh.length) * 40;
+                showProgress(meshProgress, `Generating meshes (${i + 1}/${shapesToMesh.length})...`);
 
-                addedCount++;
+                // Yield to UI thread periodically
+                if (i % 5 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
             }
 
-            // Update progress (30% to 90% for mesh generation)
-            const meshProgress = 30 + ((i + 1) / totalShapes) * 60;
-            showProgress(meshProgress, `Generating mesh (${i + 1}/${totalShapes})...`);
+            showProgress(85, 'Building scene...');
+            await new Promise(resolve => setTimeout(resolve, 10));
 
-            // Yield to UI thread periodically
-            if (i % 10 === 0) {
-                await new Promise(resolve => setTimeout(resolve, 0));
+            // Build hierarchy tree
+            let meshCount = 0;
+            rootShapes.length = 0;
+            loadedShapes.clear();
+
+            const buildShapeTree = (node: any, parent?: LoadedShape): LoadedShape => {
+                const shape: LoadedShape = {
+                    id: node.id,
+                    name: node.name,
+                    type: node.type,
+                    shapeId: node.shapeId,
+                    color: node.color,
+                    visible: true,
+                    parent
+                };
+
+                // Add mesh to viewer if available
+                if (node._meshData) {
+                    const meshId = `mesh_${node.id}`;
+                    if (viewer) {
+                        viewer.addMeshFromData(meshId, node._meshData);
+
+                        // Apply color if available
+                        if (node.color) {
+                            const colorHex = parseInt(node.color.replace('#', ''), 16);
+                            viewer.setMeshColor(meshId, colorHex);
+                        }
+                    }
+                    shape.meshId = meshId;
+                    shape.meshData = node._meshData;
+                    meshCount++;
+                }
+
+                // Process children
+                if (node.children && node.children.length > 0) {
+                    shape.children = node.children.map((child: any) => buildShapeTree(child, shape));
+                }
+
+                loadedShapes.set(shape.id, shape);
+                return shape;
+            };
+
+            result.rootNodes.forEach(root => {
+                rootShapes.push(buildShapeTree(root));
+            });
+
+            showProgress(95, 'Finalizing...');
+
+            // Fit view to show all shapes
+            if (viewer && meshCount > 0) {
+                viewer.fitToView();
             }
+
+            // Update UI
+            updateModelTree();
+            showProgress(100, 'Complete');
+            setStatus('Ready');
+            setStatusInfo(`${meshCount} parts loaded (${result.rootNodes.length} assemblies)`);
+
+            // Select first shape
+            if (rootShapes.length > 0) {
+                selectShape(rootShapes[0].id);
+            }
+
+            vscode.postMessage({
+                command: 'alert',
+                text: `Successfully loaded ${meshCount} parts from ${fileName}`
+            });
+
+        } else {
+            // Fallback to legacy flat structure
+            console.log('[loadStepFile] Using legacy flat structure');
+            showProgress(30, `Generating mesh (0/${result.shapes.length})...`);
+            setStatus(`Generating mesh for ${result.shapes.length} shapes...`);
+            await new Promise(resolve => setTimeout(resolve, 10));
+
+            let addedCount = 0;
+            rootShapes.length = 0;
+            loadedShapes.clear();
+
+            const totalShapes = result.shapes.length;
+            for (let i = 0; i < totalShapes; i++) {
+                const shapeId = result.shapes[i];
+                const meshData = occt!.getMesh(shapeId);
+                if (meshData && meshData.vertices.length > 0) {
+                    const meshId = `mesh_${shapeId}`;
+                    const shape: LoadedShape = {
+                        id: shapeId,
+                        name: shapeId,
+                        type: 'solid',
+                        shapeId,
+                        meshId,
+                        meshData,
+                        visible: true
+                    };
+
+                    // Add to viewer
+                    if (viewer) {
+                        viewer.addMeshFromData(meshId, meshData);
+                    }
+
+                    loadedShapes.set(shapeId, shape);
+                    rootShapes.push(shape);
+                    addedCount++;
+                }
+
+                // Update progress (30% to 90% for mesh generation)
+                const meshProgress = 30 + ((i + 1) / totalShapes) * 60;
+                showProgress(meshProgress, `Generating mesh (${i + 1}/${totalShapes})...`);
+
+                // Yield to UI thread periodically
+                if (i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+
+            showProgress(95, 'Finalizing...');
+
+            // Fit view to show all shapes
+            if (viewer && addedCount > 0) {
+                viewer.fitToView();
+            }
+
+            // Update UI
+            updateModelTree();
+            showProgress(100, 'Complete');
+            setStatus('Ready');
+            setStatusInfo(`${addedCount} shapes loaded`);
+
+            // Select first shape
+            if (result.shapes.length > 0) {
+                selectShape(result.shapes[0]);
+            }
+
+            vscode.postMessage({
+                command: 'alert',
+                text: `Successfully loaded ${addedCount} shapes from ${fileName}`
+            });
         }
-
-        showProgress(95, 'Finalizing...');
-
-        // Fit view to show all shapes
-        if (viewer && addedCount > 0) {
-            viewer.fitToView();
-        }
-
-        // Update UI
-        updateModelTree();
-        showProgress(100, 'Complete');
-        setStatus('Ready');
-        setStatusInfo(`${addedCount} shapes loaded`);
-
-        // Select first shape
-        if (result.shapes.length > 0) {
-            selectShape(result.shapes[0]);
-        }
-
-        vscode.postMessage({
-            command: 'alert',
-            text: `Successfully loaded ${addedCount} shapes from ${fileName}`
-        });
 
     } catch (error) {
         console.error('Failed to load STEP file:', error);

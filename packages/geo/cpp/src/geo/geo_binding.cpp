@@ -24,6 +24,20 @@
 // T2.2: STEP file reading
 #include <STEPControl_Reader.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <STEPCAFControl_Reader.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_ShapeTool.hxx>
+#include <XCAFDoc_ColorTool.hxx>
+#include <TDocStd_Document.hxx>
+#include <TDataStd_Name.hxx>
+#include <TDF_Label.hxx>
+#include <TDF_LabelSequence.hxx>
+#include <TDF_ChildIterator.hxx>
+#include <TCollection_AsciiString.hxx>
+#include <TCollection_ExtendedString.hxx>
+#include <XCAFDoc_Location.hxx>
+#include <Quantity_Color.hxx>
+#include <Quantity_ColorRGBA.hxx>
 
 // T2.3: Mesh generation
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -245,56 +259,212 @@ int getShapeCount() {
 }
 
 // ============================================================================
-// T2.2: STEP File Reading
+// T2.2: STEP File Reading with Hierarchy Support
 // ============================================================================
 
-// Read STEP file from memory buffer and store shapes
-// Returns JSON string with shape IDs and status
+// Helper function to escape JSON strings
+std::string escapeJsonString(const std::string& input) {
+    std::string output;
+    for (char c : input) {
+        switch (c) {
+            case '"': output += "\\\""; break;
+            case '\\': output += "\\\\"; break;
+            case '\b': output += "\\b"; break;
+            case '\f': output += "\\f"; break;
+            case '\n': output += "\\n"; break;
+            case '\r': output += "\\r"; break;
+            case '\t': output += "\\t"; break;
+            default: output += c; break;
+        }
+    }
+    return output;
+}
+
+// Helper function to recursively build hierarchy JSON
+void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                        const Handle(XCAFDoc_ColorTool)& colorTool,
+                        const TDF_Label& label,
+                        const std::string& baseId,
+                        int& counter,
+                        std::stringstream& result,
+                        geo::ShapeStore& store) {
+    // Get name
+    Handle(TDataStd_Name) nameAttr;
+    std::string name = "Unnamed";
+    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+        TCollection_ExtendedString extName = nameAttr->Get();
+        Standard_CString cStr = TCollection_AsciiString(extName).ToCString();
+        if (cStr && strlen(cStr) > 0) {
+            name = std::string(cStr);
+        }
+    }
+
+    // Determine node type
+    bool isAssembly = shapeTool->IsAssembly(label);
+    bool isSimpleShape = shapeTool->IsSimpleShape(label);
+
+    std::string nodeType = isAssembly ? "assembly" : (isSimpleShape ? "solid" : "part");
+    std::string nodeId = baseId + "_node_" + std::to_string(++counter);
+
+    result << "{\"id\":\"" << nodeId << "\"";
+    result << ",\"name\":\"" << escapeJsonString(name) << "\"";
+    result << ",\"type\":\"" << nodeType << "\"";
+
+    // Extract color information
+    Quantity_Color color;
+    bool hasColor = false;
+
+    // Try to get color from the label
+    if (colorTool->GetColor(label, XCAFDoc_ColorSurf, color)) {
+        hasColor = true;
+    } else if (colorTool->GetColor(label, XCAFDoc_ColorGen, color)) {
+        hasColor = true;
+    } else if (colorTool->GetColor(label, XCAFDoc_ColorCurv, color)) {
+        hasColor = true;
+    }
+
+    // Output color as hex RGB
+    if (hasColor) {
+        // Convert to RGB (0-255)
+        int r = static_cast<int>(color.Red() * 255.0);
+        int g = static_cast<int>(color.Green() * 255.0);
+        int b = static_cast<int>(color.Blue() * 255.0);
+
+        // Format as hex color
+        char hexColor[8];
+        snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
+        result << ",\"color\":\"" << hexColor << "\"";
+    } else {
+        // Default gray color
+        result << ",\"color\":\"#808080\"";
+    }
+
+    // Store shape if it's a solid/part
+    if (isSimpleShape || !isAssembly) {
+        TopoDS_Shape shape = shapeTool->GetShape(label);
+        if (!shape.IsNull()) {
+            std::string shapeId = nodeId + "_shape";
+            store.addShape(shapeId, shape);
+            result << ",\"shapeId\":\"" << shapeId << "\"";
+        }
+    }
+
+    // Get location/transform
+    TopLoc_Location loc = shapeTool->GetLocation(label);
+    if (!loc.IsIdentity()) {
+        gp_Trsf trsf = loc.Transformation();
+        gp_XYZ trans = trsf.TranslationPart();
+
+        result << ",\"transform\":{";
+        result << "\"translation\":{\"x\":" << trans.X()
+               << ",\"y\":" << trans.Y()
+               << ",\"z\":" << trans.Z() << "}";
+
+        // Get rotation as quaternion or matrix if needed
+        gp_Mat rotMat = trsf.VectorialPart();
+        result << ",\"rotation\":[";
+        result << rotMat(1,1) << "," << rotMat(1,2) << "," << rotMat(1,3) << ",";
+        result << rotMat(2,1) << "," << rotMat(2,2) << "," << rotMat(2,3) << ",";
+        result << rotMat(3,1) << "," << rotMat(3,2) << "," << rotMat(3,3);
+        result << "]}";
+    }
+
+    // Process children recursively
+    TDF_ChildIterator it(label);
+    std::vector<TDF_Label> children;
+    for (; it.More(); it.Next()) {
+        if (shapeTool->IsShape(it.Value())) {
+            children.push_back(it.Value());
+        }
+    }
+
+    if (!children.empty()) {
+        result << ",\"children\":[";
+        for (size_t i = 0; i < children.size(); ++i) {
+            if (i > 0) result << ",";
+            buildHierarchyJson(shapeTool, colorTool, children[i], baseId, counter, result, store);
+        }
+        result << "]";
+    }
+
+    result << "}";
+}
+
+// Read STEP file from memory buffer and store shapes with hierarchy
+// Returns JSON string with hierarchical structure
 std::string readStepFromBuffer(const std::string& buffer, const std::string& baseId) {
     std::stringstream result;
     result << "{\"success\":";
 
     try {
-        STEPControl_Reader reader;
+        // Create XCAF document for hierarchy support
+        Handle(TDocStd_Document) doc = new TDocStd_Document("MDTV-XCAF");
+        STEPCAFControl_Reader reader;
 
-        // OCCT V8: ReadStream takes an istream reference
+        // Read STEP data from stream
         std::istringstream inputStream(buffer);
         IFSelect_ReturnStatus status = reader.ReadStream("step_data", inputStream);
 
         if (status != IFSelect_RetDone) {
-            result << "false,\"error\":\"Failed to read STEP data\",\"shapes\":[]}";
+            result << "false,\"error\":\"Failed to read STEP data\",\"shapes\":[], \"count\":0}";
             return result.str();
         }
 
-        // Transfer all roots
-        int numRoots = reader.NbRootsForTransfer();
-        reader.TransferRoots();
-
-        int numShapes = reader.NbShapes();
-        if (numShapes == 0) {
-            result << "false,\"error\":\"No shapes found in STEP file\",\"shapes\":[]}";
+        // Transfer data to XCAF document
+        if (!reader.Transfer(doc)) {
+            result << "false,\"error\":\"Failed to transfer STEP data\",\"shapes\":[], \"count\":0}";
             return result.str();
         }
 
-        result << "true,\"shapes\":[";
+        // Get shape tool and color tool
+        Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+        Handle(XCAFDoc_ColorTool) colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+
+        // Get free shapes (root level shapes)
+        TDF_LabelSequence freeShapes;
+        shapeTool->GetFreeShapes(freeShapes);
+
+        if (freeShapes.Length() == 0) {
+            result << "false,\"error\":\"No shapes found in STEP file\",\"shapes\":[], \"count\":0}";
+            return result.str();
+        }
+
+        result << "true";
+
+        // Build flat shape list for backward compatibility
+        result << ",\"shapes\":[";
         auto& store = geo::ShapeStore::instance();
+        int shapeCount = 0;
 
-        for (int i = 1; i <= numShapes; ++i) {
-            TopoDS_Shape shape = reader.Shape(i);
+        for (int i = 1; i <= freeShapes.Length(); ++i) {
+            TDF_Label label = freeShapes.Value(i);
+            TopoDS_Shape shape = shapeTool->GetShape(label);
             if (!shape.IsNull()) {
                 std::string shapeId = baseId + "_" + std::to_string(i);
                 store.addShape(shapeId, shape);
 
-                if (i > 1) result << ",";
+                if (shapeCount > 0) result << ",";
                 result << "\"" << shapeId << "\"";
+                shapeCount++;
             }
         }
+        result << "]";
+        result << ",\"count\":" << shapeCount;
 
-        result << "],\"count\":" << numShapes << "}";
+        // Build hierarchical structure with colors
+        result << ",\"rootNodes\":[";
+        int nodeCounter = 0;
+        for (int i = 1; i <= freeShapes.Length(); ++i) {
+            if (i > 1) result << ",";
+            buildHierarchyJson(shapeTool, colorTool, freeShapes.Value(i), baseId, nodeCounter, result, store);
+        }
+        result << "]";
+        result << "}";
+
     } catch (const std::exception& e) {
-        result << "false,\"error\":\"" << e.what() << "\",\"shapes\":[]}";
+        result << "false,\"error\":\"" << escapeJsonString(e.what()) << "\",\"shapes\":[], \"count\":0}";
     } catch (...) {
-        result << "false,\"error\":\"Unknown error reading STEP file\",\"shapes\":[]}";
+        result << "false,\"error\":\"Unknown error reading STEP file\",\"shapes\":[], \"count\":0}";
     }
 
     return result.str();

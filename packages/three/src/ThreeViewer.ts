@@ -32,19 +32,23 @@ export class ThreeViewer {
 
         // Scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(options.backgroundColor ?? 0x2a2a2a);
+        // Remove solid background to allow CSS gradient to show through
+        this.scene.background = null;
 
         // Camera
         const aspect = container.clientWidth / container.clientHeight;
         this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 10000);
         this.camera.position.set(100, 100, 100);
 
-        // Renderer
+        // Renderer with alpha enabled for transparent background
         this.renderer = new THREE.WebGLRenderer({
-            antialias: options.antialias ?? true
+            antialias: options.antialias ?? true,
+            alpha: true // Enable transparency
         });
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
+        // Set clear color with alpha = 0 for full transparency
+        this.renderer.setClearColor(0x000000, 0);
         container.appendChild(this.renderer.domElement);
 
         // Controls
@@ -151,6 +155,20 @@ export class ThreeViewer {
 
     getMesh(id: string): THREE.Mesh | undefined {
         return this.meshes.get(id);
+    }
+
+    setVisibility(id: string, visible: boolean): void {
+        const mesh = this.meshes.get(id);
+        if (mesh) {
+            mesh.visible = visible;
+        }
+    }
+
+    setMeshColor(id: string, color: number): void {
+        const mesh = this.meshes.get(id);
+        if (mesh && mesh.material instanceof THREE.MeshPhongMaterial) {
+            mesh.material.color.setHex(color);
+        }
     }
 
     fitToView(): void {

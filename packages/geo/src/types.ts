@@ -28,10 +28,24 @@ export interface ShapeInfo {
     };
 }
 
+export interface StepNode {
+    id: string;
+    name: string;
+    type: 'assembly' | 'part' | 'solid';
+    shapeId?: string;
+    color?: string;
+    children?: StepNode[];
+    transform?: {
+        translation: Vec3;
+        rotation: number[];
+    };
+}
+
 export interface StepReadResult {
     success: boolean;
     shapes: string[];
     count: number;
+    rootNodes?: StepNode[];
     error?: string;
 }
 
