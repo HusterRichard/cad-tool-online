@@ -400,6 +400,7 @@ interface EmbindModule {
   meshShapeDefault(_0: EmbindString): string;
   calculateMassProperties(_0: EmbindString, _1: number): string;
   calculateMassPropertiesDefault(_0: EmbindString): string;
+  getFaceNormalAtPoint(_0: EmbindString, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number): string;
 }
 
 export type MainModule = WasmModule & EmbindModule;

@@ -53,6 +53,13 @@
 #include <GProp_GProps.hxx>
 #include <BRepGProp.hxx>
 
+// T2.5: Face normal calculation for marker creation
+#include <BRepIntCurveSurface_Inter.hxx>
+#include <BRepAdaptor_Surface.hxx>
+#include <BRepLProp_SLProps.hxx>
+#include <IntCurveSurface_IntersectionPoint.hxx>
+#include <gp_Lin.hxx>
+
 // For random color generation
 #include <cmath>
 #include <algorithm>
@@ -856,6 +863,103 @@ std::string calculateMassPropertiesDefault(const std::string& id) {
     return calculateMassProperties(id, 7850.0);
 }
 
+// ============================================================================
+// T2.5: Face Normal Calculation for Marker Creation
+// ============================================================================
+
+// Get face normal at a clicked point using raycasting
+// Returns JSON: { success, position: {x,y,z}, normal: {x,y,z}, faceIndex }
+std::string getFaceNormalAtPoint(const std::string& id,
+                                  double rayOriginX, double rayOriginY, double rayOriginZ,
+                                  double rayDirX, double rayDirY, double rayDirZ) {
+    auto& store = geo::ShapeStore::instance();
+    auto shapeOpt = store.getShape(id);
+
+    if (!shapeOpt.has_value()) {
+        return "{\"success\":false,\"error\":\"Shape not found\"}";
+    }
+
+    TopoDS_Shape shape = shapeOpt.value();
+
+    try {
+        gp_Pnt rayOrigin(rayOriginX, rayOriginY, rayOriginZ);
+        gp_Dir rayDir(rayDirX, rayDirY, rayDirZ);
+        gp_Lin ray(rayOrigin, rayDir);
+
+        // Perform intersection
+        BRepIntCurveSurface_Inter intersector;
+        intersector.Init(shape, ray, 1e-6);  // OCCT precision
+
+        if (!intersector.More()) {
+            return "{\"success\":false,\"error\":\"No intersection found\"}";
+        }
+
+        // Get the closest intersection point
+        double minDistance = 1e10;
+        gp_Pnt closestPoint;
+        TopoDS_Face closestFace;
+        double closestU = 0.0, closestV = 0.0;
+        bool found = false;
+
+        for (; intersector.More(); intersector.Next()) {
+            gp_Pnt hitPoint = intersector.Pnt();
+            double distance = rayOrigin.Distance(hitPoint);
+
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestPoint = hitPoint;
+                closestFace = intersector.Face();
+                closestU = intersector.U();
+                closestV = intersector.V();
+                found = true;
+            }
+        }
+
+        if (!found) {
+            return "{\"success\":false,\"error\":\"No valid intersection\"}";
+        }
+
+        // Calculate normal at the intersection point
+        BRepAdaptor_Surface surface(closestFace);
+        BRepLProp_SLProps props(surface, 1, 1e-6);
+        props.SetParameters(closestU, closestV);
+
+        if (!props.IsNormalDefined()) {
+            return "{\"success\":false,\"error\":\"Normal not defined at intersection point\"}";
+        }
+
+        gp_Dir normal = props.Normal();
+
+        // Ensure normal points outward (away from ray origin)
+        // If face is reversed, flip the normal
+        if (closestFace.Orientation() == TopAbs_REVERSED) {
+            normal.Reverse();
+        }
+
+        // Build JSON result
+        std::stringstream result;
+        result << std::fixed;
+        result << "{\"success\":true";
+        result << ",\"position\":{";
+        result << "\"x\":" << closestPoint.X();
+        result << ",\"y\":" << closestPoint.Y();
+        result << ",\"z\":" << closestPoint.Z() << "}";
+        result << ",\"normal\":{";
+        result << "\"x\":" << normal.X();
+        result << ",\"y\":" << normal.Y();
+        result << ",\"z\":" << normal.Z() << "}";
+        result << ",\"distance\":" << minDistance;
+        result << "}";
+
+        return result.str();
+
+    } catch (const std::exception& e) {
+        return std::string("{\"success\":false,\"error\":\"") + escapeJsonString(e.what()) + "\"}";
+    } catch (...) {
+        return "{\"success\":false,\"error\":\"Unknown error calculating face normal\"}";
+    }
+}
+
 } // anonymous namespace
 
 EMSCRIPTEN_BINDINGS(geo_module) {
@@ -889,4 +993,7 @@ EMSCRIPTEN_BINDINGS(geo_module) {
     // T2.4: Mass properties
     function("calculateMassProperties", &calculateMassProperties);
     function("calculateMassPropertiesDefault", &calculateMassPropertiesDefault);
+
+    // T2.5: Face normal calculation
+    function("getFaceNormalAtPoint", &getFaceNormalAtPoint);
 }

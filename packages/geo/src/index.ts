@@ -4,3 +4,4 @@
 export * from './types';
 export * from './mbs-types';
 export * from './OcctWrapper';
+export * from './utils';

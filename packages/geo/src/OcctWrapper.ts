@@ -1,5 +1,5 @@
 import type { MeshData } from '@cadtool-online/core';
-import type { MassProperties, StepReadResult, MeshResult, MassPropertiesResult } from './types';
+import type { MassProperties, StepReadResult, MeshResult, MassPropertiesResult, FaceNormalResult } from './types';
 
 // WASM module interface (extended with new functions)
 interface CadGeoModule {
@@ -33,6 +33,10 @@ interface CadGeoModule {
     // T2.4: Mass properties
     calculateMassProperties(id: string, density: number): string;
     calculateMassPropertiesDefault(id: string): string;
+
+    // T2.5: Face normal calculation
+    getFaceNormalAtPoint(id: string, rayOriginX: number, rayOriginY: number, rayOriginZ: number,
+                         rayDirX: number, rayDirY: number, rayDirZ: number): string;
 }
 
 export interface IOcctWrapper {
@@ -41,6 +45,7 @@ export interface IOcctWrapper {
     readStep(data: ArrayBuffer, baseId?: string): Promise<StepReadResult>;
     getMesh(shapeId: string, linearDeflection?: number, angularDeflection?: number): MeshData | null;
     getMassProperties(shapeId: string, density?: number): MassProperties | null;
+    getFaceNormalAtPoint(shapeId: string, rayOrigin: { x: number; y: number; z: number }, rayDir: { x: number; y: number; z: number }): FaceNormalResult | null;
     deleteShape(shapeId: string): void;
     hasShape(shapeId: string): boolean;
     clearShapes(): void;
@@ -171,6 +176,32 @@ export class OcctWrapper implements IOcctWrapper {
                 ]
             }
         };
+    }
+
+    // ========================================================================
+    // T2.5: Face Normal Calculation for Marker Creation
+    // ========================================================================
+
+    getFaceNormalAtPoint(
+        shapeId: string,
+        rayOrigin: { x: number; y: number; z: number },
+        rayDir: { x: number; y: number; z: number }
+    ): FaceNormalResult | null {
+        this.ensureInitialized();
+
+        const resultJson = wasmModule!.getFaceNormalAtPoint(
+            shapeId,
+            rayOrigin.x, rayOrigin.y, rayOrigin.z,
+            rayDir.x, rayDir.y, rayDir.z
+        );
+        const result: FaceNormalResult = JSON.parse(resultJson);
+
+        if (!result.success) {
+            console.error('Face normal calculation failed:', result.error);
+            return null;
+        }
+
+        return result;
     }
 
     // ========================================================================

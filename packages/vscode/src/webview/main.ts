@@ -4,6 +4,7 @@
 import { ThreeViewer } from '@cadtool-online/three';
 import { OcctWrapper, type StepReadResult } from '@cadtool-online/geo';
 import type { MeshData } from '@cadtool-online/core';
+import { markerCreator, type MbsMarker } from '@cadtool-online/core';
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -41,6 +42,23 @@ interface LoadedShape {
 const loadedShapes: Map<string, LoadedShape> = new Map();
 const rootShapes: LoadedShape[] = [];
 let selectedShapeId: string | null = null;
+
+// Mesh ID to Shape ID mapping for selection synchronization
+const meshIdToShapeId: Map<string, string> = new Map();
+
+// Marker creation state
+let isCreatingMarker = false;
+const createdMarkers: MbsMarker[] = [];
+
+// Explode view state
+let isExploded = false;
+let explodeDistance = 0;
+interface ExplodeData {
+    meshId: string;
+    originalPosition: { x: number; y: number; z: number };
+    explodeDirection: { x: number; y: number; z: number };
+}
+const explodeDataMap: Map<string, ExplodeData> = new Map();
 
 // ============================================================================
 // UI Helpers
@@ -358,7 +376,15 @@ function createPropertyRow(label: string, value: string): string {
     </div>`;
 }
 
-function selectShape(shapeId: string): void {
+function selectShape(shapeId: string, fromViewer: boolean = false): void {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) {
+        console.warn('[selectShape] Shape not found:', shapeId);
+        return;
+    }
+
+    selectedShapeId = shapeId;
+
     // Update selection in tree
     const prevSelected = document.querySelector('.tree-node.selected');
     if (prevSelected) {
@@ -368,14 +394,20 @@ function selectShape(shapeId: string): void {
     const newSelected = document.querySelector(`.tree-node[data-shape-id="${shapeId}"]`);
     if (newSelected) {
         newSelected.classList.add('selected');
+
+        // Auto-expand parent nodes
+        expandParentNodes(newSelected);
+
+        // Scroll into view
+        newSelected.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    selectedShapeId = shapeId;
-
-    // Update 3D selection
-    if (viewer) {
+    // Update 3D selection (only if not triggered from viewer to avoid loop)
+    if (viewer && !fromViewer) {
         viewer.clearSelection();
-        viewer.select(shapeId);
+        if (shape.meshId) {
+            viewer.select(shape.meshId);
+        }
     }
 
     // Update properties panel
@@ -383,6 +415,31 @@ function selectShape(shapeId: string): void {
 
     // Notify extension
     vscode.postMessage({ command: 'selectShape', shapeId });
+}
+
+/**
+ * Auto-expand all parent nodes to make the selected node visible
+ */
+function expandParentNodes(nodeElement: Element): void {
+    let current = nodeElement.parentElement;
+
+    while (current) {
+        // Check if this is a tree-children container
+        if (current.classList.contains('tree-children')) {
+            current.style.display = 'block';
+
+            // Find and update the expand button
+            const container = current.parentElement;
+            if (container) {
+                const expandBtn = container.querySelector('.expand-btn');
+                if (expandBtn) {
+                    expandBtn.textContent = '▼';
+                }
+            }
+        }
+
+        current = current.parentElement;
+    }
 }
 
 // ============================================================================
@@ -526,6 +583,10 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
                     }
                     shape.meshId = meshId;
                     shape.meshData = node._meshData;
+
+                    // Register mesh ID to shape ID mapping for selection sync
+                    meshIdToShapeId.set(meshId, shape.id);
+
                     meshCount++;
                 }
 
@@ -597,6 +658,9 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
                         viewer.addMeshFromData(meshId, meshData);
                     }
 
+                    // Register mesh ID to shape ID mapping for selection sync
+                    meshIdToShapeId.set(meshId, shapeId);
+
                     loadedShapes.set(shapeId, shape);
                     rootShapes.push(shape);
                     addedCount++;
@@ -649,22 +713,409 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
 }
 
 // ============================================================================
+// Export Model Functions
+// ============================================================================
+
+/**
+ * Export model data to JSON format
+ */
+function exportModel(): void {
+    if (rootShapes.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No model loaded to export'
+        });
+        return;
+    }
+
+    setStatus('Preparing export data...');
+
+    try {
+        // Build export data structure
+        const exportData = {
+            exportDate: new Date().toISOString(),
+            version: '1.0.0',
+            parts: [] as Array<{
+                id: string;
+                name: string;
+                type: string;
+                color?: string;
+                properties?: {
+                    vertices?: number;
+                    triangles?: number;
+                    volume?: number;
+                    surfaceArea?: number;
+                    mass?: number;
+                    centerOfMass?: { x: number; y: number; z: number };
+                };
+                boundingBox?: {
+                    min: { x: number; y: number; z: number };
+                    max: { x: number; y: number; z: number };
+                    size: { x: number; y: number; z: number };
+                };
+                children?: string[];
+            }>
+        };
+
+        // Recursively collect all parts
+        function collectParts(shape: LoadedShape): void {
+            const partData: typeof exportData.parts[0] = {
+                id: shape.id,
+                name: shape.name,
+                type: shape.type,
+                color: shape.color
+            };
+
+            // Add mesh properties if available
+            if (shape.meshData) {
+                const vertexCount = shape.meshData.vertices.length / 3;
+                const triangleCount = shape.meshData.indices.length / 3;
+
+                partData.properties = {
+                    vertices: vertexCount,
+                    triangles: triangleCount
+                };
+
+                // Calculate bounding box
+                const vertices = shape.meshData.vertices;
+                let minX = Infinity, minY = Infinity, minZ = Infinity;
+                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+                for (let i = 0; i < vertices.length; i += 3) {
+                    minX = Math.min(minX, vertices[i]);
+                    minY = Math.min(minY, vertices[i + 1]);
+                    minZ = Math.min(minZ, vertices[i + 2]);
+                    maxX = Math.max(maxX, vertices[i]);
+                    maxY = Math.max(maxY, vertices[i + 1]);
+                    maxZ = Math.max(maxZ, vertices[i + 2]);
+                }
+
+                partData.boundingBox = {
+                    min: { x: minX, y: minY, z: minZ },
+                    max: { x: maxX, y: maxY, z: maxZ },
+                    size: {
+                        x: maxX - minX,
+                        y: maxY - minY,
+                        z: maxZ - minZ
+                    }
+                };
+            }
+
+            // Get mass properties if available
+            if (occt && shape.shapeId && occt.hasShape(shape.shapeId)) {
+                try {
+                    const massProps = occt.getMassProperties(shape.shapeId);
+                    if (massProps && partData.properties) {
+                        partData.properties.volume = massProps.volume;
+                        partData.properties.surfaceArea = massProps.surfaceArea;
+                        partData.properties.mass = massProps.mass;
+                        partData.properties.centerOfMass = massProps.centerOfMass;
+                    }
+                } catch (e) {
+                    console.warn('Failed to get mass properties for export:', e);
+                }
+            }
+
+            // Add children IDs
+            if (shape.children && shape.children.length > 0) {
+                partData.children = shape.children.map(child => child.id);
+            }
+
+            exportData.parts.push(partData);
+
+            // Recursively process children
+            if (shape.children) {
+                shape.children.forEach(collectParts);
+            }
+        }
+
+        rootShapes.forEach(collectParts);
+
+        // Convert to JSON string with formatting
+        const jsonData = JSON.stringify(exportData, null, 2);
+
+        // Send to extension to save file
+        vscode.postMessage({
+            command: 'exportModel',
+            data: jsonData
+        });
+
+        setStatus('Ready');
+        setStatusInfo(`Exported ${exportData.parts.length} parts`);
+
+    } catch (error) {
+        console.error('Failed to export model:', error);
+        setStatus('Export failed');
+        vscode.postMessage({
+            command: 'alert',
+            text: `Failed to export model: ${error}`
+        });
+    }
+}
+
+// ============================================================================
+// Exploded View Functions
+// ============================================================================
+
+/**
+ * Calculate bounding box center for a shape hierarchy
+ */
+function calculateShapeCenter(shape: LoadedShape): { x: number; y: number; z: number } {
+    if (!shape.meshData) {
+        return { x: 0, y: 0, z: 0 };
+    }
+
+    const vertices = shape.meshData.vertices;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+    for (let i = 0; i < vertices.length; i += 3) {
+        minX = Math.min(minX, vertices[i]);
+        minY = Math.min(minY, vertices[i + 1]);
+        minZ = Math.min(minZ, vertices[i + 2]);
+        maxX = Math.max(maxX, vertices[i]);
+        maxY = Math.max(maxY, vertices[i + 1]);
+        maxZ = Math.max(maxZ, vertices[i + 2]);
+    }
+
+    return {
+        x: (minX + maxX) / 2,
+        y: (minY + maxY) / 2,
+        z: (minZ + maxZ) / 2
+    };
+}
+
+/**
+ * Calculate assembly center from all root shapes
+ */
+function calculateAssemblyCenter(): { x: number; y: number; z: number } {
+    if (rootShapes.length === 0) {
+        return { x: 0, y: 0, z: 0 };
+    }
+
+    const centers: Array<{ x: number; y: number; z: number }> = [];
+
+    function collectCenters(shape: LoadedShape): void {
+        if (shape.meshData && shape.meshId) {
+            centers.push(calculateShapeCenter(shape));
+        }
+        if (shape.children) {
+            shape.children.forEach(collectCenters);
+        }
+    }
+
+    rootShapes.forEach(collectCenters);
+
+    if (centers.length === 0) {
+        return { x: 0, y: 0, z: 0 };
+    }
+
+    const sum = centers.reduce(
+        (acc, center) => ({
+            x: acc.x + center.x,
+            y: acc.y + center.y,
+            z: acc.z + center.z
+        }),
+        { x: 0, y: 0, z: 0 }
+    );
+
+    return {
+        x: sum.x / centers.length,
+        y: sum.y / centers.length,
+        z: sum.z / centers.length
+    };
+}
+
+/**
+ * Prepare explode data for all meshes
+ */
+function prepareExplodeData(): void {
+    explodeDataMap.clear();
+
+    const assemblyCenter = calculateAssemblyCenter();
+
+    function processShape(shape: LoadedShape): void {
+        if (shape.meshData && shape.meshId) {
+            const shapeCenter = calculateShapeCenter(shape);
+
+            // Calculate direction from assembly center to shape center
+            let dirX = shapeCenter.x - assemblyCenter.x;
+            let dirY = shapeCenter.y - assemblyCenter.y;
+            let dirZ = shapeCenter.z - assemblyCenter.z;
+
+            // Normalize direction
+            const length = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+            if (length > 0.001) {
+                dirX /= length;
+                dirY /= length;
+                dirZ /= length;
+            } else {
+                // If at center, use a default direction
+                dirX = 0;
+                dirY = 0;
+                dirZ = 1;
+            }
+
+            explodeDataMap.set(shape.meshId, {
+                meshId: shape.meshId,
+                originalPosition: { x: 0, y: 0, z: 0 }, // Will be filled by viewer
+                explodeDirection: { x: dirX, y: dirY, z: dirZ }
+            });
+        }
+
+        if (shape.children) {
+            shape.children.forEach(processShape);
+        }
+    }
+
+    rootShapes.forEach(processShape);
+}
+
+/**
+ * Apply explode transform to all meshes
+ */
+function applyExplode(distance: number): void {
+    if (!viewer) return;
+
+    explodeDataMap.forEach((data) => {
+        const offset = {
+            x: data.explodeDirection.x * distance,
+            y: data.explodeDirection.y * distance,
+            z: data.explodeDirection.z * distance
+        };
+        viewer.setMeshPosition(data.meshId, offset);
+    });
+}
+
+/**
+ * Toggle explode view
+ */
+function toggleExplode(): void {
+    const sliderContainer = document.getElementById('explode-slider-container');
+    const explodeBtn = document.getElementById('btn-explode');
+
+    if (!sliderContainer || !explodeBtn) return;
+
+    if (!isExploded) {
+        // Enter explode mode
+        if (rootShapes.length === 0) {
+            vscode.postMessage({
+                command: 'alert',
+                text: 'Please load a model first'
+            });
+            return;
+        }
+
+        isExploded = true;
+        sliderContainer.classList.add('show');
+        explodeBtn.style.backgroundColor = 'rgba(0, 122, 204, 0.3)';
+
+        prepareExplodeData();
+        setStatus('Exploded view mode active');
+    } else {
+        // Exit explode mode
+        isExploded = false;
+        sliderContainer.classList.remove('show');
+        explodeBtn.style.backgroundColor = '';
+
+        // Reset to zero
+        const slider = document.getElementById('explode-slider') as HTMLInputElement;
+        if (slider) {
+            slider.value = '0';
+            explodeDistance = 0;
+            updateExplodeValue(0);
+        }
+
+        applyExplode(0);
+        setStatus('Ready');
+    }
+}
+
+/**
+ * Update explode distance from slider
+ */
+function updateExplodeDistance(percent: number): void {
+    explodeDistance = percent;
+
+    // Calculate actual distance based on model size
+    // Use assembly bounding box to determine scale
+    const maxDistance = calculateModelScale() * 2;
+    const actualDistance = (percent / 100) * maxDistance;
+
+    applyExplode(actualDistance);
+    updateExplodeValue(percent);
+}
+
+/**
+ * Calculate model scale for explosion distance
+ */
+function calculateModelScale(): number {
+    if (rootShapes.length === 0) return 100;
+
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+    function processShape(shape: LoadedShape): void {
+        if (shape.meshData) {
+            const vertices = shape.meshData.vertices;
+            for (let i = 0; i < vertices.length; i += 3) {
+                minX = Math.min(minX, vertices[i]);
+                minY = Math.min(minY, vertices[i + 1]);
+                minZ = Math.min(minZ, vertices[i + 2]);
+                maxX = Math.max(maxX, vertices[i]);
+                maxY = Math.max(maxY, vertices[i + 1]);
+                maxZ = Math.max(maxZ, vertices[i + 2]);
+            }
+        }
+        if (shape.children) {
+            shape.children.forEach(processShape);
+        }
+    }
+
+    rootShapes.forEach(processShape);
+
+    const sizeX = maxX - minX;
+    const sizeY = maxY - minY;
+    const sizeZ = maxZ - minZ;
+
+    return Math.max(sizeX, sizeY, sizeZ);
+}
+
+/**
+ * Update explode slider value display
+ */
+function updateExplodeValue(percent: number): void {
+    const valueDisplay = document.getElementById('explode-slider-value');
+    if (valueDisplay) {
+        valueDisplay.textContent = `${Math.round(percent)}%`;
+    }
+}
+
+// ============================================================================
 // Clear Scene
 // ============================================================================
 
 function clearScene(): void {
     // Remove all meshes from viewer
-    loadedShapes.forEach((_, id) => {
-        if (viewer) {
-            viewer.removeMesh(id);
+    loadedShapes.forEach((shape) => {
+        if (viewer && shape.meshId) {
+            viewer.removeMesh(shape.meshId);
         }
-        if (occt) {
-            occt.deleteShape(id);
+        if (occt && shape.shapeId) {
+            occt.deleteShape(shape.shapeId);
         }
     });
 
     loadedShapes.clear();
+    rootShapes.length = 0;
     selectedShapeId = null;
+    meshIdToShapeId.clear();
+    explodeDataMap.clear();
+
+    // Reset explode state
+    if (isExploded) {
+        toggleExplode();
+    }
 
     updateModelTree();
     updatePropertiesPanel(null);
@@ -675,6 +1126,119 @@ function clearScene(): void {
 // ============================================================================
 // MBS Action Handling
 // ============================================================================
+
+/**
+ * Start marker creation mode
+ */
+function startMarkerCreation(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a part first to create a marker'
+        });
+        return;
+    }
+
+    isCreatingMarker = true;
+    setStatus('Click on a face to create marker (法向向外)');
+    setStatusInfo('Marker creation mode active');
+
+    // Change cursor to crosshair
+    const container = document.getElementById('canvas-container');
+    if (container) {
+        container.style.cursor = 'crosshair';
+    }
+
+    vscode.postMessage({
+        command: 'alert',
+        text: 'Click on a face to place the marker. The Z-axis will point outward along the face normal.'
+    });
+}
+
+/**
+ * Handle click on canvas to create marker
+ */
+function handleCanvasClick(event: MouseEvent): void {
+    if (!isCreatingMarker || !viewer || !occt || !selectedShapeId) return;
+
+    const selectedShape = loadedShapes.get(selectedShapeId);
+    if (!selectedShape || !selectedShape.shapeId) {
+        console.warn('Selected shape has no shapeId');
+        return;
+    }
+
+    // Get click position in canvas coordinates
+    const container = document.getElementById('canvas-container');
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    // Get ray from camera through click point
+    const ray = viewer.getRayFromScreenPoint(x, y);
+    if (!ray) {
+        console.warn('Failed to get ray from screen point');
+        return;
+    }
+
+    console.log('[Marker Creation] Ray:', ray);
+
+    // Call OCCT to get face normal at intersection point
+    const result = occt.getFaceNormalAtPoint(
+        selectedShape.shapeId,
+        ray.origin,
+        ray.direction
+    );
+
+    if (!result) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No face found at click position. Please click on a face.'
+        });
+        return;
+    }
+
+    console.log('[Marker Creation] Face normal result:', result);
+
+    // Create marker using MarkerCreator
+    const marker = markerCreator.createMarker({
+        position: result.position,
+        normal: result.normal,
+        groupId: selectedShape.id, // Use selected shape as parent
+        name: `Marker${createdMarkers.length + 1}`
+    });
+
+    createdMarkers.push(marker);
+
+    // Visualize marker in 3D viewer
+    if (viewer) {
+        viewer.addFrame({
+            id: marker.id,
+            name: marker.name,
+            position: marker.position,
+            orientation: marker.orientation,
+            isPrimary: true
+        });
+    }
+
+    console.log('[Marker Creation] Created marker:', marker);
+
+    // Exit marker creation mode
+    isCreatingMarker = false;
+    const container2 = document.getElementById('canvas-container');
+    if (container2) {
+        container2.style.cursor = 'default';
+    }
+
+    setStatus('Ready');
+    setStatusInfo(`Marker created: ${marker.name}`);
+
+    vscode.postMessage({
+        command: 'alert',
+        text: `Marker "${marker.name}" created successfully at position (${result.position.x.toFixed(2)}, ${result.position.y.toFixed(2)}, ${result.position.z.toFixed(2)})`
+    });
+}
 
 function handleMbsAction(action: string, params: Record<string, unknown>): void {
     console.log('[MBS Action]', action, params);
@@ -697,7 +1261,7 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
         // 标架设计
         case 'createFrame':
             console.log('Creating new frame...');
-            // TODO: 实现创建标架逻辑
+            startMarkerCreation();
             break;
         case 'editFrame':
             console.log('Editing frame...');
@@ -705,7 +1269,23 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             break;
         case 'deleteFrame':
             console.log('Deleting frame...');
-            // TODO: 实现删除标架逻辑
+            if (createdMarkers.length === 0) {
+                vscode.postMessage({
+                    command: 'alert',
+                    text: 'No markers to delete'
+                });
+                return;
+            }
+            // Delete the last created marker
+            const lastMarker = createdMarkers.pop();
+            if (lastMarker && viewer) {
+                viewer.removeFrame(lastMarker.id);
+                vscode.postMessage({
+                    command: 'alert',
+                    text: `Marker "${lastMarker.name}" deleted`
+                });
+                setStatusInfo(`Marker deleted: ${lastMarker.name}`);
+            }
             break;
 
         // 关节设计
@@ -771,12 +1351,29 @@ async function initViewer(): Promise<void> {
             enableSelection: true
         });
 
-        // Listen for selection changes
+        // Listen for selection changes from 3D viewer
         viewer.onSelectionChange((event) => {
             if (event.type === 'select' && event.objectId) {
-                selectShape(event.objectId);
+                // Map mesh ID to shape ID
+                const shapeId = meshIdToShapeId.get(event.objectId);
+                if (shapeId) {
+                    selectShape(shapeId, true); // fromViewer = true to avoid selection loop
+                } else {
+                    console.warn('[Viewer Selection] No shape ID found for mesh:', event.objectId);
+                }
+            } else if (event.type === 'deselect') {
+                // Clear selection in tree
+                const prevSelected = document.querySelector('.tree-node.selected');
+                if (prevSelected) {
+                    prevSelected.classList.remove('selected');
+                }
+                selectedShapeId = null;
+                updatePropertiesPanel(null);
             }
         });
+
+        // Add click listener for marker creation
+        container.addEventListener('click', handleCanvasClick);
     }
 }
 
@@ -820,6 +1417,10 @@ document.addEventListener('DOMContentLoaded', () => {
         vscode.postMessage({ command: 'importStep' });
     });
 
+    document.getElementById('btn-export')?.addEventListener('click', () => {
+        exportModel();
+    });
+
     document.getElementById('btn-fit')?.addEventListener('click', () => {
         viewer?.fitToView();
     });
@@ -827,4 +1428,27 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-clear')?.addEventListener('click', () => {
         clearScene();
     });
+
+    document.getElementById('btn-explode')?.addEventListener('click', () => {
+        toggleExplode();
+    });
+
+    // Explode slider listeners
+    const explodeSlider = document.getElementById('explode-slider') as HTMLInputElement;
+    if (explodeSlider) {
+        explodeSlider.addEventListener('input', (e) => {
+            const target = e.target as HTMLInputElement;
+            const value = parseInt(target.value);
+            updateExplodeDistance(value);
+        });
+    }
+
+    const explodeSliderClose = document.getElementById('explode-slider-close');
+    if (explodeSliderClose) {
+        explodeSliderClose.addEventListener('click', () => {
+            if (isExploded) {
+                toggleExplode();
+            }
+        });
+    }
 });

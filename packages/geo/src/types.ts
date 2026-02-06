@@ -76,3 +76,11 @@ export interface MassPropertiesResult {
     };
     error?: string;
 }
+
+export interface FaceNormalResult {
+    success: boolean;
+    position: Vec3;
+    normal: Vec3;
+    distance: number;
+    error?: string;
+}

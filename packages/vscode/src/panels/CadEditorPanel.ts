@@ -54,6 +54,9 @@ export class CadEditorPanel {
                     case 'importStep':
                         await this._handleImportStep();
                         return;
+                    case 'exportModel':
+                        await this._handleExportModel(message.data);
+                        return;
                     case 'fitView':
                         // Handled in webview
                         return;
@@ -108,6 +111,33 @@ export class CadEditorPanel {
 
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load STEP file: ${error}`);
+            this._setStatus('Ready');
+        }
+    }
+
+    private async _handleExportModel(data: string): Promise<void> {
+        const options: vscode.SaveDialogOptions = {
+            saveLabel: 'Export Model',
+            filters: {
+                'JSON Files': ['json'],
+                'All Files': ['*']
+            },
+            defaultUri: vscode.Uri.file('model_export.json')
+        };
+
+        const fileUri = await vscode.window.showSaveDialog(options);
+        if (!fileUri) {
+            return;
+        }
+
+        try {
+            // Write JSON data to file
+            fs.writeFileSync(fileUri.fsPath, data, 'utf-8');
+            const fileName = path.basename(fileUri.fsPath);
+            vscode.window.showInformationMessage(`Model exported successfully to ${fileName}`);
+            this._setStatus('Ready');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to export model: ${error}`);
             this._setStatus('Ready');
         }
     }
@@ -600,6 +630,85 @@ export class CadEditorPanel {
             font-size: 12px;
             color: #808080;
         }
+        /* Explode slider */
+        .explode-slider-container {
+            position: absolute;
+            top: 90px;
+            right: 20px;
+            background-color: rgba(37, 37, 38, 0.95);
+            border: 1px solid #3c3c3c;
+            border-radius: 6px;
+            padding: 15px 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+            display: none;
+            min-width: 280px;
+        }
+        .explode-slider-container.show {
+            display: block;
+        }
+        .explode-slider-header {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #cccccc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .explode-slider-close {
+            cursor: pointer;
+            font-size: 18px;
+            color: #888;
+            line-height: 1;
+            padding: 0 4px;
+        }
+        .explode-slider-close:hover {
+            color: #ccc;
+        }
+        .explode-slider-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .explode-slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #3c3c3c;
+            outline: none;
+            border-radius: 3px;
+        }
+        .explode-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #007acc;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .explode-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #007acc;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+        .explode-slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #888;
+        }
+        .explode-slider-value {
+            text-align: center;
+            font-size: 13px;
+            color: #cccccc;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -627,6 +736,10 @@ export class CadEditorPanel {
                         <button class="ribbon-btn" id="btn-import">
                             <span class="ribbon-btn-icon">📥</span>
                             <span class="ribbon-btn-text">导入</span>
+                        </button>
+                        <button class="ribbon-btn" id="btn-export">
+                            <span class="ribbon-btn-icon">📤</span>
+                            <span class="ribbon-btn-text">导出</span>
                         </button>
                         <button class="ribbon-btn" id="btn-fit">
                             <span class="ribbon-btn-icon">🔍</span>
@@ -728,8 +841,35 @@ export class CadEditorPanel {
                     </div>
                     <div class="ribbon-tab-label">驱动设计</div>
                 </div>
+                <div class="ribbon-separator"></div>
+                <!-- Tools -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" id="btn-explode">
+                            <span class="ribbon-btn-icon">💥</span>
+                            <span class="ribbon-btn-text">爆炸图</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">工具</div>
+                </div>
             </div>
-            <div id="canvas-container"></div>
+            <div id="canvas-container">
+                <!-- Explode slider control -->
+                <div class="explode-slider-container" id="explode-slider-container">
+                    <div class="explode-slider-header">
+                        <span>爆炸视图距离</span>
+                        <span class="explode-slider-close" id="explode-slider-close">×</span>
+                    </div>
+                    <div class="explode-slider-wrapper">
+                        <input type="range" class="explode-slider" id="explode-slider" min="0" max="100" value="0" step="1">
+                        <div class="explode-slider-labels">
+                            <span>0%</span>
+                            <span>100%</span>
+                        </div>
+                        <div class="explode-slider-value" id="explode-slider-value">0%</div>
+                    </div>
+                </div>
+            </div>
             <div class="loading-overlay hidden" id="loading-overlay">
                 <div style="text-align: center;">
                     <div class="loading-spinner"></div>

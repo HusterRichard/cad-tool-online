@@ -184,6 +184,13 @@ export class ThreeViewer {
         }
     }
 
+    setMeshPosition(id: string, offset: { x: number; y: number; z: number }): void {
+        const mesh = this.meshes.get(id);
+        if (mesh) {
+            mesh.position.set(offset.x, offset.y, offset.z);
+        }
+    }
+
     fitToView(): void {
         const box = new THREE.Box3();
         this.meshes.forEach(mesh => {
@@ -355,5 +362,37 @@ export class ThreeViewer {
      */
     getRenderer(): THREE.WebGLRenderer {
         return this.renderer;
+    }
+
+    /**
+     * 从屏幕坐标获取射线 (用于拾取面法向)
+     */
+    getRayFromScreenPoint(x: number, y: number): { origin: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } } | null {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+
+        // 归一化设备坐标 (NDC): -1 到 +1
+        const mouse = new THREE.Vector2(
+            ((x / rect.width) * 2) - 1,
+            -((y / rect.height) * 2) + 1
+        );
+
+        // 创建射线
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.camera);
+
+        const ray = raycaster.ray;
+
+        return {
+            origin: {
+                x: ray.origin.x,
+                y: ray.origin.y,
+                z: ray.origin.z
+            },
+            direction: {
+                x: ray.direction.x,
+                y: ray.direction.y,
+                z: ray.direction.z
+            }
+        };
     }
 }
