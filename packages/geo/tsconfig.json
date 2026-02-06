@@ -8,5 +8,5 @@
     "declarationMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "cpp", "wasm"]
+  "exclude": ["node_modules", "dist", "cpp", "wasm", "src/**/__tests__/**", "src/**/*.spec.ts", "src/**/*.test.ts"]
 }

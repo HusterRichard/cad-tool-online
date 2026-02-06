@@ -77,16 +77,29 @@ export class ThreeViewer {
     }
 
     private setupLights(): void {
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        // 环境光 - 提供基础照明，确保所有面都能被照亮
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
         this.scene.add(ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        // 半球光 - 模拟天空和地面的反射光，提供更自然的照明
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+        hemisphereLight.position.set(0, 0, 1); // Z-up
+        this.scene.add(hemisphereLight);
+
+        // 主方向光 - 从右上方照射
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
         directionalLight.position.set(100, 100, 100);
         this.scene.add(directionalLight);
 
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+        // 辅助方向光 - 从左下方照射，填补阴影
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
         directionalLight2.position.set(-100, -100, -100);
         this.scene.add(directionalLight2);
+
+        // 侧面补光 - 增强侧面细节
+        const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight3.position.set(-100, 100, 0);
+        this.scene.add(directionalLight3);
     }
 
     private setupGrid(): void {

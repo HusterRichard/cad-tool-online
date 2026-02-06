@@ -20,7 +20,9 @@
       "Bash(pnpm run build:ui:*)",
       "Bash(pnpm run build:all:*)",
       "Bash(pnpm -r build:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "Bash(./build_wasm.sh:*)"
     ],
     "additionalDirectories": [
       "E:\\04.work_code\\CadToolOnline"

@@ -53,9 +53,113 @@
 #include <GProp_GProps.hxx>
 #include <BRepGProp.hxx>
 
+// For random color generation
+#include <cmath>
+#include <algorithm>
+#include <locale>
+#include <codecvt>
+
 using namespace emscripten;
 
 namespace {
+
+// ============================================================================
+// Part Name Counter - 用于无效名称的回退命名
+// ============================================================================
+
+class PartNameCounter {
+private:
+    int partIndex = 0;
+
+public:
+    std::string getNextPartName() {
+        partIndex++;
+        return "Part" + std::to_string(partIndex);
+    }
+
+    void reset() {
+        partIndex = 0;
+    }
+};
+
+// 全局零件名计数器实例
+static PartNameCounter g_partNameCounter;
+
+// ============================================================================
+// Smart Color Generator - 使用黄金角分割生成视觉上协调的颜色
+// ============================================================================
+
+class SmartColorGenerator {
+private:
+    int colorIndex = 0;
+    static constexpr double GOLDEN_RATIO_CONJUGATE = 0.618033988749895;
+    static constexpr double DEFAULT_SATURATION = 0.75;  // 饱和度
+    static constexpr double DEFAULT_VALUE = 0.90;       // 明度
+
+    // HSV 转 RGB
+    static void hsvToRgb(double h, double s, double v, int& r, int& g, int& b) {
+        double c = v * s;
+        double x = c * (1.0 - std::abs(std::fmod(h * 6.0, 2.0) - 1.0));
+        double m = v - c;
+
+        double r1, g1, b1;
+
+        if (h < 1.0/6.0) {
+            r1 = c; g1 = x; b1 = 0;
+        } else if (h < 2.0/6.0) {
+            r1 = x; g1 = c; b1 = 0;
+        } else if (h < 3.0/6.0) {
+            r1 = 0; g1 = c; b1 = x;
+        } else if (h < 4.0/6.0) {
+            r1 = 0; g1 = x; b1 = c;
+        } else if (h < 5.0/6.0) {
+            r1 = x; g1 = 0; b1 = c;
+        } else {
+            r1 = c; g1 = 0; b1 = x;
+        }
+
+        r = static_cast<int>((r1 + m) * 255.0);
+        g = static_cast<int>((g1 + m) * 255.0);
+        b = static_cast<int>((b1 + m) * 255.0);
+
+        // 确保在有效范围内
+        r = std::max(0, std::min(255, r));
+        g = std::max(0, std::min(255, g));
+        b = std::max(0, std::min(255, b));
+    }
+
+public:
+    // 获取下一个颜色（使用黄金角分割确保颜色均匀分布）
+    std::string getNextColor() {
+        // 使用黄金角分割生成色相
+        double hue = std::fmod(colorIndex * GOLDEN_RATIO_CONJUGATE, 1.0);
+
+        // 轻微变化饱和度和明度以增加多样性
+        double saturation = DEFAULT_SATURATION + (std::fmod(colorIndex * 0.123, 0.2) - 0.1);
+        double value = DEFAULT_VALUE + (std::fmod(colorIndex * 0.456, 0.15) - 0.075);
+
+        // 确保在合理范围内
+        saturation = std::max(0.6, std::min(0.95, saturation));
+        value = std::max(0.75, std::min(0.98, value));
+
+        int r, g, b;
+        hsvToRgb(hue, saturation, value, r, g, b);
+
+        char hexColor[8];
+        snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
+
+        colorIndex++;
+        return std::string(hexColor);
+    }
+
+    // 重置颜色索引（用于新的 STEP 文件）
+    void reset() {
+        colorIndex = 0;
+    }
+};
+
+// 全局颜色生成器实例
+static SmartColorGenerator g_colorGenerator;
 
 // Create a box and store it
 std::string makeBox(double dx, double dy, double dz, const std::string& id) {
@@ -262,10 +366,68 @@ int getShapeCount() {
 // T2.2: STEP File Reading with Hierarchy Support
 // ============================================================================
 
+// Helper function to convert ExtendedString to UTF-8
+std::string extendedStringToUtf8(const TCollection_ExtendedString& extStr) {
+    if (extStr.IsEmpty()) {
+        return "";
+    }
+
+    try {
+        // Convert ExtendedString to UTF-8
+        std::string utf8Result;
+        const Standard_ExtString extChars = extStr.ToExtString();
+
+        for (int i = 0; i < extStr.Length(); ++i) {
+            Standard_ExtCharacter extChar = extChars[i];
+
+            if (extChar < 0x80) {
+                // ASCII character (1 byte)
+                utf8Result += static_cast<char>(extChar);
+            } else if (extChar < 0x800) {
+                // 2-byte UTF-8
+                utf8Result += static_cast<char>(0xC0 | (extChar >> 6));
+                utf8Result += static_cast<char>(0x80 | (extChar & 0x3F));
+            } else {
+                // 3-byte UTF-8
+                utf8Result += static_cast<char>(0xE0 | (extChar >> 12));
+                utf8Result += static_cast<char>(0x80 | ((extChar >> 6) & 0x3F));
+                utf8Result += static_cast<char>(0x80 | (extChar & 0x3F));
+            }
+        }
+
+        return utf8Result;
+    } catch (...) {
+        return "";
+    }
+}
+
+// Helper function to check if a string is valid (not garbled)
+bool isValidPartName(const std::string& name) {
+    if (name.empty() || name == "Unnamed") {
+        return false;
+    }
+
+    // Check for common garbled patterns
+    // If the string contains mostly control characters or unprintable chars, it's likely garbled
+    int printableCount = 0;
+    int totalCount = 0;
+
+    for (unsigned char c : name) {
+        totalCount++;
+        // Consider ASCII printable chars and UTF-8 continuation bytes as valid
+        if ((c >= 32 && c <= 126) || (c >= 0x80)) {
+            printableCount++;
+        }
+    }
+
+    // If less than 80% of characters are printable, consider it garbled
+    return totalCount > 0 && (printableCount * 100 / totalCount >= 80);
+}
+
 // Helper function to escape JSON strings
 std::string escapeJsonString(const std::string& input) {
     std::string output;
-    for (char c : input) {
+    for (unsigned char c : input) {
         switch (c) {
             case '"': output += "\\\""; break;
             case '\\': output += "\\\\"; break;
@@ -274,7 +436,10 @@ std::string escapeJsonString(const std::string& input) {
             case '\n': output += "\\n"; break;
             case '\r': output += "\\r"; break;
             case '\t': output += "\\t"; break;
-            default: output += c; break;
+            default:
+                // Keep UTF-8 bytes as-is
+                output += c;
+                break;
         }
     }
     return output;
@@ -288,15 +453,25 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
                         int& counter,
                         std::stringstream& result,
                         geo::ShapeStore& store) {
-    // Get name
+    // Get name with UTF-8 support and fallback to Part+number for invalid names
     Handle(TDataStd_Name) nameAttr;
-    std::string name = "Unnamed";
+    std::string name;
+    bool nameFound = false;
+
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
         TCollection_ExtendedString extName = nameAttr->Get();
-        Standard_CString cStr = TCollection_AsciiString(extName).ToCString();
-        if (cStr && strlen(cStr) > 0) {
-            name = std::string(cStr);
+        std::string convertedName = extendedStringToUtf8(extName);
+
+        // Validate the converted name
+        if (isValidPartName(convertedName)) {
+            name = convertedName;
+            nameFound = true;
         }
+    }
+
+    // Fallback to Part+number if no valid name found
+    if (!nameFound) {
+        name = g_partNameCounter.getNextPartName();
     }
 
     // Determine node type
@@ -325,7 +500,7 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
 
     // Output color as hex RGB
     if (hasColor) {
-        // Convert to RGB (0-255)
+        // Use color from STEP file
         int r = static_cast<int>(color.Red() * 255.0);
         int g = static_cast<int>(color.Green() * 255.0);
         int b = static_cast<int>(color.Blue() * 255.0);
@@ -335,8 +510,15 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
         snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
         result << ",\"color\":\"" << hexColor << "\"";
     } else {
-        // Default gray color
-        result << ",\"color\":\"#808080\"";
+        // Generate a smart random color for parts without color info
+        // Only assign color to actual parts (not assemblies)
+        if (isSimpleShape || (!isAssembly && nodeType == "part")) {
+            std::string smartColor = g_colorGenerator.getNextColor();
+            result << ",\"color\":\"" << smartColor << "\"";
+        } else {
+            // Assemblies get a neutral gray
+            result << ",\"color\":\"#C0C0C0\"";
+        }
     }
 
     // Store shape if it's a solid/part
@@ -395,6 +577,10 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
 std::string readStepFromBuffer(const std::string& buffer, const std::string& baseId) {
     std::stringstream result;
     result << "{\"success\":";
+
+    // Reset color generator and part name counter for new STEP file
+    g_colorGenerator.reset();
+    g_partNameCounter.reset();
 
     try {
         // Create XCAF document for hierarchy support
