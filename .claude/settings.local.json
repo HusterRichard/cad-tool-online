@@ -19,7 +19,8 @@
       "Bash(pnpm build:*)",
       "Bash(pnpm run build:ui:*)",
       "Bash(pnpm run build:all:*)",
-      "Bash(pnpm -r build:*)"
+      "Bash(pnpm -r build:*)",
+      "Bash(chmod:*)"
     ],
     "additionalDirectories": [
       "E:\\04.work_code\\CadToolOnline"

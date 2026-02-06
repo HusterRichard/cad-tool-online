@@ -1,0 +1,160 @@
+# CadToolOnline 依赖说明
+
+## 运行环境要求
+
+### 必需环境
+
+- **Node.js**: >= 20.0.0
+  - 下载地址: https://nodejs.org/
+  - 推荐版本: 20.x LTS
+
+- **pnpm**: >= 8.0.0
+  - 安装命令: `npm install -g pnpm`
+  - 官方文档: https://pnpm.io/
+
+- **VSCode**: >= 1.85.0
+  - 下载地址: https://code.visualstudio.com/
+  - 用于运行和调试插件
+
+### 可选环境（仅用于 WASM 编译）
+
+如需重新编译 OCCT WASM 模块：
+
+- **CMake**: >= 3.30
+  - 下载地址: https://cmake.org/download/
+
+- **Ninja**: 最新版
+  - Windows: `choco install ninja`
+  - macOS: `brew install ninja`
+  - Linux: `apt install ninja-build`
+
+- **Git**: >= 2.0
+  - 下载地址: https://git-scm.com/
+
+- **Emscripten SDK**: v4.0.8
+  - 会自动通过 `pnpm setup:wasm` 安装
+
+## Node.js 依赖包
+
+### 生产依赖
+
+所有依赖已在各模块的 `package.json` 中声明，通过 `pnpm install` 自动安装。
+
+#### 核心依赖
+- `three@^0.170.0` - 3D 渲染引擎
+- `@maxgraph/core` - 拓扑图可视化
+
+#### VSCode 依赖
+- `vscode` - VSCode API 类型定义
+
+### 开发依赖
+
+- **TypeScript**: `typescript@^5.3.3`
+- **构建工具**: `vite@^5.0.0`
+- **代码检查**: `eslint@^8.56.0`, `@typescript-eslint/*`
+- **代码格式化**: `prettier@^3.1.1`
+
+## 系统依赖
+
+### Windows
+
+无特殊系统依赖
+
+### macOS
+
+无特殊系统依赖
+
+### Linux
+
+如需编译 WASM，可能需要：
+```bash
+sudo apt update
+sudo apt install build-essential
+```
+
+## 安装步骤
+
+### 快速安装
+
+```bash
+# 1. 克隆仓库
+git clone <repository-url>
+cd CadToolOnline
+
+# 2. 运行一键脚本
+chmod +x scripts/run.sh
+./scripts/run.sh
+```
+
+### 手动安装
+
+```bash
+# 1. 安装 Node.js 依赖
+pnpm install
+
+# 2. （可选）设置 WASM 编译环境
+pnpm setup:wasm
+
+# 3. 构建项目
+pnpm build:all  # 全量构建（含 WASM）
+# 或
+pnpm build      # 仅构建 TypeScript
+
+# 4. 在 VSCode 中按 F5 启动调试
+```
+
+## 依赖版本锁定
+
+项目使用 `pnpm-lock.yaml` 锁定依赖版本，确保所有开发者使用相同版本。
+
+**注意**: 请勿删除 `pnpm-lock.yaml` 文件。
+
+## 依赖更新
+
+```bash
+# 检查过期依赖
+pnpm outdated
+
+# 更新依赖（谨慎操作）
+pnpm update
+
+# 更新特定依赖
+pnpm update <package-name>
+```
+
+## 故障排查
+
+### 问题 1: `pnpm install` 失败
+
+**解决方案**:
+```bash
+# 清除缓存
+pnpm store prune
+
+# 删除 node_modules 和 lock 文件
+rm -rf node_modules pnpm-lock.yaml
+
+# 重新安装
+pnpm install
+```
+
+### 问题 2: WASM 模块编译失败
+
+**解决方案**:
+1. 确保已安装 CMake 和 Ninja
+2. 检查 Emscripten SDK 是否正确安装
+3. 使用预编译的 WASM 模块（如有提供）
+
+### 问题 3: VSCode 插件无法启动
+
+**解决方案**:
+1. 确保已执行 `pnpm build`
+2. 检查 VSCode 版本是否 >= 1.85.0
+3. 查看 VSCode 开发者工具控制台的错误信息
+
+## 参考链接
+
+- [Node.js 官方文档](https://nodejs.org/docs/)
+- [pnpm 文档](https://pnpm.io/)
+- [VSCode Extension API](https://code.visualstudio.com/api)
+- [Emscripten 文档](https://emscripten.org/docs/)
