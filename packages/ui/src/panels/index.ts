@@ -79,3 +79,6 @@ export class PropertyPanel extends Panel {
 
 // MBS Panels
 export * from './MbsPanels';
+
+// Ribbon Menu
+export * from './RibbonMenu';

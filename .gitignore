@@ -4,3 +4,4 @@ dist
 .git
 *.vsix
 packages/geo/cpp/build/
+.VSCodeCounter/

@@ -371,6 +371,65 @@ function clearScene(): void {
 }
 
 // ============================================================================
+// MBS Action Handling
+// ============================================================================
+
+function handleMbsAction(action: string, params: Record<string, unknown>): void {
+    console.log('[MBS Action]', action, params);
+
+    switch (action) {
+        // 分组设计
+        case 'createGroup':
+            console.log('Creating new MBS group...');
+            // TODO: 实现创建分组逻辑
+            break;
+        case 'createChildGroup':
+            console.log('Creating child group...');
+            // TODO: 实现创建子分组逻辑
+            break;
+        case 'groupProperties':
+            console.log('Showing group properties...');
+            // TODO: 实现分组属性面板
+            break;
+
+        // 标架设计
+        case 'createFrame':
+            console.log('Creating new frame...');
+            // TODO: 实现创建标架逻辑
+            break;
+        case 'editFrame':
+            console.log('Editing frame...');
+            // TODO: 实现编辑标架逻辑
+            break;
+        case 'deleteFrame':
+            console.log('Deleting frame...');
+            // TODO: 实现删除标架逻辑
+            break;
+
+        // 关节设计
+        case 'createJoint':
+            const jointType = params.jointType as string;
+            console.log(`Creating ${jointType} joint...`);
+            // TODO: 实现创建关节逻辑
+            break;
+
+        // 驱动设计
+        case 'createMotion':
+            const motionType = params.motionType as string;
+            console.log(`Creating ${motionType} motion...`);
+            // TODO: 实现创建驱动逻辑
+            break;
+        case 'motionProperties':
+            console.log('Showing motion properties...');
+            // TODO: 实现驱动属性面板
+            break;
+
+        default:
+            console.log('Unknown MBS action:', action);
+    }
+}
+
+// ============================================================================
 // Message Handling
 // ============================================================================
 
@@ -391,6 +450,9 @@ function handleMessage(event: MessageEvent): void {
             break;
         case 'updateProperties':
             updatePropertiesPanel(message.shapeId);
+            break;
+        case 'mbsAction':
+            handleMbsAction(message.action, message);
             break;
     }
 }

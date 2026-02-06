@@ -64,6 +64,9 @@ export class CadEditorPanel {
                         // Webview is ready
                         this._onWebviewReady();
                         return;
+                    case 'ribbonAction':
+                        this._handleRibbonAction(message.action, message.params);
+                        return;
                 }
             },
             null,
@@ -123,6 +126,102 @@ export class CadEditorPanel {
 
     private _onWebviewReady(): void {
         this._setStatus('Ready');
+    }
+
+    private _handleRibbonAction(action: string, params?: Record<string, unknown>): void {
+        // 处理 Ribbon 菜单动作
+        switch (action) {
+            // 分组设计
+            case 'createGroup':
+                vscode.window.showInformationMessage('创建新分组');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createGroup'
+                });
+                break;
+            case 'createChildGroup':
+                vscode.window.showInformationMessage('添加子分组');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createChildGroup'
+                });
+                break;
+            case 'groupProperties':
+                vscode.window.showInformationMessage('查看分组属性');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'groupProperties'
+                });
+                break;
+
+            // 标架设计
+            case 'createFrame':
+                vscode.window.showInformationMessage('创建新标架');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createFrame'
+                });
+                break;
+            case 'editFrame':
+                vscode.window.showInformationMessage('编辑标架');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'editFrame'
+                });
+                break;
+            case 'deleteFrame':
+                vscode.window.showInformationMessage('删除标架');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'deleteFrame'
+                });
+                break;
+
+            // 关节设计
+            case 'createJoint_revolute':
+            case 'createJoint_prismatic':
+            case 'createJoint_cylindrical':
+            case 'createJoint_spherical':
+            case 'createJoint_universal':
+            case 'createJoint_planar':
+            case 'createJoint_fixed':
+                const jointType = params?.jointType as string;
+                vscode.window.showInformationMessage(`创建 ${jointType} 关节`);
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createJoint',
+                    jointType: jointType
+                });
+                break;
+
+            // 驱动设计
+            case 'createMotion_rotational':
+                vscode.window.showInformationMessage('创建旋转驱动');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createMotion',
+                    motionType: 'rotational'
+                });
+                break;
+            case 'createMotion_translational':
+                vscode.window.showInformationMessage('创建平移驱动');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createMotion',
+                    motionType: 'translational'
+                });
+                break;
+            case 'motionProperties':
+                vscode.window.showInformationMessage('查看驱动属性');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'motionProperties'
+                });
+                break;
+
+            default:
+                console.log('Unknown ribbon action:', action, params);
+        }
     }
 
     private _setStatus(text: string): void {
@@ -235,29 +334,119 @@ export class CadEditorPanel {
             width: 100%;
             position: relative;
         }
-        .toolbar {
-            position: absolute;
-            top: 10px;
-            left: 10px;
+        /* Ribbon Bar Styles */
+        .ribbon-bar {
+            display: flex;
+            background: linear-gradient(to bottom, #3c3c3c 0%, #2d2d2d 100%);
+            border-bottom: 1px solid #1e1e1e;
+            padding: 0;
+            min-height: 70px;
+        }
+        .ribbon-tab-group {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #4a4a4a;
+            padding: 4px 8px;
+            min-width: 80px;
+        }
+        .ribbon-tab-group:last-child {
+            border-right: none;
+        }
+        .ribbon-tab-content {
             display: flex;
             gap: 4px;
-            z-index: 100;
+            flex: 1;
+            align-items: flex-start;
+            padding-top: 4px;
         }
-        .toolbar button {
-            padding: 6px 12px;
-            background-color: #0e639c;
-            color: white;
-            border: none;
-            border-radius: 2px;
+        .ribbon-tab-label {
+            font-size: 10px;
+            color: #888;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 0;
+            border-top: 1px solid #4a4a4a;
+            margin-top: auto;
+        }
+        .ribbon-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            color: #cccccc;
             cursor: pointer;
-            font-size: 12px;
+            font-family: inherit;
+            min-width: 50px;
+            gap: 2px;
         }
-        .toolbar button:hover {
-            background-color: #1177bb;
+        .ribbon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
         }
-        .toolbar button:disabled {
-            background-color: #4a4a4a;
-            cursor: not-allowed;
+        .ribbon-btn:active {
+            background: rgba(0, 122, 204, 0.3);
+        }
+        .ribbon-btn.has-dropdown {
+            position: relative;
+        }
+        .ribbon-btn-icon {
+            font-size: 20px;
+            line-height: 1;
+        }
+        .ribbon-btn-text {
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .ribbon-btn-arrow {
+            font-size: 8px;
+            opacity: 0.6;
+        }
+        .ribbon-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            min-width: 200px;
+            background-color: #252526;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            padding: 4px 0;
+            display: none;
+        }
+        .ribbon-dropdown.show {
+            display: block;
+        }
+        .ribbon-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #cccccc;
+        }
+        .ribbon-dropdown-item:hover {
+            background-color: #094771;
+        }
+        .ribbon-dropdown-item-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .ribbon-dropdown-item-label {
+            flex: 1;
+        }
+        .ribbon-separator {
+            width: 1px;
+            background: #4a4a4a;
+            margin: 4px 6px;
+            align-self: stretch;
         }
         .status-bar {
             height: 22px;
@@ -392,10 +581,115 @@ export class CadEditorPanel {
             </div>
         </div>
         <div class="viewport">
-            <div class="toolbar">
-                <button id="btn-import">Import STEP</button>
-                <button id="btn-fit">Fit View</button>
-                <button id="btn-clear">Clear</button>
+            <!-- Ribbon Bar -->
+            <div class="ribbon-bar">
+                <!-- File Group -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" id="btn-import">
+                            <span class="ribbon-btn-icon">📥</span>
+                            <span class="ribbon-btn-text">导入</span>
+                        </button>
+                        <button class="ribbon-btn" id="btn-fit">
+                            <span class="ribbon-btn-icon">🔍</span>
+                            <span class="ribbon-btn-text">适应</span>
+                        </button>
+                        <button class="ribbon-btn" id="btn-clear">
+                            <span class="ribbon-btn-icon">🗑️</span>
+                            <span class="ribbon-btn-text">清空</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">文件</div>
+                </div>
+                <div class="ribbon-separator"></div>
+                <!-- Group Design -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" data-action-id="createGroup">
+                            <span class="ribbon-btn-icon">➕</span>
+                            <span class="ribbon-btn-text">新建</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createChildGroup">
+                            <span class="ribbon-btn-icon">📂</span>
+                            <span class="ribbon-btn-text">子分组</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="groupProperties">
+                            <span class="ribbon-btn-icon">⚙️</span>
+                            <span class="ribbon-btn-text">属性</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">分组设计</div>
+                </div>
+                <!-- Frame Design -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" data-action-id="createFrame">
+                            <span class="ribbon-btn-icon">➕</span>
+                            <span class="ribbon-btn-text">新建</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="editFrame">
+                            <span class="ribbon-btn-icon">✏️</span>
+                            <span class="ribbon-btn-text">编辑</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="deleteFrame">
+                            <span class="ribbon-btn-icon">🗑️</span>
+                            <span class="ribbon-btn-text">删除</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">标架设计</div>
+                </div>
+                <!-- Joint Design -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" data-action-id="createJoint_revolute">
+                            <span class="ribbon-btn-icon">🔄</span>
+                            <span class="ribbon-btn-text">旋转</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createJoint_prismatic">
+                            <span class="ribbon-btn-icon">↔️</span>
+                            <span class="ribbon-btn-text">移动</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
+                            <span class="ribbon-btn-icon">🔵</span>
+                            <span class="ribbon-btn-text">圆柱</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createJoint_spherical">
+                            <span class="ribbon-btn-icon">⚪</span>
+                            <span class="ribbon-btn-text">球</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createJoint_universal">
+                            <span class="ribbon-btn-icon">✚</span>
+                            <span class="ribbon-btn-text">万向</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createJoint_planar">
+                            <span class="ribbon-btn-icon">▭</span>
+                            <span class="ribbon-btn-text">平面</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createJoint_fixed">
+                            <span class="ribbon-btn-icon">🔒</span>
+                            <span class="ribbon-btn-text">固定</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">关节设计</div>
+                </div>
+                <!-- Motion Design -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" data-action-id="createMotion_rotational">
+                            <span class="ribbon-btn-icon">🔄</span>
+                            <span class="ribbon-btn-text">旋转</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createMotion_translational">
+                            <span class="ribbon-btn-icon">➡️</span>
+                            <span class="ribbon-btn-text">平移</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="motionProperties">
+                            <span class="ribbon-btn-icon">⚙️</span>
+                            <span class="ribbon-btn-text">属性</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">驱动设计</div>
+                </div>
             </div>
             <div id="canvas-container"></div>
             <div class="loading-overlay hidden" id="loading-overlay">
@@ -418,6 +712,36 @@ export class CadEditorPanel {
     </div>
     <script nonce="${nonce}">
         window.WASM_BASE_URL = "${wasmUri}";
+
+        // Ribbon Menu Event Handling
+        (function() {
+            // Handle ribbon buttons with action
+            document.querySelectorAll('.ribbon-btn[data-action-id]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const actionId = btn.dataset.actionId;
+                    handleRibbonAction(actionId);
+                });
+            });
+
+            function handleRibbonAction(actionId) {
+                const params = {};
+
+                if (actionId.startsWith('createJoint_')) {
+                    params.jointType = actionId.replace('createJoint_', '');
+                } else if (actionId.startsWith('createMotion_')) {
+                    params.motionType = actionId.replace('createMotion_', '');
+                }
+
+                // Post message to VSCode extension
+                const vscode = acquireVsCodeApi();
+                vscode.postMessage({
+                    command: 'ribbonAction',
+                    action: actionId,
+                    params: params
+                });
+            }
+        })();
     </script>
     <script nonce="${nonce}" type="module" src="${webviewUri}"></script>
 </body>
