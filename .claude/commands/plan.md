@@ -1,3 +1,8 @@
+---
+name: plan
+description: 使用 Planner Agent 分析需求并生成带优先级的结构化任务计划。
+---
+
 # /plan 命令
 
 使用 Planner Agent 分析需求并生成任务计划。

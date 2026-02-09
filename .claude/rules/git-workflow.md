@@ -1,3 +1,8 @@
+---
+name: git-workflow
+description: Git 工作流规则，定义分支命名、提交信息格式及 PR 审查要求。
+---
+
 # Git 工作流规则
 
 ## 分支命名

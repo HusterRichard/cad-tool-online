@@ -1,3 +1,8 @@
+---
+name: project-context
+description: 项目上下文文档，包含 CadToolOnline 的架构设计、模块划分、移植计划及开发任务分解。
+---
+
 # CadToolOnline 项目开发指南
 
 ## 项目概述

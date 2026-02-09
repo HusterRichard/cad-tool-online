@@ -1,3 +1,8 @@
+---
+name: build-fix
+description: 使用 Build Error Resolver Agent 诊断并修复构建错误。
+---
+
 # /build-fix 命令
 
 使用 Build Error Resolver Agent 诊断并修复构建错误。

@@ -30,5 +30,10 @@
     "additionalDirectories": [
       "E:\\04.work_code\\CadToolOnline"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "filesystem",
+    "git"
+  ],
+  "enableAllProjectMcpServers": true
 }

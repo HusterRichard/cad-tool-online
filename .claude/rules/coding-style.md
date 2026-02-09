@@ -1,3 +1,8 @@
+---
+name: coding-style
+description: 代码风格规则，涵盖 TypeScript/C++ 编码规范、命名约定及禁止规则。
+---
+
 # 代码风格规则
 
 ## TypeScript

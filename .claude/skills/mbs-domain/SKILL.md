@@ -1,3 +1,8 @@
+---
+name: mbs-domain
+description: 多体动力学（MBS）领域知识，涵盖刚体、标架、关节类型、驱动类型及 Modelica 映射。在开发 MBS 相关功能、修复 Bug 或进行重构时使用。
+---
+
 # 多体动力学领域知识
 
 ## 核心概念

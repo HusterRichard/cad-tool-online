@@ -1,3 +1,8 @@
+---
+name: embind-patterns
+description: Emscripten Embind 绑定模式，涵盖类/枚举/值类型绑定、内存管理及 TypeScript 接口生成。在开发 C++ WASM 绑定时使用。
+---
+
 # Embind 绑定技能
 
 ## 绑定模式

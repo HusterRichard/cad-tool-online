@@ -1,3 +1,8 @@
+---
+name: threejs-patterns
+description: Three.js 渲染模式，涵盖 WASM 数据转 Mesh、标架与关节可视化及性能优化。在开发 3D 渲染相关功能时使用。
+---
+
 # Three.js 渲染技能
 
 ## 从 WASM 数据创建 Mesh

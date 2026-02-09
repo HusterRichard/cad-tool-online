@@ -1,3 +1,8 @@
+---
+name: port-class
+description: 从 CADToolbox 移植 C++ 类到 WASM 模块，生成 Embind 绑定和 TypeScript 接口。
+---
+
 # /port-class 命令
 
 从 CADToolbox 移植 C++ 类到 WASM 模块。

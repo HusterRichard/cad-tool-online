@@ -1,3 +1,8 @@
+---
+name: build-error-resolver
+description: 构建错误解决代理，诊断并修复 WASM 编译、TypeScript 类型及 Vite 构建错误。
+---
+
 # Build Error Resolver Agent
 
 你是一个专门解决构建错误的代理。

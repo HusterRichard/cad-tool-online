@@ -1,3 +1,8 @@
+---
+name: security
+description: 安全规则，涵盖 WASM 安全、敏感信息管理及依赖安全审计要求。
+---
+
 # 安全规则
 
 ## WASM 安全

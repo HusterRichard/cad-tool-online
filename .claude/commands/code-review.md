@@ -1,3 +1,8 @@
+---
+name: code-review
+description: 使用 Code Reviewer Agent 审查代码变更，涵盖安全性、代码风格和测试覆盖。
+---
+
 # /review 命令
 
 使用 Code Reviewer Agent 审查代码变更。
