@@ -24,7 +24,8 @@
       "Bash(ls:*)",
       "Bash(./build_wasm.sh:*)",
       "Bash(pnpm test:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(xargs cat:*)"
     ],
     "additionalDirectories": [
       "E:\\04.work_code\\CadToolOnline"
