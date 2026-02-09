@@ -1,8 +1,12 @@
+# Exclude source packages
+packages/**
+
 # Exclude source files
 src/**
 *.ts
 !*.d.ts
 tsconfig.json
+tsconfig.extension.json
 
 # Exclude build config
 vite.config.ts
@@ -17,6 +21,13 @@ node_modules/**
 # Exclude git
 .git/**
 .gitignore
+
+# Exclude dev/CI files
+.claude/**
+.vscode/**
+scripts/**
+pnpm-workspace.yaml
+pnpm-lock.yaml
 
 # Include dist folder (extension + webview + wasm)
 !dist/**

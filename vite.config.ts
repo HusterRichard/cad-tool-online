@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { copyFileSync, mkdirSync, existsSync } from 'fs';
 
-const wasmDir = resolve(__dirname, '../geo/wasm');
+const wasmDir = resolve(__dirname, 'packages/geo/wasm');
 const distWasmDir = resolve(__dirname, 'dist/wasm');
 
 export default defineConfig({
@@ -26,10 +26,10 @@ export default defineConfig({
     },
     resolve: {
         alias: {
-            '@cadtool-online/core': resolve(__dirname, '../core/src'),
-            '@cadtool-online/geo': resolve(__dirname, '../geo/src'),
-            '@cadtool-online/three': resolve(__dirname, '../three/src'),
-            '@cadtool-online/ui': resolve(__dirname, '../ui/src')
+            '@cadtool-online/core': resolve(__dirname, 'packages/core/src'),
+            '@cadtool-online/geo': resolve(__dirname, 'packages/geo/src'),
+            '@cadtool-online/three': resolve(__dirname, 'packages/three/src'),
+            '@cadtool-online/ui': resolve(__dirname, 'packages/ui/src')
         }
     },
     plugins: [

@@ -25,15 +25,23 @@
       "Bash(./build_wasm.sh:*)",
       "Bash(pnpm test:*)",
       "Bash(cat:*)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(move:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm build:extension:*)",
+      "Bash(pnpm build:webview:*)",
+      "Bash(npx pnpm add:*)",
+      "Bash(npx esbuild:*)",
+      "Bash(node -e:*)",
+      "Bash(node --version:*)"
     ],
     "additionalDirectories": [
       "E:\\04.work_code\\CadToolOnline"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "filesystem",
     "git"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
