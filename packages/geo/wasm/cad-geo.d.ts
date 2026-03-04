@@ -321,6 +321,16 @@ export type ExtremaCCResult = {
   u2: number
 };
 
+export type MeshShapeDataResult = {
+  success: boolean,
+  vertices: any,
+  normals: any,
+  indices: any,
+  vertexCount: number,
+  triangleCount: number,
+  error: EmbindString | undefined
+};
+
 interface EmbindModule {
   VectorDouble: {
     new(): VectorDouble;
@@ -395,7 +405,9 @@ interface EmbindModule {
   hasShape(_0: EmbindString): boolean;
   clearShapes(): void;
   getShapeCount(): number;
-  readStepFromBuffer(_0: EmbindString, _1: EmbindString): string;
+  readStepFromBuffer(_0: Uint8Array, _1: EmbindString): string;
+  meshShapeData(_0: EmbindString, _1: number, _2: number): MeshShapeDataResult;
+  meshShapesData(_0: any, _1: number, _2: number): any;
   meshShape(_0: EmbindString, _1: number, _2: number): string;
   meshShapeDefault(_0: EmbindString): string;
   calculateMassProperties(_0: EmbindString, _1: number): string;

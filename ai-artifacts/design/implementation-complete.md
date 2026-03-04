@@ -1,4 +1,4 @@
-# 零件颜色功能完整实现报告
+﻿# 零件颜色功能完整实现报告
 
 **项目**: CadToolOnline
 **功能**: STEP 文件零件颜色解析与渲染
@@ -81,7 +81,7 @@ STEP 文件 (.step)
 |------|---------|------|------|
 | 颜色提取 | [packages/geo/cpp/src/geo/geo_binding.cpp](../../packages/geo/cpp/src/geo/geo_binding.cpp) | 488-522 | C++ 层颜色提取逻辑 |
 | 类型定义 | [packages/geo/src/types.ts](../../packages/geo/src/types.ts) | 31-42 | StepNode 接口定义 |
-| 颜色应用 | [packages/vscode/src/webview/main.ts](../../packages/vscode/src/webview/main.ts) | 521-525 | 前端自动应用颜色 |
+| 颜色应用 | [packages/vscode/src/webview/main.ts](../../src/webview/main.ts) | 521-525 | 前端自动应用颜色 |
 | 渲染方法 | [packages/three/src/ThreeViewer.ts](../../packages/three/src/ThreeViewer.ts) | 180-185 | Three.js 设置颜色 |
 | 工具函数 | [packages/geo/src/utils/color-utils.ts](../../packages/geo/src/utils/color-utils.ts) | - | 颜色转换工具库 |
 
@@ -617,3 +617,4 @@ pnpm test
 **作者**: Claude Sonnet 4.5
 **审核状态**: ✅ 完成
 **版本**: 1.0.0
+

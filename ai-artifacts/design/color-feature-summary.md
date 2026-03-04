@@ -1,4 +1,4 @@
-# 零件颜色功能开发总结
+﻿# 零件颜色功能开发总结
 
 **项目**: CadToolOnline
 **功能**: STEP 文件零件颜色解析与渲染
@@ -99,7 +99,7 @@ export interface StepNode {
 
 ### 3. 前端应用层
 
-**文件**: [packages/vscode/src/webview/main.ts:521-525](../../packages/vscode/src/webview/main.ts#L521-L525)
+**文件**: [packages/vscode/src/webview/main.ts:521-525](../../src/webview/main.ts#L521-L525)
 
 **自动应用颜色**:
 ```typescript
@@ -489,3 +489,4 @@ function getCachedColor(hex: string): number {
 **最后更新**: 2026-02-06
 **作者**: Claude Sonnet 4.5
 **审核状态**: ✅ 完成
+

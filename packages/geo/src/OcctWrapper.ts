@@ -24,9 +24,27 @@ interface CadGeoModule {
     getShapeCount(): number;
 
     // T2.2: STEP file reading
-    readStepFromBuffer(buffer: string, baseId: string): string;
+    readStepFromBuffer(buffer: Uint8Array, baseId: string): string;
 
     // T2.3: Mesh generation
+    meshShapeData?: (id: string, linearDeflection: number, angularDeflection: number) => {
+        success: boolean;
+        vertices: number[];
+        normals: number[];
+        indices: number[];
+        vertexCount: number;
+        triangleCount: number;
+        error?: string;
+    };
+    meshShapesData?: (shapeIds: string[], linearDeflection: number, angularDeflection: number) => Array<{
+        success: boolean;
+        vertices: number[];
+        normals: number[];
+        indices: number[];
+        vertexCount: number;
+        triangleCount: number;
+        error?: string;
+    }>;
     meshShape(id: string, linearDeflection: number, angularDeflection: number): string;
     meshShapeDefault(id: string): string;
 
@@ -44,6 +62,7 @@ export interface IOcctWrapper {
     isInitialized(): boolean;
     readStep(data: ArrayBuffer, baseId?: string): Promise<StepReadResult>;
     getMesh(shapeId: string, linearDeflection?: number, angularDeflection?: number): MeshData | null;
+    getMeshes(shapeIds: string[], linearDeflection?: number, angularDeflection?: number): Map<string, MeshData | null>;
     getMassProperties(shapeId: string, density?: number): MassProperties | null;
     getFaceNormalAtPoint(shapeId: string, rayOrigin: { x: number; y: number; z: number }, rayDir: { x: number; y: number; z: number }): FaceNormalResult | null;
     deleteShape(shapeId: string): void;
@@ -111,12 +130,9 @@ export class OcctWrapper implements IOcctWrapper {
 
         const id = baseId ?? this.generateShapeId('step');
 
-        // Convert ArrayBuffer to string for WASM
+        // Pass binary data directly to WASM to avoid UTF-8/base64 conversion overhead
         const uint8Array = new Uint8Array(data);
-        const decoder = new TextDecoder('utf-8');
-        const stepString = decoder.decode(uint8Array);
-
-        const resultJson = wasmModule!.readStepFromBuffer(stepString, id);
+        const resultJson = wasmModule!.readStepFromBuffer(uint8Array, id);
         const result: StepReadResult = JSON.parse(resultJson);
 
         return result;
@@ -129,6 +145,24 @@ export class OcctWrapper implements IOcctWrapper {
     getMesh(shapeId: string, linearDeflection: number = 0.1, angularDeflection: number = 0.5): MeshData | null {
         this.ensureInitialized();
 
+        // Prefer structured WASM return to avoid huge JSON serialization/deserialization overhead.
+        const meshShapeData = wasmModule!.meshShapeData;
+        if (meshShapeData) {
+            const result = meshShapeData(shapeId, linearDeflection, angularDeflection);
+
+            if (!result.success) {
+                console.error('Mesh generation failed:', result.error);
+                return null;
+            }
+
+            return {
+                vertices: new Float32Array(result.vertices),
+                normals: new Float32Array(result.normals),
+                indices: new Uint32Array(result.indices)
+            };
+        }
+
+        // Backward-compatible fallback for older WASM modules.
         const resultJson = wasmModule!.meshShape(shapeId, linearDeflection, angularDeflection);
         const result: MeshResult = JSON.parse(resultJson);
 
@@ -143,6 +177,40 @@ export class OcctWrapper implements IOcctWrapper {
             normals: new Float32Array(result.normals),
             indices: new Uint32Array(result.indices)
         };
+    }
+
+    getMeshes(shapeIds: string[], linearDeflection: number = 0.1, angularDeflection: number = 0.5): Map<string, MeshData | null> {
+        this.ensureInitialized();
+
+        const result = new Map<string, MeshData | null>();
+        if (shapeIds.length === 0) {
+            return result;
+        }
+
+        const meshShapesData = wasmModule!.meshShapesData;
+        if (meshShapesData) {
+            const batch = meshShapesData(shapeIds, linearDeflection, angularDeflection);
+            for (let i = 0; i < shapeIds.length; i++) {
+                const shapeId = shapeIds[i];
+                const item = batch[i];
+                if (!item?.success) {
+                    result.set(shapeId, null);
+                    continue;
+                }
+                result.set(shapeId, {
+                    vertices: new Float32Array(item.vertices),
+                    normals: new Float32Array(item.normals),
+                    indices: new Uint32Array(item.indices)
+                });
+            }
+            return result;
+        }
+
+        // Backward-compatible fallback
+        for (const shapeId of shapeIds) {
+            result.set(shapeId, this.getMesh(shapeId, linearDeflection, angularDeflection));
+        }
+        return result;
     }
 
     // ========================================================================

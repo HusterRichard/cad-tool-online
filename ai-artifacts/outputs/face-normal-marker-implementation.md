@@ -206,14 +206,14 @@ bash build_wasm.sh release
 - `packages/geo/wasm/cad-geo.wasm`
 - `packages/geo/wasm/cad-geo.d.ts`
 
-### 2. Build TypeScript
+## 2. Build TypeScript
 
 ```bash
 # From project root
 pnpm build
 ```
 
-### 3. Run VSCode Extension
+## 3. Run VSCode Extension
 
 ```bash
 # Method 1: Debug in VSCode

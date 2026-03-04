@@ -59,7 +59,7 @@ npm run build:wasm
 pnpm build:wasm
 ```
 
-### 方法 2: 手动编译
+## 方法 2: 手动编译
 
 ```bash
 # 1. 进入 C++ 源码目录
@@ -84,7 +84,7 @@ cp cad-geo.wasm ../../../wasm/
 cp cad-geo.d.ts ../../../wasm/ 2>/dev/null || true
 ```
 
-### 方法 3: 检查现有构建脚本
+## 方法 3: 检查现有构建脚本
 
 ```bash
 # 查看 package.json 中的构建命令
@@ -111,7 +111,7 @@ du -h cad-geo.wasm
 strings cad-geo.wasm | grep -i "color"
 ```
 
-### 2. 测试构建的完整性
+## 2. 测试构建的完整性
 
 ```bash
 # 回到根目录
@@ -170,7 +170,7 @@ cd packages/geo/cpp/build/emsdk
 source ./emsdk_env.sh
 ```
 
-### 问题 2: OCCT 库未找到
+## 问题 2: OCCT 库未找到
 
 **症状**:
 ```
@@ -187,7 +187,7 @@ cd packages/geo/cpp
 ./build_occt_wasm.sh  # 如果有这个脚本
 ```
 
-### 问题 3: 编译错误
+## 问题 3: 编译错误
 
 **症状**:
 ```
@@ -273,7 +273,7 @@ pnpm dev
 
 开发时编译速度：~30 秒
 
-### 生产构建（当前配置）
+## 生产构建（当前配置）
 
 ```cmake
 -O3        # 完全优化

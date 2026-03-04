@@ -29,7 +29,7 @@ bash build_wasm.sh release
 # === Build completed ===
 ```
 
-### 步骤 2：构建 TypeScript 包
+## 步骤 2：构建 TypeScript 包
 
 ```bash
 # 返回项目根目录
@@ -44,7 +44,7 @@ pnpm build
 # 预期看到每个包的构建成功消息
 ```
 
-### 步骤 3：启动并测试
+## 步骤 3：启动并测试
 
 ```bash
 # 启动 VSCode 扩展调试
@@ -142,7 +142,7 @@ cd ../..
 pnpm setup:wasm
 ```
 
-### 问题 2：TypeScript 类型错误
+## 问题 2：TypeScript 类型错误
 
 **症状**：`pnpm build` 报类型错误
 
@@ -163,7 +163,7 @@ pnpm clean
 pnpm build
 ```
 
-### 问题 3：点击面无响应
+## 问题 3：点击面无响应
 
 **症状**：点击零件表面没有创建标架
 

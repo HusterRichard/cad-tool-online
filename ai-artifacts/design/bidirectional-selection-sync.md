@@ -454,7 +454,7 @@ Ctrl+Shift+P → "CAD Tool: Import STEP File"
 - 点击3D模型 → 查看模型树高亮
 ```
 
-### 预期效果
+## 预期效果
 
 ```
 ✅ 点击模型树节点:
@@ -508,6 +508,6 @@ Ctrl+Shift+P → "CAD Tool: Import STEP File"
 ---
 
 **实现日期**: 2026-02-06
-**文件位置**: [main.ts](../../packages/vscode/src/webview/main.ts#L361)
+**文件位置**: [main.ts](../../src/webview/main.ts#L361)
 **状态**: ✅ 生产就绪
 **建议**: 立即测试，体验双向同步高亮功能！🎉

@@ -114,7 +114,7 @@ pnpm test:coverage
 pnpm test
 ```
 
-### 3. 使用颜色工具
+## 3. 使用颜色工具
 
 ```typescript
 import {

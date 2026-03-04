@@ -98,15 +98,15 @@ export class CadEditorPanel {
         try {
             this._setStatus(`Loading ${fileName}...`);
 
-            // Read file content
+            // Read file content and send raw bytes to avoid base64 overhead
             const fileContent = fs.readFileSync(filePath);
-            const base64Content = fileContent.toString('base64');
+            const fileBytes = new Uint8Array(fileContent);
 
             // Send to webview for processing
             this._panel.webview.postMessage({
                 command: 'loadStepFile',
                 fileName: fileName,
-                fileContent: base64Content
+                fileContent: fileBytes
             });
 
         } catch (error) {

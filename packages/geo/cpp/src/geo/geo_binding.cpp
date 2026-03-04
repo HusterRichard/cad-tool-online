@@ -6,8 +6,10 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <streambuf>
 
 #include "ShapeStore.h"
+#include "../binding/shared.hpp"
 
 // OCCT headers for shape creation
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -69,6 +71,16 @@
 using namespace emscripten;
 
 namespace {
+
+class VectorBuffer : public std::streambuf {
+public:
+    explicit VectorBuffer(const std::vector<uint8_t>& data)
+    {
+        auto* begin = const_cast<char*>(reinterpret_cast<const char*>(data.data()));
+        auto* end = begin + static_cast<std::ptrdiff_t>(data.size());
+        setg(begin, begin, end);
+    }
+};
 
 // ============================================================================
 // Part Name Counter - 用于无效名称的回退命名
@@ -581,7 +593,7 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
 
 // Read STEP file from memory buffer and store shapes with hierarchy
 // Returns JSON string with hierarchical structure
-std::string readStepFromBuffer(const std::string& buffer, const std::string& baseId) {
+std::string readStepFromBuffer(const Uint8Array& buffer, const std::string& baseId) {
     std::stringstream result;
     result << "{\"success\":";
 
@@ -594,8 +606,10 @@ std::string readStepFromBuffer(const std::string& buffer, const std::string& bas
         Handle(TDocStd_Document) doc = new TDocStd_Document("MDTV-XCAF");
         STEPCAFControl_Reader reader;
 
-        // Read STEP data from stream
-        std::istringstream inputStream(buffer);
+        // Read STEP data from binary stream
+        std::vector<uint8_t> input = convertJSArrayToNumberVector<uint8_t>(buffer);
+        VectorBuffer vectorBuffer(input);
+        std::istream inputStream(&vectorBuffer);
         IFSelect_ReturnStatus status = reader.ReadStream("step_data", inputStream);
 
         if (status != IFSelect_RetDone) {
@@ -666,6 +680,176 @@ std::string readStepFromBuffer(const std::string& buffer, const std::string& bas
 // ============================================================================
 // T2.3: Mesh Generation (for three.js display)
 // ============================================================================
+
+struct MeshShapeDataResult {
+    bool success;
+    val vertices;
+    val normals;
+    val indices;
+    int vertexCount;
+    int triangleCount;
+    std::optional<std::string> error;
+};
+
+MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection, double angularDeflection) {
+    auto& store = geo::ShapeStore::instance();
+    auto shapeOpt = store.getShape(id);
+
+    if (!shapeOpt.has_value()) {
+        return {
+            false,
+            val::array(std::vector<double>()),
+            val::array(std::vector<double>()),
+            val::array(std::vector<int>()),
+            0,
+            0,
+            std::optional<std::string>("Shape not found")
+        };
+    }
+
+    TopoDS_Shape shape = shapeOpt.value();
+
+    try {
+        BRepMesh_IncrementalMesh mesher(shape, linearDeflection, Standard_False, angularDeflection);
+        mesher.Perform();
+
+        if (!mesher.IsDone()) {
+            return {
+                false,
+                val::array(std::vector<double>()),
+                val::array(std::vector<double>()),
+                val::array(std::vector<int>()),
+                0,
+                0,
+                std::optional<std::string>("Meshing failed")
+            };
+        }
+
+        std::vector<double> vertices;
+        std::vector<double> normals;
+        std::vector<int> indices;
+        int vertexOffset = 0;
+
+        TopExp_Explorer explorer(shape, TopAbs_FACE);
+        for (; explorer.More(); explorer.Next()) {
+            TopoDS_Face face = TopoDS::Face(explorer.Current());
+            TopLoc_Location location;
+            Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, location);
+
+            if (triangulation.IsNull()) continue;
+
+            gp_Trsf transform = location.Transformation();
+            bool reversed = (face.Orientation() == TopAbs_REVERSED);
+
+            int nbNodes = triangulation->NbNodes();
+            for (int i = 1; i <= nbNodes; ++i) {
+                gp_Pnt p = triangulation->Node(i).Transformed(transform);
+                vertices.push_back(p.X());
+                vertices.push_back(p.Y());
+                vertices.push_back(p.Z());
+            }
+
+            if (triangulation->HasNormals()) {
+                for (int i = 1; i <= nbNodes; ++i) {
+                    gp_Dir n = triangulation->Normal(i);
+                    if (reversed) {
+                        normals.push_back(-n.X());
+                        normals.push_back(-n.Y());
+                        normals.push_back(-n.Z());
+                    } else {
+                        normals.push_back(n.X());
+                        normals.push_back(n.Y());
+                        normals.push_back(n.Z());
+                    }
+                }
+            } else {
+                for (int i = 1; i <= nbNodes; ++i) {
+                    normals.push_back(0.0);
+                    normals.push_back(0.0);
+                    normals.push_back(1.0);
+                }
+            }
+
+            int nbTriangles = triangulation->NbTriangles();
+            for (int i = 1; i <= nbTriangles; ++i) {
+                Poly_Triangle tri = triangulation->Triangle(i);
+                int n1, n2, n3;
+                tri.Get(n1, n2, n3);
+
+                if (reversed) {
+                    indices.push_back(vertexOffset + n1 - 1);
+                    indices.push_back(vertexOffset + n3 - 1);
+                    indices.push_back(vertexOffset + n2 - 1);
+                } else {
+                    indices.push_back(vertexOffset + n1 - 1);
+                    indices.push_back(vertexOffset + n2 - 1);
+                    indices.push_back(vertexOffset + n3 - 1);
+                }
+            }
+
+            vertexOffset += nbNodes;
+        }
+
+        return {
+            true,
+            val::array(vertices),
+            val::array(normals),
+            val::array(indices),
+            static_cast<int>(vertices.size() / 3),
+            static_cast<int>(indices.size() / 3),
+            std::nullopt
+        };
+    } catch (const std::exception& e) {
+        return {
+            false,
+            val::array(std::vector<double>()),
+            val::array(std::vector<double>()),
+            val::array(std::vector<int>()),
+            0,
+            0,
+            std::optional<std::string>(e.what())
+        };
+    } catch (...) {
+        return {
+            false,
+            val::array(std::vector<double>()),
+            val::array(std::vector<double>()),
+            val::array(std::vector<int>()),
+            0,
+            0,
+            std::optional<std::string>("Unknown error during meshing")
+        };
+    }
+}
+
+val meshShapeDataToVal(const MeshShapeDataResult& data)
+{
+    val obj = val::object();
+    obj.set("success", data.success);
+    obj.set("vertices", data.vertices);
+    obj.set("normals", data.normals);
+    obj.set("indices", data.indices);
+    obj.set("vertexCount", data.vertexCount);
+    obj.set("triangleCount", data.triangleCount);
+    if (data.error.has_value()) {
+        obj.set("error", data.error.value());
+    } else {
+        obj.set("error", val::undefined());
+    }
+    return obj;
+}
+
+val meshShapesData(const val& shapeIds, double linearDeflection, double angularDeflection)
+{
+    const auto length = shapeIds["length"].as<size_t>();
+    val results = val::array();
+    for (size_t i = 0; i < length; ++i) {
+        const std::string id = shapeIds[i].as<std::string>();
+        MeshShapeDataResult data = meshShapeData(id, linearDeflection, angularDeflection);
+        results.set(i, meshShapeDataToVal(data));
+    }
+    return results;
+}
 
 // Mesh data structure returned as JSON
 // Format: { vertices: [x,y,z,...], indices: [i0,i1,i2,...], normals: [nx,ny,nz,...] }
@@ -987,6 +1171,16 @@ EMSCRIPTEN_BINDINGS(geo_module) {
     function("readStepFromBuffer", &readStepFromBuffer);
 
     // T2.3: Mesh generation
+    value_object<MeshShapeDataResult>("MeshShapeDataResult")
+        .field("success", &MeshShapeDataResult::success)
+        .field("vertices", &MeshShapeDataResult::vertices)
+        .field("normals", &MeshShapeDataResult::normals)
+        .field("indices", &MeshShapeDataResult::indices)
+        .field("vertexCount", &MeshShapeDataResult::vertexCount)
+        .field("triangleCount", &MeshShapeDataResult::triangleCount)
+        .field("error", &MeshShapeDataResult::error);
+    function("meshShapeData", &meshShapeData);
+    function("meshShapesData", &meshShapesData);
     function("meshShape", &meshShape);
     function("meshShapeDefault", &meshShapeDefault);
 

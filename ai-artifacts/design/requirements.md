@@ -1,4 +1,4 @@
-# 需求分析文档
+﻿# 需求分析文档
 
 **生成工具**: Claude Sonnet 4.5
 **生成日期**: 2026-02-06
@@ -294,7 +294,7 @@ CadToolOnline 是将桌面版 CADToolbox (基于 Qt/C++ + OpenCASCADE) 迁移到
 
 ### A. 参考资料
 
-- [CADToolbox 源码](../CADToolbox)
+- [CADToolbox 源码](../../../CADToolbox)
 - [OpenCASCADE Documentation](https://dev.opencascade.org/)
 - [Modelica Multibody Library](https://doc.modelica.org/Modelica%204.0.0/Resources/helpDymola/Modelica_Mechanics_MultiBody.html)
 
@@ -306,3 +306,4 @@ CadToolOnline 是将桌面版 CADToolbox (基于 Qt/C++ + OpenCASCADE) 迁移到
 | STEP | Standard for the Exchange of Product model data (产品模型数据交换标准) |
 | OCCT | OpenCASCADE Technology |
 | WASM | WebAssembly |
+

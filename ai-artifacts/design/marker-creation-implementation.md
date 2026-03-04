@@ -201,14 +201,14 @@ bash build_wasm.sh debug
 - `packages/geo/wasm/cad-geo.wasm`
 - `packages/geo/wasm/cad-geo.d.ts`
 
-### 2. 构建 TypeScript
+## 2. 构建 TypeScript
 
 ```bash
 # 在项目根目录执行
 pnpm build
 ```
 
-### 3. 启动 VSCode 插件
+## 3. 启动 VSCode 插件
 
 ```bash
 # 方法1：VSCode调试

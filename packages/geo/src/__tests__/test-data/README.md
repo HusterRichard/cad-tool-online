@@ -23,9 +23,9 @@ test-data/
 cp ../CADToolbox/src/python/test_use_case/*.step ./test-data/
 ```
 
-### 方法 2: 使用 CAD 软件创建
+## 方法 2: 使用 CAD 软件创建
 
-#### 使用 SolidWorks
+### 使用 SolidWorks
 1. 创建一个简单的零件（如长方体）
 2. 应用颜色：右键 → 外观 → 选择颜色
 3. 导出为 STEP：文件 → 另存为 → STEP (*.step)

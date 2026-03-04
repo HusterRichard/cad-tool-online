@@ -466,15 +466,32 @@ async function initOcct(): Promise<void> {
 // STEP File Loading
 // ============================================================================
 
-async function loadStepFile(fileName: string, base64Content: string): Promise<void> {
+function toArrayBuffer(fileContent: unknown): ArrayBuffer {
+    if (fileContent instanceof ArrayBuffer) {
+        return fileContent;
+    }
+    if (fileContent instanceof Uint8Array) {
+        return fileContent.buffer.slice(fileContent.byteOffset, fileContent.byteOffset + fileContent.byteLength);
+    }
+    if (Array.isArray(fileContent)) {
+        return new Uint8Array(fileContent).buffer;
+    }
+    throw new Error('Unsupported file content format');
+}
+
+async function loadStepFile(fileName: string, fileContent: unknown): Promise<void> {
     console.log('[loadStepFile] Starting to load:', fileName);
 
     // Always wait for OCCT to be fully initialized
     await initOcct();
     console.log('[loadStepFile] OCCT initialized');
 
+    // Ensure old scene/WASM shapes are fully cleaned before importing a new file
+    clearScene();
+    occt?.clearShapes();
+
     showLoading(`Loading ${fileName}...`);
-    showProgress(0, 'Decoding file...');
+    showProgress(0, 'Reading file...');
     setStatus(`Loading ${fileName}...`);
 
     // Yield to allow UI to update
@@ -482,14 +499,8 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
     console.log('[loadStepFile] UI updated, starting decode');
 
     try {
-        // Decode base64 to ArrayBuffer
-        const binaryString = atob(base64Content);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        const arrayBuffer = bytes.buffer;
-        console.log('[loadStepFile] Decoded base64, size:', arrayBuffer.byteLength);
+        const arrayBuffer = toArrayBuffer(fileContent);
+        console.log('[loadStepFile] Received binary file data, size:', arrayBuffer.byteLength);
 
         showProgress(10, 'Parsing STEP file...');
         // Yield to allow UI to update before heavy WASM call
@@ -530,11 +541,16 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
             showProgress(40, `Generating meshes (0/${shapesToMesh.length})...`);
             console.log('[loadStepFile] Total shapes to mesh:', shapesToMesh.length);
 
-            // Generate meshes for all shapes
+            const validShapeIds = shapesToMesh
+                .map(({ node }) => node.shapeId as string | undefined)
+                .filter((shapeId): shapeId is string => Boolean(shapeId) && occt!.hasShape(shapeId));
+            const meshByShapeId = occt!.getMeshes(validShapeIds);
+
+            // Attach meshes to all nodes
             for (let i = 0; i < shapesToMesh.length; i++) {
                 const {node} = shapesToMesh[i];
-                if (node.shapeId && occt!.hasShape(node.shapeId)) {
-                    const meshData = occt!.getMesh(node.shapeId);
+                if (node.shapeId) {
+                    const meshData = meshByShapeId.get(node.shapeId) ?? null;
                     if (meshData && meshData.vertices.length > 0) {
                         node._meshData = meshData;
                     }
@@ -638,9 +654,10 @@ async function loadStepFile(fileName: string, base64Content: string): Promise<vo
             loadedShapes.clear();
 
             const totalShapes = result.shapes.length;
+            const meshByShapeId = occt!.getMeshes(result.shapes);
             for (let i = 0; i < totalShapes; i++) {
                 const shapeId = result.shapes[i];
-                const meshData = occt!.getMesh(shapeId);
+                const meshData = meshByShapeId.get(shapeId) ?? null;
                 if (meshData && meshData.vertices.length > 0) {
                     const meshId = `mesh_${shapeId}`;
                     const shape: LoadedShape = {

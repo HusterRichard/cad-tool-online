@@ -43,7 +43,7 @@ tests/
 pnpm test
 ```
 
-### 运行特定模块测试
+## 运行特定模块测试
 
 ```bash
 # 测试 core 模块
@@ -53,7 +53,7 @@ pnpm --filter @cadtool-online/core test
 pnpm --filter @cadtool-online/geo test
 ```
 
-### 生成覆盖率报告
+## 生成覆盖率报告
 
 ```bash
 ./scripts/test.sh --coverage
@@ -63,7 +63,7 @@ open coverage/index.html  # macOS
 start coverage/index.html  # Windows
 ```
 
-### 监听模式
+## 监听模式
 
 ```bash
 ./scripts/test.sh --watch

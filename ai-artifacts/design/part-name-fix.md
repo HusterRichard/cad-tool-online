@@ -261,7 +261,7 @@ Ctrl+Shift+P → "CAD Tool: Import STEP File"
 ✨ 无效名称自动替换为 Part1, Part2...
 ```
 
-### 预期结果
+## 预期结果
 
 | STEP 文件类型 | 显示效果 |
 |--------------|---------|

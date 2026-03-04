@@ -204,21 +204,21 @@ packages/geo/dist/
 # 观察颜色是否正确显示
 ```
 
-#### 2. 测试工具函数
+## 2. 测试工具函数
 ```bash
 cd packages/geo
 pnpm install  # 安装测试依赖
 pnpm build    # 构建包
 ```
 
-#### 3. 添加测试数据（可选）
+### 3. 添加测试数据（可选）
 ```bash
 # 参考 packages/geo/src/__tests__/test-data/README.md
 # 添加带颜色的 STEP 测试文件
 cp /path/to/colored.step packages/geo/src/__tests__/test-data/
 ```
 
-#### 4. 运行测试（可选）
+## 4. 运行测试（可选）
 ```bash
 cd packages/geo
 pnpm test:run

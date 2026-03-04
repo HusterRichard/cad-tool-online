@@ -463,7 +463,7 @@ Ctrl+Shift+P → "CAD Tool: Import STEP File"
 ✨ 模型明亮清晰，颜色鲜艳夺目！
 ```
 
-### 预期效果
+## 预期效果
 
 导入模型后，您会看到：
 

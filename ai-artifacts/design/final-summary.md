@@ -131,21 +131,21 @@ class SmartColorGenerator {
 
 | # | 文档 | 路径 | 内容 |
 |---|------|------|------|
-| 1 | **功能验证文档** | [color-feature-validation.md](ai-artifacts/design/color-feature-validation.md) | 原有颜色功能技术验证 |
-| 2 | **使用示例集** | [color-usage-examples.md](ai-artifacts/examples/color-usage-examples.md) | 20+ 代码示例和最佳实践 |
-| 3 | **功能总结** | [color-feature-summary.md](ai-artifacts/design/color-feature-summary.md) | 原有功能架构总结 |
-| 4 | **智能颜色说明** | [smart-color-generator.md](ai-artifacts/design/smart-color-generator.md) | 黄金角分割算法详解 |
-| 5 | **WASM 编译指南** | [wasm-build-guide.md](ai-artifacts/design/wasm-build-guide.md) | 编译步骤和故障排查 |
-| 6 | **完成报告** | [smart-color-complete.md](ai-artifacts/design/smart-color-complete.md) | 智能颜色实现报告 |
-| 7 | **构建修复** | [build-fix-summary.md](ai-artifacts/design/build-fix-summary.md) | TypeScript 编译修复 |
-| 8 | **最终总结** | [final-summary.md](ai-artifacts/design/final-summary.md) | 本文档 |
+| 1 | **功能验证文档** | [color-feature-validation.md](./color-feature-validation.md) | 原有颜色功能技术验证 |
+| 2 | **使用示例集** | [color-usage-examples.md](../examples/color-usage-examples.md) | 20+ 代码示例和最佳实践 |
+| 3 | **功能总结** | [color-feature-summary.md](./color-feature-summary.md) | 原有功能架构总结 |
+| 4 | **智能颜色说明** | [smart-color-generator.md](./smart-color-generator.md) | 黄金角分割算法详解 |
+| 5 | **WASM 编译指南** | [wasm-build-guide.md](./wasm-build-guide.md) | 编译步骤和故障排查 |
+| 6 | **完成报告** | [smart-color-complete.md](./smart-color-complete.md) | 智能颜色实现报告 |
+| 7 | **构建修复** | [build-fix-summary.md](./build-fix-summary.md) | TypeScript 编译修复 |
+| 8 | **最终总结** | [final-summary.md](./final-summary.md) | 本文档 |
 
 ### 测试文件
 
 | 测试 | 路径 | 内容 |
 |------|------|------|
-| **单元测试** | [color-parsing.spec.ts](packages/geo/src/__tests__/color-parsing.spec.ts) | 颜色提取、转换、验证 |
-| **集成测试** | [color-integration.test.ts](packages/geo/src/__tests__/color-integration.test.ts) | 端到端流程测试 |
+| **单元测试** | [color-parsing.spec.ts](../../packages/geo/src/__tests__/color-parsing.spec.ts) | 颜色提取、转换、验证 |
+| **集成测试** | [color-integration.test.ts](../../packages/geo/src/__tests__/color-integration.test.ts) | 端到端流程测试 |
 
 ---
 
@@ -168,7 +168,7 @@ Ctrl+Shift+P → "CAD Tool: Import STEP File"
 # 如果文件无颜色信息 → 自动应用智能随机颜色 🌈
 ```
 
-### 预期效果
+## 预期效果
 
 导入一个包含 10 个零件的装配体：
 
@@ -424,9 +424,9 @@ pnpm dev
 # 按 F5 启动，导入 STEP 文件查看效果
 ```
 
-### 2. 查看文档
-- 算法详解：[smart-color-generator.md](ai-artifacts/design/smart-color-generator.md)
-- 使用指南：[color-usage-examples.md](ai-artifacts/examples/color-usage-examples.md)
+## 2. 查看文档
+- 算法详解：[smart-color-generator.md](./smart-color-generator.md)
+- 使用指南：[color-usage-examples.md](../examples/color-usage-examples.md)
 
 ### 3. 调整参数（可选）
 ```cpp
