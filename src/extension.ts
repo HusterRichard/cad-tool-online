@@ -30,7 +30,38 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(openEditorCommand, openCadtoolDocsCommand);
+    const exportCadtoolConfigCommand = vscode.commands.registerCommand(
+        'cadtool-online.exportCadtoolConfig',
+        () => {
+            const panel = CadEditorPanel.currentPanel;
+            if (!panel) {
+                vscode.window.showInformationMessage('Please open CAD Editor first, then export CADTool config.');
+                return;
+            }
+
+            panel.requestCadtoolConfigExport();
+        }
+    );
+
+    const importCadtoolConfigCommand = vscode.commands.registerCommand(
+        'cadtool-online.importCadtoolConfig',
+        async () => {
+            const panel = CadEditorPanel.currentPanel;
+            if (!panel) {
+                vscode.window.showInformationMessage('Please open CAD Editor first, then import CADTool config.');
+                return;
+            }
+
+            await panel.requestCadtoolConfigImport();
+        }
+    );
+
+    context.subscriptions.push(
+        openEditorCommand,
+        openCadtoolDocsCommand,
+        exportCadtoolConfigCommand,
+        importCadtoolConfigCommand
+    );
 }
 
 export function deactivate() {

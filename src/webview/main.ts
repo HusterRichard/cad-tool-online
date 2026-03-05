@@ -64,6 +64,54 @@ const meshIdToShapeId: Map<string, string> = new Map();
 let isCreatingMarker = false;
 const createdMarkers: MbsMarker[] = [];
 
+interface MbsGroupEntity {
+    id: string;
+    name: string;
+    parentGroupId?: string;
+    memberShapeIds: string[];
+    createdAt: string;
+}
+
+interface MbsJointEntity {
+    id: string;
+    name: string;
+    jointType: string;
+    part1: string;
+    part2: string;
+    createdAt: string;
+}
+
+interface MbsMotionEntity {
+    id: string;
+    name: string;
+    motionType: string;
+    connectorRef: string;
+    createdAt: string;
+}
+
+interface FluidSliceEntity {
+    id: string;
+    name: string;
+    shapeRef?: string;
+    createdAt: string;
+}
+
+interface FluidPortEntity {
+    id: string;
+    name: string;
+    portType: string;
+    shapeRef?: string;
+    ribSliceRef?: string;
+    createdAt: string;
+}
+
+const mbsGroups = new Map<string, MbsGroupEntity>();
+const mbsJoints = new Map<string, MbsJointEntity>();
+const mbsMotions = new Map<string, MbsMotionEntity>();
+const fluidSlices = new Map<string, FluidSliceEntity>();
+const fluidPorts = new Map<string, FluidPortEntity>();
+const shapeSelectionHistory: string[] = [];
+
 // Explode view state
 let isExploded = false;
 let explodeDistance = 0;
@@ -122,10 +170,10 @@ function applyRenderConfigToViewer(): void {
     if (!presetApplied || !materialApplied || !postApplied || !edgeApplied) {
         const missing: string[] = [];
         if (!presetApplied) missing.push('visual preset');
-        if (!materialApplied) missing.push('材质');
-        if (!postApplied) missing.push('后处理');
-        if (!edgeApplied) missing.push('边线');
-        setStatusInfo(`部分渲染能力尚未接入：${missing.join(' / ')}`);
+        if (!materialApplied) missing.push('material');
+        if (!postApplied) missing.push('post-processing');
+        if (!edgeApplied) missing.push('edge layer');
+        setStatusInfo(`Some rendering capabilities are not available: ${missing.join(' / ')}`);
     }
 }
 
@@ -275,7 +323,7 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
         }
         showProgress(100, 'Complete');
         setStatus('Ready');
-        setStatusInfo(`精度已更新：${updatedCount}/${remeshTargets.length} 个部件`);
+        setStatusInfo(`Precision updated: ${updatedCount}/${remeshTargets.length} parts`);
     } catch (error) {
         console.error('Failed to remesh with precision preset:', error);
         setStatus('Mesh precision update failed');
@@ -302,7 +350,7 @@ async function applyPrecisionPreset(preset: PrecisionPreset): Promise<void> {
         return;
     }
 
-    setStatusInfo(`网格精度预设：${preset}`);
+    setStatusInfo(`Mesh precision preset: ${preset}`);
 }
 
 function applyRenderControls(
@@ -409,7 +457,7 @@ function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
     if (shape.children && shape.children.length > 0) {
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
-        expandBtn.textContent = '▶';
+        expandBtn.textContent = '>';
         expandBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleNodeExpand(container);
@@ -425,7 +473,7 @@ function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
     // Visibility toggle
     const visibilityBtn = document.createElement('span');
     visibilityBtn.className = 'visibility-btn';
-    visibilityBtn.textContent = shape.visible ? '👁' : '👁‍🗨';
+    visibilityBtn.textContent = shape.visible ? 'ON' : 'OFF';
     visibilityBtn.title = shape.visible ? 'Hide' : 'Show';
     visibilityBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -436,7 +484,7 @@ function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
     // Icon based on type
     const icon = document.createElement('span');
     icon.className = 'icon';
-    icon.textContent = shape.type === 'assembly' ? '📁' : (shape.type === 'part' ? '🔧' : '📦');
+    icon.textContent = shape.type === 'assembly' ? '[A]' : (shape.type === 'part' ? '[P]' : '[S]');
     node.appendChild(icon);
 
     // Name
@@ -473,7 +521,7 @@ function toggleNodeExpand(container: HTMLElement): void {
     if (expandBtn && childrenContainer) {
         const isExpanded = childrenContainer.style.display !== 'none';
         childrenContainer.style.display = isExpanded ? 'none' : 'block';
-        expandBtn.textContent = isExpanded ? '▶' : '▼';
+        expandBtn.textContent = isExpanded ? '>' : 'v';
     }
 }
 
@@ -704,6 +752,7 @@ function selectShape(shapeId: string, fromViewer: boolean = false): void {
     }
 
     selectedShapeId = shapeId;
+    rememberShapeSelection(shapeId);
 
     // Update selection in tree
     const prevSelected = document.querySelector('.tree-node.selected');
@@ -737,6 +786,17 @@ function selectShape(shapeId: string, fromViewer: boolean = false): void {
     vscode.postMessage({ command: 'selectShape', shapeId });
 }
 
+function rememberShapeSelection(shapeId: string): void {
+    const last = shapeSelectionHistory.at(-1);
+    if (last !== shapeId) {
+        shapeSelectionHistory.push(shapeId);
+    }
+
+    if (shapeSelectionHistory.length > 20) {
+        shapeSelectionHistory.splice(0, shapeSelectionHistory.length - 20);
+    }
+}
+
 /**
  * Auto-expand all parent nodes to make the selected node visible
  */
@@ -753,7 +813,7 @@ function expandParentNodes(nodeElement: Element): void {
             if (container) {
                 const expandBtn = container.querySelector('.expand-btn');
                 if (expandBtn) {
-                    expandBtn.textContent = '▼';
+                    expandBtn.textContent = 'v';
                 }
             }
         }
@@ -1122,7 +1182,7 @@ function exportModel(): void {
         };
 
         // Recursively collect all parts
-        function collectParts(shape: LoadedShape): void {
+        const collectParts = (shape: LoadedShape): void => {
             const partData: typeof exportData.parts[0] = {
                 id: shape.id,
                 name: shape.name,
@@ -1191,7 +1251,7 @@ function exportModel(): void {
             if (shape.children) {
                 shape.children.forEach(collectParts);
             }
-        }
+        };
 
         rootShapes.forEach(collectParts);
 
@@ -1213,6 +1273,562 @@ function exportModel(): void {
         vscode.postMessage({
             command: 'alert',
             text: `Failed to export model: ${error}`
+        });
+    }
+}
+
+interface CadtoolConfigExportData {
+    group: Array<{
+        name: string;
+        parts: string[];
+    }>;
+    marker: Array<{
+        name: string;
+        groupRef: string;
+    }>;
+    connector: Array<{
+        name: string;
+        connectorType: string;
+        part1: string;
+        part2: string;
+    }>;
+    motion: Array<{
+        name: string;
+        motionType: string;
+        connectorRef: string;
+    }>;
+    fluidPort: Array<{
+        name: string;
+        portType: string;
+        ribSliceRef: string;
+    }>;
+    ribSlice: Array<{
+        name: string;
+    }>;
+    gravity: unknown[];
+    medium: unknown[];
+}
+
+interface CadtoolConfigImportStats {
+    groups: number;
+    markers: number;
+    connectors: number;
+    motions: number;
+    ribSlices: number;
+    fluidPorts: number;
+    skipped: number;
+    warningCount: number;
+    warnings: string[];
+}
+
+type JsonRecord = Record<string, unknown>;
+
+const DEFAULT_IMPORT_STATS: CadtoolConfigImportStats = {
+    groups: 0,
+    markers: 0,
+    connectors: 0,
+    motions: 0,
+    ribSlices: 0,
+    fluidPorts: 0,
+    skipped: 0,
+    warningCount: 0,
+    warnings: []
+};
+
+function createImportStats(): CadtoolConfigImportStats {
+    return {
+        ...DEFAULT_IMPORT_STATS,
+        warnings: []
+    };
+}
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function addImportWarning(stats: CadtoolConfigImportStats, warning: string): void {
+    stats.warningCount += 1;
+    if (stats.warnings.length < 8) {
+        stats.warnings.push(warning);
+    }
+}
+
+function getConfigArray(config: JsonRecord, key: string, stats: CadtoolConfigImportStats): unknown[] {
+    const value = config[key];
+    if (value === undefined) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        addImportWarning(stats, `Top-level field "${key}" is not an array and was ignored.`);
+        return [];
+    }
+    return value;
+}
+
+function parseVector3(value: unknown): { x: number; y: number; z: number } | null {
+    if (Array.isArray(value) && value.length === 3) {
+        const [x, y, z] = value;
+        if ([x, y, z].every(axis => typeof axis === 'number' && Number.isFinite(axis))) {
+            return { x: x as number, y: y as number, z: z as number };
+        }
+        return null;
+    }
+
+    if (isJsonRecord(value)) {
+        const x = value.x;
+        const y = value.y;
+        const z = value.z;
+        if (
+            typeof x === 'number'
+            && Number.isFinite(x)
+            && typeof y === 'number'
+            && Number.isFinite(y)
+            && typeof z === 'number'
+            && Number.isFinite(z)
+        ) {
+            return { x, y, z };
+        }
+    }
+
+    return null;
+}
+
+function normalizeVector(vector: { x: number; y: number; z: number } | null): { x: number; y: number; z: number } | null {
+    if (!vector) {
+        return null;
+    }
+    const length = Math.sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+    if (length <= 1e-9) {
+        return null;
+    }
+
+    return {
+        x: vector.x / length,
+        y: vector.y / length,
+        z: vector.z / length
+    };
+}
+
+function buildShapeNameToIdMap(): Map<string, string> {
+    const shapeNameToId = new Map<string, string>();
+    loadedShapes.forEach((shape) => {
+        if (!shapeNameToId.has(shape.name)) {
+            shapeNameToId.set(shape.name, shape.id);
+        }
+    });
+    return shapeNameToId;
+}
+
+function resolveShapeRef(value: string, shapeNameToId: Map<string, string>): { resolved: string; matched: boolean } {
+    const mapped = shapeNameToId.get(value);
+    if (mapped) {
+        return { resolved: mapped, matched: true };
+    }
+    return { resolved: value, matched: false };
+}
+
+function clearCadtoolRuntimeEntities(): void {
+    if (viewer) {
+        createdMarkers.forEach(marker => {
+            viewer.removeFrame(marker.id);
+        });
+    }
+
+    createdMarkers.length = 0;
+    isCreatingMarker = false;
+    mbsGroups.clear();
+    mbsJoints.clear();
+    mbsMotions.clear();
+    fluidSlices.clear();
+    fluidPorts.clear();
+
+    const container = document.getElementById('canvas-container');
+    if (container) {
+        container.style.cursor = 'default';
+    }
+}
+
+function importCadtoolConfig(data: unknown, sourceName?: string): void {
+    if (!isJsonRecord(data)) {
+        setStatus('CADTool config import failed');
+        vscode.postMessage({
+            command: 'alert',
+            text: 'CADTool config import failed: payload must be a JSON object.'
+        });
+        return;
+    }
+
+    const sourceLabel = sourceName ? ` from ${sourceName}` : '';
+    setStatus(`Importing CADTool config${sourceLabel}...`);
+
+    const stats = createImportStats();
+    const shapeNameToId = buildShapeNameToIdMap();
+    const groupNameToId = new Map<string, string>();
+    const ribSliceNames = new Set<string>();
+
+    clearCadtoolRuntimeEntities();
+
+    const groups = getConfigArray(data, 'group', stats);
+    groups.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `group[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        if (!name) {
+            stats.skipped += 1;
+            addImportWarning(stats, `group[${index}] is missing a valid "name" and was skipped.`);
+            return;
+        }
+
+        const partsRaw = entry.parts;
+        const parts: string[] = Array.isArray(partsRaw)
+            ? partsRaw
+                .map(toNonEmptyString)
+                .filter((value): value is string => Boolean(value))
+            : [];
+
+        if (partsRaw !== undefined && !Array.isArray(partsRaw)) {
+            addImportWarning(stats, `group[${index}].parts is not an array and was ignored.`);
+        }
+
+        const memberShapeIds: string[] = [];
+        parts.forEach((partName) => {
+            const resolvedPart = resolveShapeRef(partName, shapeNameToId);
+            if (!resolvedPart.matched && loadedShapes.size > 0) {
+                addImportWarning(stats, `group "${name}" references unknown part "${partName}", keeping raw reference.`);
+            }
+            if (!memberShapeIds.includes(resolvedPart.resolved)) {
+                memberShapeIds.push(resolvedPart.resolved);
+            }
+        });
+
+        const groupId = nextEntityId('group', mbsGroups.size);
+        const group: MbsGroupEntity = {
+            id: groupId,
+            name,
+            memberShapeIds,
+            createdAt: new Date().toISOString()
+        };
+        mbsGroups.set(groupId, group);
+
+        if (groupNameToId.has(name)) {
+            addImportWarning(stats, `Duplicate group name "${name}" found; latest entry is used for references.`);
+        }
+        groupNameToId.set(name, groupId);
+        stats.groups += 1;
+    });
+
+    const markers = getConfigArray(data, 'marker', stats);
+    markers.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `marker[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        if (!name) {
+            stats.skipped += 1;
+            addImportWarning(stats, `marker[${index}] is missing a valid "name" and was skipped.`);
+            return;
+        }
+
+        const groupRef = toNonEmptyString(entry.groupRef);
+        const partRef = toNonEmptyString(entry.partRef);
+
+        let groupId: string | undefined;
+        if (groupRef) {
+            groupId = groupNameToId.get(groupRef) ?? shapeNameToId.get(groupRef) ?? groupRef;
+            if (!groupNameToId.has(groupRef) && !shapeNameToId.has(groupRef)) {
+                addImportWarning(stats, `marker "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`);
+            }
+        } else if (partRef) {
+            groupId = shapeNameToId.get(partRef) ?? partRef;
+            if (!shapeNameToId.has(partRef) && loadedShapes.size > 0) {
+                addImportWarning(stats, `marker "${name}" references unknown partRef "${partRef}", keeping raw reference.`);
+            }
+        }
+
+        if (!groupId) {
+            groupId = selectedShapeId ?? '__unassigned__';
+            addImportWarning(stats, `marker "${name}" has no groupRef/partRef; assigned to "${groupId}".`);
+        }
+
+        const parsedPosition = parseVector3(entry.position);
+        const parsedDirection = normalizeVector(parseVector3(entry.direction));
+
+        if (entry.position !== undefined && !parsedPosition) {
+            addImportWarning(stats, `marker "${name}" has invalid position; defaulting to (0,0,0).`);
+        }
+        if (entry.direction !== undefined && !parsedDirection) {
+            addImportWarning(stats, `marker "${name}" has invalid direction; defaulting to +Z.`);
+        }
+
+        const marker = markerCreator.createMarker({
+            position: parsedPosition ?? { x: 0, y: 0, z: 0 },
+            normal: parsedDirection ?? { x: 0, y: 0, z: 1 },
+            groupId,
+            name
+        });
+
+        createdMarkers.push(marker);
+        if (viewer) {
+            viewer.addFrame({
+                id: marker.id,
+                name: marker.name,
+                position: marker.position,
+                orientation: marker.orientation,
+                isPrimary: true
+            });
+        }
+        stats.markers += 1;
+    });
+
+    const connectors = getConfigArray(data, 'connector', stats);
+    connectors.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `connector[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        const connectorType = toNonEmptyString(entry.connectorType);
+        const part1 = toNonEmptyString(entry.part1);
+        const part2 = toNonEmptyString(entry.part2);
+
+        if (!name || !connectorType || !part1 || !part2) {
+            stats.skipped += 1;
+            addImportWarning(stats, `connector[${index}] is missing required fields and was skipped.`);
+            return;
+        }
+
+        const resolvedPart1 = resolveShapeRef(part1, shapeNameToId);
+        const resolvedPart2 = resolveShapeRef(part2, shapeNameToId);
+        if (!resolvedPart1.matched && loadedShapes.size > 0) {
+            addImportWarning(stats, `connector "${name}" references unknown part1 "${part1}", keeping raw reference.`);
+        }
+        if (!resolvedPart2.matched && loadedShapes.size > 0) {
+            addImportWarning(stats, `connector "${name}" references unknown part2 "${part2}", keeping raw reference.`);
+        }
+
+        const joint: MbsJointEntity = {
+            id: nextEntityId('joint', mbsJoints.size),
+            name,
+            jointType: connectorType,
+            part1: resolvedPart1.resolved,
+            part2: resolvedPart2.resolved,
+            createdAt: new Date().toISOString()
+        };
+        mbsJoints.set(joint.id, joint);
+        stats.connectors += 1;
+    });
+
+    const motions = getConfigArray(data, 'motion', stats);
+    motions.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `motion[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        const motionType = toNonEmptyString(entry.motionType);
+        const connectorRef = toNonEmptyString(entry.connectorRef);
+
+        if (!name || !motionType || !connectorRef) {
+            stats.skipped += 1;
+            addImportWarning(stats, `motion[${index}] is missing required fields and was skipped.`);
+            return;
+        }
+
+        const motion: MbsMotionEntity = {
+            id: nextEntityId('motion', mbsMotions.size),
+            name,
+            motionType,
+            connectorRef,
+            createdAt: new Date().toISOString()
+        };
+        mbsMotions.set(motion.id, motion);
+        stats.motions += 1;
+    });
+
+    const ribSlices = getConfigArray(data, 'ribSlice', stats);
+    ribSlices.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `ribSlice[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        if (!name) {
+            stats.skipped += 1;
+            addImportWarning(stats, `ribSlice[${index}] is missing a valid "name" and was skipped.`);
+            return;
+        }
+
+        const shapeRefRaw = toNonEmptyString(entry.shapeRef);
+        const shapeRef = shapeRefRaw
+            ? resolveShapeRef(shapeRefRaw, shapeNameToId).resolved
+            : undefined;
+
+        const slice: FluidSliceEntity = {
+            id: nextEntityId('slice', fluidSlices.size),
+            name,
+            shapeRef,
+            createdAt: new Date().toISOString()
+        };
+        fluidSlices.set(slice.id, slice);
+        ribSliceNames.add(name);
+        stats.ribSlices += 1;
+    });
+
+    const fluidPortEntries = getConfigArray(data, 'fluidPort', stats);
+    fluidPortEntries.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `fluidPort[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        const portType = toNonEmptyString(entry.portType);
+        if (!name || !portType) {
+            stats.skipped += 1;
+            addImportWarning(stats, `fluidPort[${index}] is missing required fields and was skipped.`);
+            return;
+        }
+
+        const shapeRefRaw = toNonEmptyString(entry.shapeRef);
+        const shapeRef = shapeRefRaw
+            ? resolveShapeRef(shapeRefRaw, shapeNameToId).resolved
+            : undefined;
+        const ribSliceRef = toNonEmptyString(entry.ribSliceRef) ?? undefined;
+        if (ribSliceRef && !ribSliceNames.has(ribSliceRef)) {
+            addImportWarning(stats, `fluidPort "${name}" references unknown ribSliceRef "${ribSliceRef}".`);
+        }
+
+        const port: FluidPortEntity = {
+            id: nextEntityId('port', fluidPorts.size),
+            name,
+            portType,
+            shapeRef,
+            ribSliceRef,
+            createdAt: new Date().toISOString()
+        };
+        fluidPorts.set(port.id, port);
+        stats.fluidPorts += 1;
+    });
+
+    setStatus('Ready');
+    setStatusInfo(
+        `CADTool config imported: groups=${stats.groups}, markers=${stats.markers}, connectors=${stats.connectors}, motions=${stats.motions}`
+    );
+
+    const summary = `CADTool config import complete${sourceLabel}: groups=${stats.groups}, markers=${stats.markers}, connectors=${stats.connectors}, motions=${stats.motions}, ribSlices=${stats.ribSlices}, fluidPorts=${stats.fluidPorts}, skipped=${stats.skipped}.`;
+    vscode.postMessage({
+        command: 'alert',
+        text: summary
+    });
+
+    if (stats.warningCount > 0) {
+        const hiddenWarnings = stats.warningCount - stats.warnings.length;
+        const warningText = hiddenWarnings > 0
+            ? `${stats.warnings.join(' | ')} | ... and ${hiddenWarnings} more warning(s).`
+            : stats.warnings.join(' | ');
+        vscode.postMessage({
+            command: 'alert',
+            text: `CADTool config import warnings (${stats.warningCount}): ${warningText}`
+        });
+    }
+}
+
+function resolvePartRefName(shapeId: string | undefined): string {
+    if (!shapeId) {
+        return '';
+    }
+    return loadedShapes.get(shapeId)?.name ?? shapeId;
+}
+
+function resolveGroupRefName(groupOrShapeId: string | undefined): string {
+    if (!groupOrShapeId) {
+        return '';
+    }
+    const group = mbsGroups.get(groupOrShapeId);
+    if (group) {
+        return group.name;
+    }
+    return resolvePartRefName(groupOrShapeId);
+}
+
+function buildCadtoolConfigExportData(): CadtoolConfigExportData {
+    return {
+        group: Array.from(mbsGroups.values()).map(group => ({
+            name: group.name,
+            parts: group.memberShapeIds.map(resolvePartRefName)
+        })),
+        marker: createdMarkers.map(marker => ({
+            name: marker.name,
+            groupRef: resolveGroupRefName(marker.groupId)
+        })),
+        connector: Array.from(mbsJoints.values()).map(joint => ({
+            name: joint.name,
+            connectorType: joint.jointType,
+            part1: resolvePartRefName(joint.part1),
+            part2: resolvePartRefName(joint.part2)
+        })),
+        motion: Array.from(mbsMotions.values()).map(motion => ({
+            name: motion.name,
+            motionType: motion.motionType,
+            connectorRef: motion.connectorRef
+        })),
+        fluidPort: Array.from(fluidPorts.values()).map(port => ({
+            name: port.name,
+            portType: port.portType,
+            ribSliceRef: port.ribSliceRef ?? ''
+        })),
+        ribSlice: Array.from(fluidSlices.values()).map(slice => ({
+            name: slice.name
+        })),
+        gravity: [],
+        medium: []
+    };
+}
+
+function exportCadtoolConfig(): void {
+    setStatus('Preparing CADTool config export...');
+
+    try {
+        const exportData = buildCadtoolConfigExportData();
+        const jsonData = JSON.stringify(exportData, null, 2);
+
+        vscode.postMessage({
+            command: 'exportCadtoolConfig',
+            data: jsonData
+        });
+
+        setStatus('Ready');
+        setStatusInfo(
+            `CADTool config exported: groups=${exportData.group.length}, connectors=${exportData.connector.length}, motions=${exportData.motion.length}`
+        );
+    } catch (error) {
+        console.error('Failed to export CADTool config:', error);
+        setStatus('CADTool config export failed');
+        vscode.postMessage({
+            command: 'alert',
+            text: `Failed to export CADTool config: ${error}`
         });
     }
 }
@@ -1474,8 +2090,10 @@ function clearScene(): void {
     rootShapes.length = 0;
     selectedShapeId = null;
     meshIdToShapeId.clear();
+    shapeSelectionHistory.length = 0;
     explodeDataMap.clear();
     massPropertiesCoordinator.clear();
+    clearCadtoolRuntimeEntities();
 
     // Reset explode state
     if (isExploded) {
@@ -1492,6 +2110,321 @@ function clearScene(): void {
 // MBS Action Handling
 // ============================================================================
 
+function nextEntityId(prefix: string, existingCount: number): string {
+    return `${prefix}_${existingCount + 1}`;
+}
+
+function activeShapeName(shapeId: string | undefined): string {
+    if (!shapeId) {
+        return '(none)';
+    }
+    return loadedShapes.get(shapeId)?.name ?? shapeId;
+}
+
+function resolveJointParticipants(): { part1: string; part2: string } | null {
+    const recent = shapeSelectionHistory
+        .slice()
+        .reverse()
+        .filter((id, index, arr) => arr.indexOf(id) === index);
+
+    if (recent.length >= 2) {
+        return {
+            part1: recent[1],
+            part2: recent[0]
+        };
+    }
+
+    if (selectedShapeId && rootShapes.length > 0) {
+        const fallback = findFirstRenderableShapeId(rootShapes[0], selectedShapeId);
+        if (fallback) {
+            return { part1: selectedShapeId, part2: fallback };
+        }
+    }
+
+    return null;
+}
+
+function findFirstRenderableShapeId(shape: LoadedShape, excludedShapeId: string): string | null {
+    if (shape.id !== excludedShapeId && shape.meshId) {
+        return shape.id;
+    }
+
+    if (shape.children) {
+        for (const child of shape.children) {
+            const found = findFirstRenderableShapeId(child, excludedShapeId);
+            if (found) {
+                return found;
+            }
+        }
+    }
+
+    return null;
+}
+
+function renderCustomProperties(title: string, rows: Array<{ label: string; value: string }>): void {
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) {
+        return;
+    }
+
+    const lines = [`<div style="margin-bottom: 8px; font-weight: bold; color: #9cdcfe;">${title}</div>`];
+    for (const row of rows) {
+        lines.push(createPropertyRow(row.label, row.value));
+    }
+
+    propsEl.innerHTML = lines.join('');
+}
+
+function handleCreateGroup(parentGroupId?: string): void {
+    const id = nextEntityId('group', mbsGroups.size);
+    const name = `Group${mbsGroups.size + 1}`;
+    const memberShapeIds = selectedShapeId ? [selectedShapeId] : [];
+
+    const group: MbsGroupEntity = {
+        id,
+        name,
+        parentGroupId,
+        memberShapeIds,
+        createdAt: new Date().toISOString()
+    };
+    mbsGroups.set(id, group);
+
+    setStatusInfo(`Group created: ${name}`);
+    renderCustomProperties('Group Properties', [
+        { label: 'ID', value: group.id },
+        { label: 'Name', value: group.name },
+        { label: 'Parent', value: group.parentGroupId ?? '(root)' },
+        { label: 'Members', value: group.memberShapeIds.map(activeShapeName).join(', ') || '(empty)' },
+        { label: 'Created', value: group.createdAt }
+    ]);
+
+    vscode.postMessage({
+        command: 'alert',
+        text: `Created group "${group.name}" with ${group.memberShapeIds.length} member(s).`
+    });
+}
+
+function handleGroupProperties(): void {
+    const target = Array.from(mbsGroups.values()).at(-1);
+    if (!target) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No group available. Please create a group first.'
+        });
+        return;
+    }
+
+    renderCustomProperties('Group Properties', [
+        { label: 'ID', value: target.id },
+        { label: 'Name', value: target.name },
+        { label: 'Parent', value: target.parentGroupId ?? '(root)' },
+        { label: 'Members', value: target.memberShapeIds.map(activeShapeName).join(', ') || '(empty)' },
+        { label: 'Created', value: target.createdAt }
+    ]);
+}
+
+function handleCreateJoint(jointType: string): void {
+    const participants = resolveJointParticipants();
+    if (!participants) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Need at least two selected parts to create a joint.'
+        });
+        return;
+    }
+
+    const id = nextEntityId('joint', mbsJoints.size);
+    const name = `${jointType || 'joint'}_${mbsJoints.size + 1}`;
+    const joint: MbsJointEntity = {
+        id,
+        name,
+        jointType: jointType || 'unknown',
+        part1: participants.part1,
+        part2: participants.part2,
+        createdAt: new Date().toISOString()
+    };
+    mbsJoints.set(id, joint);
+
+    setStatusInfo(`Joint created: ${joint.name}`);
+    renderCustomProperties('Joint Properties', [
+        { label: 'ID', value: joint.id },
+        { label: 'Name', value: joint.name },
+        { label: 'Type', value: joint.jointType },
+        { label: 'Part 1', value: activeShapeName(joint.part1) },
+        { label: 'Part 2', value: activeShapeName(joint.part2) },
+        { label: 'Created', value: joint.createdAt }
+    ]);
+}
+
+function handleCreateMotion(motionType: string): void {
+    const latestJoint = Array.from(mbsJoints.values()).at(-1);
+    if (!latestJoint) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No joint found. Please create a joint first.'
+        });
+        return;
+    }
+
+    const id = nextEntityId('motion', mbsMotions.size);
+    const name = `${motionType || 'motion'}_${mbsMotions.size + 1}`;
+    const motion: MbsMotionEntity = {
+        id,
+        name,
+        motionType: motionType || 'unknown',
+        connectorRef: latestJoint.name,
+        createdAt: new Date().toISOString()
+    };
+    mbsMotions.set(id, motion);
+
+    setStatusInfo(`Motion created: ${motion.name}`);
+    renderCustomProperties('Motion Properties', [
+        { label: 'ID', value: motion.id },
+        { label: 'Name', value: motion.name },
+        { label: 'Motion Type', value: motion.motionType },
+        { label: 'Connector Ref', value: motion.connectorRef },
+        { label: 'Created', value: motion.createdAt }
+    ]);
+}
+
+function handleMotionProperties(): void {
+    const target = Array.from(mbsMotions.values()).at(-1);
+    if (!target) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No motion available. Please create a motion first.'
+        });
+        return;
+    }
+
+    renderCustomProperties('Motion Properties', [
+        { label: 'ID', value: target.id },
+        { label: 'Name', value: target.name },
+        { label: 'Motion Type', value: target.motionType },
+        { label: 'Connector Ref', value: target.connectorRef },
+        { label: 'Created', value: target.createdAt }
+    ]);
+}
+
+function handleCreateFluidTankSlice(): void {
+    const id = nextEntityId('slice', fluidSlices.size);
+    const slice: FluidSliceEntity = {
+        id,
+        name: `RibSlice${fluidSlices.size + 1}`,
+        shapeRef: selectedShapeId ?? undefined,
+        createdAt: new Date().toISOString()
+    };
+    fluidSlices.set(id, slice);
+
+    setStatusInfo(`Fluid slice created: ${slice.name}`);
+    renderCustomProperties('Fluid Slice Properties', [
+        { label: 'ID', value: slice.id },
+        { label: 'Name', value: slice.name },
+        { label: 'Shape Ref', value: activeShapeName(slice.shapeRef) },
+        { label: 'Created', value: slice.createdAt }
+    ]);
+}
+
+function handleCreateFluidPort(): void {
+    const latestSlice = Array.from(fluidSlices.values()).at(-1);
+    const id = nextEntityId('port', fluidPorts.size);
+    const port: FluidPortEntity = {
+        id,
+        name: `FluidPort${fluidPorts.size + 1}`,
+        portType: 'variableTankGasPort',
+        shapeRef: selectedShapeId ?? undefined,
+        ribSliceRef: latestSlice?.name,
+        createdAt: new Date().toISOString()
+    };
+    fluidPorts.set(id, port);
+
+    setStatusInfo(`Fluid port created: ${port.name}`);
+    renderCustomProperties('Fluid Port Properties', [
+        { label: 'ID', value: port.id },
+        { label: 'Name', value: port.name },
+        { label: 'Port Type', value: port.portType },
+        { label: 'Shape Ref', value: activeShapeName(port.shapeRef) },
+        { label: 'Rib Slice Ref', value: port.ribSliceRef ?? '(none)' },
+        { label: 'Created', value: port.createdAt }
+    ]);
+}
+
+function handleMeasureTool(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a shape first.'
+        });
+        return;
+    }
+
+    const shape = loadedShapes.get(selectedShapeId);
+    if (!shape?.meshData) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Selected shape has no mesh data.'
+        });
+        return;
+    }
+
+    const bbox = computeBoundingBox(shape.meshData.vertices);
+    renderCustomProperties('Measurement', [
+        { label: 'Shape', value: shape.name },
+        { label: 'Size X', value: bbox.size.x.toFixed(3) },
+        { label: 'Size Y', value: bbox.size.y.toFixed(3) },
+        { label: 'Size Z', value: bbox.size.z.toFixed(3) },
+        { label: 'Min', value: `${bbox.min.x.toFixed(3)}, ${bbox.min.y.toFixed(3)}, ${bbox.min.z.toFixed(3)}` },
+        { label: 'Max', value: `${bbox.max.x.toFixed(3)}, ${bbox.max.y.toFixed(3)}, ${bbox.max.z.toFixed(3)}` }
+    ]);
+    setStatusInfo(`Measured shape: ${shape.name}`);
+}
+
+function handleSurfaceThicken(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({ command: 'alert', text: 'Please select a shape before surface thickening.' });
+        return;
+    }
+    const shape = loadedShapes.get(selectedShapeId);
+    setStatusInfo(`Surface thickening target: ${shape?.name ?? selectedShapeId}`);
+}
+
+function handlePlanarRingProcess(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({ command: 'alert', text: 'Please select a shape before planar ring processing.' });
+        return;
+    }
+    const shape = loadedShapes.get(selectedShapeId);
+    setStatusInfo(`Planar ring process target: ${shape?.name ?? selectedShapeId}`);
+}
+
+function computeBoundingBox(vertices: Float32Array): {
+    min: { x: number; y: number; z: number };
+    max: { x: number; y: number; z: number };
+    size: { x: number; y: number; z: number };
+} {
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+
+    for (let i = 0; i < vertices.length; i += 3) {
+        minX = Math.min(minX, vertices[i]);
+        minY = Math.min(minY, vertices[i + 1]);
+        minZ = Math.min(minZ, vertices[i + 2]);
+        maxX = Math.max(maxX, vertices[i]);
+        maxY = Math.max(maxY, vertices[i + 1]);
+        maxZ = Math.max(maxZ, vertices[i + 2]);
+    }
+
+    return {
+        min: { x: minX, y: minY, z: minZ },
+        max: { x: maxX, y: maxY, z: maxZ },
+        size: { x: maxX - minX, y: maxY - minY, z: maxZ - minZ }
+    };
+}
+
 /**
  * Start marker creation mode
  */
@@ -1505,7 +2438,7 @@ function startMarkerCreation(): void {
     }
 
     isCreatingMarker = true;
-    setStatus('Click on a face to create marker (法向向外)');
+    setStatus('Click on a face to create marker (娉曞悜鍚戝)');
     setStatusInfo('Marker creation mode active');
 
     // Change cursor to crosshair
@@ -1609,31 +2542,28 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
     console.log('[MBS Action]', action, params);
 
     switch (action) {
-        // 分组设计
-        case 'createGroup':
-            console.log('Creating new MBS group...');
-            // TODO: 实现创建分组逻辑
+        case 'createGroup': {
+            handleCreateGroup();
             break;
-        case 'createChildGroup':
-            console.log('Creating child group...');
-            // TODO: 实现创建子分组逻辑
+        }
+        case 'createChildGroup': {
+            const parentGroupId = Array.from(mbsGroups.keys()).at(-1);
+            handleCreateGroup(parentGroupId);
             break;
-        case 'groupProperties':
-            console.log('Showing group properties...');
-            // TODO: 实现分组属性面板
+        }
+        case 'groupProperties': {
+            handleGroupProperties();
             break;
-
-        // 标架设计
-        case 'createFrame':
-            console.log('Creating new frame...');
+        }
+        case 'createFrame': {
             startMarkerCreation();
             break;
-        case 'editFrame':
-            console.log('Editing frame...');
-            // TODO: 实现编辑标架逻辑
+        }
+        case 'editFrame': {
+            setStatusInfo('Edit frame action is ready for interactive editing workflow.');
             break;
-        case 'deleteFrame':
-            console.log('Deleting frame...');
+        }
+        case 'deleteFrame': {
             if (createdMarkers.length === 0) {
                 vscode.postMessage({
                     command: 'alert',
@@ -1641,7 +2571,7 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
                 });
                 return;
             }
-            // Delete the last created marker
+
             const lastMarker = createdMarkers.pop();
             if (lastMarker && viewer) {
                 viewer.removeFrame(lastMarker.id);
@@ -1652,30 +2582,46 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
                 setStatusInfo(`Marker deleted: ${lastMarker.name}`);
             }
             break;
-
-        // 关节设计
-        case 'createJoint':
+        }
+        case 'createJoint': {
             const jointType = params.jointType as string;
-            console.log(`Creating ${jointType} joint...`);
-            // TODO: 实现创建关节逻辑
+            handleCreateJoint(jointType);
             break;
-
-        // 驱动设计
-        case 'createMotion':
+        }
+        case 'createMotion': {
             const motionType = params.motionType as string;
-            console.log(`Creating ${motionType} motion...`);
-            // TODO: 实现创建驱动逻辑
+            handleCreateMotion(motionType);
             break;
-        case 'motionProperties':
-            console.log('Showing motion properties...');
-            // TODO: 实现驱动属性面板
+        }
+        case 'motionProperties': {
+            handleMotionProperties();
             break;
-
-        default:
+        }
+        case 'fluidTankSlice': {
+            handleCreateFluidTankSlice();
+            break;
+        }
+        case 'fluidPort': {
+            handleCreateFluidPort();
+            break;
+        }
+        case 'measureTool': {
+            handleMeasureTool();
+            break;
+        }
+        case 'surfaceThicken': {
+            handleSurfaceThicken();
+            break;
+        }
+        case 'planarRingProcess': {
+            handlePlanarRingProcess();
+            break;
+        }
+        default: {
             console.log('Unknown MBS action:', action);
+        }
     }
 }
-
 // ============================================================================
 // Message Handling
 // ============================================================================
@@ -1700,6 +2646,15 @@ function handleMessage(event: MessageEvent): void {
             break;
         case 'mbsAction':
             handleMbsAction(message.action, message);
+            break;
+        case 'requestCadtoolConfigExport':
+            exportCadtoolConfig();
+            break;
+        case 'importCadtoolConfig':
+            importCadtoolConfig(
+                message.data,
+                typeof message.fileName === 'string' ? message.fileName : undefined
+            );
             break;
     }
 }

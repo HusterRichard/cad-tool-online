@@ -57,6 +57,9 @@ export class CadEditorPanel {
                     case 'exportModel':
                         await this._handleExportModel(message.data);
                         return;
+                    case 'exportCadtoolConfig':
+                        await this._handleExportCadtoolConfig(message.data);
+                        return;
                     case 'fitView':
                         // Handled in webview
                         return;
@@ -142,6 +145,81 @@ export class CadEditorPanel {
         }
     }
 
+    private async _handleImportCadtoolConfig(): Promise<void> {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+        const options: vscode.OpenDialogOptions = {
+            canSelectMany: false,
+            openLabel: 'Import CADTool Config',
+            filters: {
+                'CADTool Config': ['json'],
+                'All Files': ['*']
+            },
+            defaultUri: workspaceRoot
+                ? vscode.Uri.joinPath(workspaceRoot, 'cadtool.config.json')
+                : vscode.Uri.file('cadtool.config.json')
+        };
+
+        const fileUri = await vscode.window.showOpenDialog(options);
+        if (!fileUri || fileUri.length === 0) {
+            return;
+        }
+
+        const configPath = fileUri[0].fsPath;
+        const fileName = path.basename(configPath);
+
+        try {
+            this._setStatus(`Importing ${fileName}...`);
+            const fileContent = fs.readFileSync(configPath, 'utf-8');
+            const parsed = JSON.parse(fileContent) as unknown;
+
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                vscode.window.showErrorMessage('CADTool config must be a JSON object.');
+                this._setStatus('Ready');
+                return;
+            }
+
+            this._panel.webview.postMessage({
+                command: 'importCadtoolConfig',
+                fileName,
+                data: parsed
+            });
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to import CADTool config: ${detail}`);
+            this._setStatus('Ready');
+        }
+    }
+
+    private async _handleExportCadtoolConfig(data: unknown): Promise<void> {
+        const serializedData = typeof data === 'string'
+            ? data
+            : JSON.stringify(data ?? {}, null, 2);
+
+        const options: vscode.SaveDialogOptions = {
+            saveLabel: 'Export CADTool Config',
+            filters: {
+                'JSON Files': ['json'],
+                'All Files': ['*']
+            },
+            defaultUri: vscode.Uri.file('cadtool.config.json')
+        };
+
+        const fileUri = await vscode.window.showSaveDialog(options);
+        if (!fileUri) {
+            return;
+        }
+
+        try {
+            fs.writeFileSync(fileUri.fsPath, serializedData, 'utf-8');
+            const fileName = path.basename(fileUri.fsPath);
+            vscode.window.showInformationMessage(`CADTool config exported successfully to ${fileName}`);
+            this._setStatus('Ready');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to export CADTool config: ${error}`);
+            this._setStatus('Ready');
+        }
+    }
+
     private _handleSelectShape(shapeId: string): void {
         const shape = this._loadedShapes.get(shapeId);
         if (shape) {
@@ -159,55 +237,51 @@ export class CadEditorPanel {
     }
 
     private _handleRibbonAction(action: string, params?: Record<string, unknown>): void {
-        // 处理 Ribbon 菜单动作
         switch (action) {
-            // 分组设计
             case 'createGroup':
-                vscode.window.showInformationMessage('创建新分组');
+                vscode.window.showInformationMessage('Create group');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createGroup'
                 });
                 break;
             case 'createChildGroup':
-                vscode.window.showInformationMessage('添加子分组');
+                vscode.window.showInformationMessage('Create child group');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createChildGroup'
                 });
                 break;
             case 'groupProperties':
-                vscode.window.showInformationMessage('查看分组属性');
+                vscode.window.showInformationMessage('Show group properties');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'groupProperties'
                 });
                 break;
 
-            // 标架设计
             case 'createFrame':
-                vscode.window.showInformationMessage('创建新标架');
+                vscode.window.showInformationMessage('Create frame');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createFrame'
                 });
                 break;
             case 'editFrame':
-                vscode.window.showInformationMessage('编辑标架');
+                vscode.window.showInformationMessage('Edit frame');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'editFrame'
                 });
                 break;
             case 'deleteFrame':
-                vscode.window.showInformationMessage('删除标架');
+                vscode.window.showInformationMessage('Delete frame');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'deleteFrame'
                 });
                 break;
 
-            // 连接设计
             case 'createJoint_revolute':
             case 'createJoint_prismatic':
             case 'createJoint_cylindrical':
@@ -215,8 +289,8 @@ export class CadEditorPanel {
             case 'createJoint_universal':
             case 'createJoint_planar':
             case 'createJoint_fixed': {
-                const jointType = params?.jointType as string;
-                vscode.window.showInformationMessage(`创建 ${jointType} 连接`);
+                const jointType = (params?.jointType as string | undefined) ?? action.replace('createJoint_', '');
+                vscode.window.showInformationMessage(`Create ${jointType} joint`);
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createJoint',
@@ -225,9 +299,8 @@ export class CadEditorPanel {
                 break;
             }
 
-            // 驱动设计
             case 'createMotion_rotational':
-                vscode.window.showInformationMessage('创建旋转驱动');
+                vscode.window.showInformationMessage('Create rotational motion');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createMotion',
@@ -235,7 +308,7 @@ export class CadEditorPanel {
                 });
                 break;
             case 'createMotion_translational':
-                vscode.window.showInformationMessage('创建平移驱动');
+                vscode.window.showInformationMessage('Create translational motion');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createMotion',
@@ -243,24 +316,36 @@ export class CadEditorPanel {
                 });
                 break;
             case 'motionProperties':
-                vscode.window.showInformationMessage('查看驱动属性');
+                vscode.window.showInformationMessage('Show motion properties');
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'motionProperties'
                 });
                 break;
 
-            // 占位动作（尚未实现）
             case 'fluidTankSlice':
             case 'fluidPort':
             case 'measureTool':
             case 'surfaceThicken':
-            case 'planarRingProcess':
-                vscode.window.showInformationMessage(`功能开发中：${action}`);
+            case 'planarRingProcess': {
+                const actionMessages: Record<string, string> = {
+                    fluidTankSlice: 'Creating fluid tank slice',
+                    fluidPort: 'Creating fluid port',
+                    measureTool: 'Running measurement tool',
+                    surfaceThicken: 'Running surface thicken',
+                    planarRingProcess: 'Running planar ring process'
+                };
+
+                vscode.window.showInformationMessage(actionMessages[action] ?? `Executing action: ${action}`);
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: action
+                });
                 break;
+            }
 
             default:
-                vscode.window.showInformationMessage(`未识别的 Ribbon 动作：${action}`);
+                vscode.window.showInformationMessage(`Unknown Ribbon action: ${action}`);
                 console.log('Unknown ribbon action:', action, params);
         }
     }
@@ -277,6 +362,16 @@ export class CadEditorPanel {
             command: 'updateModelTree',
             shapes: shapes
         });
+    }
+
+    public requestCadtoolConfigExport(): void {
+        this._panel.webview.postMessage({
+            command: 'requestCadtoolConfigExport'
+        });
+    }
+
+    public async requestCadtoolConfigImport(): Promise<void> {
+        await this._handleImportCadtoolConfig();
     }
 
     public dispose() {
@@ -802,172 +897,172 @@ export class CadEditorPanel {
         <div class="viewport">
             <!-- Ribbon Bar -->
             <div class="ribbon-bar">
-                <!-- 文件 -->
+                <!-- 閺傚洣娆?-->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" id="btn-import">
                             <span class="ribbon-btn-icon">IMP</span>
-                            <span class="ribbon-btn-text">导入</span>
+                            <span class="ribbon-btn-text">鐎电厧鍙?/span>
                         </button>
                         <button class="ribbon-btn" id="btn-export">
                             <span class="ribbon-btn-icon">EXP</span>
-                            <span class="ribbon-btn-text">导出</span>
+                            <span class="ribbon-btn-text">鐎电厧鍤?/span>
                         </button>
                         <button class="ribbon-btn" id="btn-fit">
                             <span class="ribbon-btn-icon">FIT</span>
-                            <span class="ribbon-btn-text">适应</span>
+                            <span class="ribbon-btn-text">闁倸绨?/span>
                         </button>
                         <button class="ribbon-btn" id="btn-clear">
                             <span class="ribbon-btn-icon">CLR</span>
-                            <span class="ribbon-btn-text">清空</span>
+                            <span class="ribbon-btn-text">濞撳懐鈹?/span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">文件</div>
+                    <div class="ribbon-tab-label">閺傚洣娆?/div>
                 </div>
                 <div class="ribbon-separator"></div>
 
-                <!-- 多体设计：分组设计 -->
+                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙艾鍨庣紒鍕啎鐠?-->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createGroup">
                             <span class="ribbon-btn-icon">+</span>
-                            <span class="ribbon-btn-text">新建</span>
+                            <span class="ribbon-btn-text">閺傛澘缂?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createChildGroup">
                             <span class="ribbon-btn-icon">+</span>
-                            <span class="ribbon-btn-text">子分组</span>
+                            <span class="ribbon-btn-text">鐎涙劕鍨庣紒?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="groupProperties">
                             <span class="ribbon-btn-icon">i</span>
-                            <span class="ribbon-btn-text">属性</span>
+                            <span class="ribbon-btn-text">鐏炵偞鈧?/span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">分组设计</div>
+                    <div class="ribbon-tab-label">閸掑棛绮嶇拋鎹愵吀</div>
                 </div>
 
-                <!-- 多体设计：标架设计 -->
+                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙碍鐖ｉ弸鎯邦啎鐠?-->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createFrame">
                             <span class="ribbon-btn-icon">+</span>
-                            <span class="ribbon-btn-text">新建</span>
+                            <span class="ribbon-btn-text">閺傛澘缂?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="editFrame">
                             <span class="ribbon-btn-icon">E</span>
-                            <span class="ribbon-btn-text">编辑</span>
+                            <span class="ribbon-btn-text">缂傛牞绶?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="deleteFrame">
                             <span class="ribbon-btn-icon">-</span>
-                            <span class="ribbon-btn-text">删除</span>
+                            <span class="ribbon-btn-text">閸掔娀娅?/span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">标架设计</div>
+                    <div class="ribbon-tab-label">閺嶅洦鐏︾拋鎹愵吀</div>
                 </div>
 
-                <!-- 多体设计：连接设计 -->
+                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙俺绻涢幒銉啎鐠?-->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createJoint_revolute">
                             <span class="ribbon-btn-icon">R</span>
-                            <span class="ribbon-btn-text">转动</span>
+                            <span class="ribbon-btn-text">鏉烆剙濮?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_prismatic">
                             <span class="ribbon-btn-icon">P</span>
-                            <span class="ribbon-btn-text">移动</span>
+                            <span class="ribbon-btn-text">缁夎濮?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
                             <span class="ribbon-btn-icon">C</span>
-                            <span class="ribbon-btn-text">圆柱</span>
+                            <span class="ribbon-btn-text">閸﹀棙鐓?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_spherical">
                             <span class="ribbon-btn-icon">S</span>
-                            <span class="ribbon-btn-text">球形</span>
+                            <span class="ribbon-btn-text">閻炲啫鑸?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_universal">
                             <span class="ribbon-btn-icon">U</span>
-                            <span class="ribbon-btn-text">万向</span>
+                            <span class="ribbon-btn-text">娑撳洤鎮?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_planar">
                             <span class="ribbon-btn-icon">L</span>
-                            <span class="ribbon-btn-text">平面</span>
+                            <span class="ribbon-btn-text">楠炴娊娼?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_fixed">
                             <span class="ribbon-btn-icon">F</span>
-                            <span class="ribbon-btn-text">固定</span>
+                            <span class="ribbon-btn-text">閸ュ搫鐣?/span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">连接设计</div>
+                    <div class="ribbon-tab-label">鏉╃偞甯寸拋鎹愵吀</div>
                 </div>
 
-                <!-- 多体设计：驱动设计 -->
+                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙岸鈹嶉崝銊啎鐠?-->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createMotion_rotational">
                             <span class="ribbon-btn-icon">R</span>
-                            <span class="ribbon-btn-text">旋转</span>
+                            <span class="ribbon-btn-text">閺冨娴?/span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createMotion_translational">
                             <span class="ribbon-btn-icon">T</span>
-                            <span class="ribbon-btn-text">平移</span>
+                            <span class="ribbon-btn-text">楠炲磭些</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="motionProperties">
                             <span class="ribbon-btn-icon">i</span>
-                            <span class="ribbon-btn-text">属性</span>
+                            <span class="ribbon-btn-text">鐏炵偞鈧?/span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">驱动设计</div>
+                    <div class="ribbon-tab-label">妞瑰崬濮╃拋鎹愵吀</div>
                 </div>
                 <div class="ribbon-separator"></div>
 
-                <!-- 流体设计 -->
+                <!-- 濞翠椒缍嬬拋鎹愵吀 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="fluidTankSlice">
                             <span class="ribbon-btn-icon">F1</span>
-                            <span class="ribbon-btn-text">油箱切片</span>
+                            <span class="ribbon-btn-text">濞屽湱顔堥崚鍥╁</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="fluidPort">
                             <span class="ribbon-btn-icon">F2</span>
-                            <span class="ribbon-btn-text">流体端口</span>
+                            <span class="ribbon-btn-text">濞翠椒缍嬬粩顖氬經</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">流体设计</div>
+                    <div class="ribbon-tab-label">濞翠椒缍嬬拋鎹愵吀</div>
                 </div>
                 <div class="ribbon-separator"></div>
 
-                <!-- 设计工具 -->
+                <!-- 鐠佹崘顓稿銉ュ徔 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="measureTool">
                             <span class="ribbon-btn-icon">M</span>
-                            <span class="ribbon-btn-text">测量</span>
+                            <span class="ribbon-btn-text">濞村鍣?/span>
                         </button>
                         <button class="ribbon-btn" id="btn-explode">
                             <span class="ribbon-btn-icon">X</span>
-                            <span class="ribbon-btn-text">爆炸视图</span>
+                            <span class="ribbon-btn-text">閻栧棛鍋㈢憴鍡楁禈</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="surfaceThicken">
                             <span class="ribbon-btn-icon">S+</span>
-                            <span class="ribbon-btn-text">曲面加厚</span>
+                            <span class="ribbon-btn-text">閺囨煡娼伴崝鐘插袱</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="planarRingProcess">
                             <span class="ribbon-btn-icon">P</span>
-                            <span class="ribbon-btn-text">平面环处理</span>
+                            <span class="ribbon-btn-text">楠炴娊娼伴悳顖氼槱閻?/span>
                         </button>
                         <button class="ribbon-btn" id="btn-render-config">
                             <span class="ribbon-btn-icon">CFG</span>
-                            <span class="ribbon-btn-text">渲染配置</span>
+                            <span class="ribbon-btn-text">濞撳弶鐓嬮柊宥囩枂</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">设计工具</div>
+                    <div class="ribbon-tab-label">鐠佹崘顓稿銉ュ徔</div>
                 </div>
             </div>
             <div id="canvas-container">
                 <!-- Explode slider control -->
                 <div class="explode-slider-container" id="explode-slider-container">
                     <div class="explode-slider-header">
-                        <span>爆炸视图距离</span>
-                        <span class="explode-slider-close" id="explode-slider-close">×</span>
+                        <span>閻栧棛鍋㈢憴鍡楁禈鐠烘繄顬?/span>
+                        <span class="explode-slider-close" id="explode-slider-close">鑴?/span>
                     </div>
                     <div class="explode-slider-wrapper">
                         <input type="range" class="explode-slider" id="explode-slider" min="0" max="100" value="0" step="1">
@@ -980,18 +1075,18 @@ export class CadEditorPanel {
                 </div>
                 <div class="render-config-panel" id="render-config-panel">
                     <div class="render-config-header">
-                        <span>渲染配置</span>
-                        <span class="render-config-close" id="render-config-close">×</span>
+                        <span>濞撳弶鐓嬮柊宥囩枂</span>
+                        <span class="render-config-close" id="render-config-close">鑴?/span>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-visual-preset">视觉预设</label>
+                        <label for="render-visual-preset">鐟欏棜顫庢０鍕啎</label>
                         <select id="render-visual-preset">
                             <option value="cad" selected>CAD</option>
-                            <option value="cinematic">电影感</option>
+                            <option value="cinematic">閻㈤潧濂栭幇?/option>
                         </select>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-material-mode">材质模式</label>
+                        <label for="render-material-mode">閺夋劘宸濆Ο鈥崇础</label>
                         <select id="render-material-mode">
                             <option value="matcap">Matcap</option>
                             <option value="pbr">PBR</option>
@@ -1000,19 +1095,19 @@ export class CadEditorPanel {
                         </select>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-postprocessing">后处理</label>
+                        <label for="render-postprocessing">閸氬骸顦╅悶?/label>
                         <input id="render-postprocessing" type="checkbox" checked>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-edge-layer">边线层</label>
+                        <label for="render-edge-layer">鏉堝湱鍤庣仦?/label>
                         <input id="render-edge-layer" type="checkbox" checked>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-precision">网格精度</label>
+                        <label for="render-precision">缂冩垶鐗哥划鎯у</label>
                         <select id="render-precision">
-                            <option value="coarse">粗略</option>
-                            <option value="balanced" selected>平衡</option>
-                            <option value="fine">精细</option>
+                            <option value="coarse">缁鏆?/option>
+                            <option value="balanced" selected>楠炲疇銆€</option>
+                            <option value="fine">缁墽绮?/option>
                         </select>
                     </div>
                 </div>

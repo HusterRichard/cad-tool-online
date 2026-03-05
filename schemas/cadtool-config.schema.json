@@ -182,12 +182,16 @@
         "prismatic",
         "cylindrical",
         "universal",
+        "constantVelocity",
         "screw"
       ]
     },
     "motionType": {
       "type": "string",
       "enum": [
+        "rotational",
+        "translational",
+        "displacement",
         "angle",
         "angularVelocity",
         "angularAcceleration",
@@ -201,7 +205,8 @@
       "enum": [
         "variableTankGasPort",
         "variableTankLiquidPort",
-        "variableTankFillingPort"
+        "variableTankFillingPort",
+        "variableTankGasLiquidPort"
       ]
     },
     "gravityType": {
@@ -217,6 +222,7 @@
     "stateSelect": {
       "type": "string",
       "enum": [
+        "none",
         "never",
         "avoid",
         "default",

@@ -500,6 +500,14 @@ export const CADTOOL_ENUM_VALUES_BY_FIELD: Readonly<Record<string, readonly Cadt
             }
         },
         {
+            value: 'constantVelocity',
+            detail: 'Constant-velocity joint',
+            doc: {
+                zh: 'Constant-velocity joint.',
+                en: 'Constant-velocity joint.'
+            }
+        },
+        {
             value: 'screw',
             detail: 'Screw joint',
             doc: {
@@ -509,6 +517,30 @@ export const CADTOOL_ENUM_VALUES_BY_FIELD: Readonly<Record<string, readonly Cadt
         }
     ],
     motionType: [
+        {
+            value: 'rotational',
+            detail: 'Rotational joint motion',
+            doc: {
+                zh: 'Rotational joint motion.',
+                en: 'Rotational joint motion.'
+            }
+        },
+        {
+            value: 'translational',
+            detail: 'Translational joint motion',
+            doc: {
+                zh: 'Translational joint motion.',
+                en: 'Translational joint motion.'
+            }
+        },
+        {
+            value: 'displacement',
+            detail: 'Displacement drive',
+            doc: {
+                zh: 'Displacement drive.',
+                en: 'Displacement drive.'
+            }
+        },
         {
             value: 'angle',
             detail: 'Angle drive',
@@ -582,6 +614,14 @@ export const CADTOOL_ENUM_VALUES_BY_FIELD: Readonly<Record<string, readonly Cadt
                 zh: '可变油箱填充孔口',
                 en: 'Variable fill orifice of tank.'
             }
+        },
+        {
+            value: 'variableTankGasLiquidPort',
+            detail: 'Variable gas-liquid orifice',
+            doc: {
+                zh: 'Variable gas-liquid orifice of tank.',
+                en: 'Variable gas-liquid orifice of tank.'
+            }
         }
     ],
     gravityType: [
@@ -645,6 +685,14 @@ export const CADTOOL_ENUM_VALUES_BY_FIELD: Readonly<Record<string, readonly Cadt
         }
     ],
     stateSelect: [
+        {
+            value: 'none',
+            detail: 'StateSelect.none',
+            doc: {
+                zh: 'No explicit state selection.',
+                en: 'No explicit state selection.'
+            }
+        },
         {
             value: 'never',
             detail: 'StateSelect.never',

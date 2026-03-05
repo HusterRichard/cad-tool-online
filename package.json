@@ -19,6 +19,8 @@
     "onLanguage:jsonc",
     "onLanguage:modelica",
     "onCommand:cadtool-online.openCadtoolDocs",
+    "onCommand:cadtool-online.exportCadtoolConfig",
+    "onCommand:cadtool-online.importCadtoolConfig",
     "onCommand:cadtool-online.refreshCadtoolIndex"
   ],
   "main": "./dist/extension.cjs",
@@ -37,6 +39,16 @@
       {
         "command": "cadtool-online.refreshCadtoolIndex",
         "title": "Refresh CADTool Index",
+        "category": "CadToolOnline"
+      },
+      {
+        "command": "cadtool-online.exportCadtoolConfig",
+        "title": "Export CADTool Config",
+        "category": "CadToolOnline"
+      },
+      {
+        "command": "cadtool-online.importCadtoolConfig",
+        "title": "Import CADTool Config",
         "category": "CadToolOnline"
       }
     ],
