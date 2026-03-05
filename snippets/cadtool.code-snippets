@@ -1,0 +1,209 @@
+{
+  "cadtool-multibody-basic": {
+    "prefix": [
+      "multibody-basic",
+      "cadtool-multibody-basic"
+    ],
+    "description": "CADTool multibody basic template",
+    "body": [
+      "{",
+      "  \"schemaVersion\": \"1.0\",",
+      "  \"projectName\": \"${1:MyCadProject}\",",
+      "  \"group\": [",
+      "    {",
+      "      \"name\": \"${2:GroupA}\",",
+      "      \"iconSize\": 64,",
+      "      \"visibility\": true,",
+      "      \"position\": [0, 0, 0],",
+      "      \"direction\": [0, 0, 0]",
+      "    }",
+      "  ],",
+      "  \"marker\": [],",
+      "  \"designPoint\": [],",
+      "  \"connector\": [],",
+      "  \"motion\": [],",
+      "  \"contact\": [],",
+      "  \"gravity\": [",
+      "    {",
+      "      \"name\": \"gravity1\",",
+      "      \"gravityType\": \"uniform\",",
+      "      \"target\": \"multibody\",",
+      "      \"g\": 9.81,",
+      "      \"n\": [0, 0, -1]",
+      "    }",
+      "  ]",
+      "}"
+    ]
+  },
+  "cadtool-fluid-basic": {
+    "prefix": [
+      "fluid-basic",
+      "cadtool-fluid-basic"
+    ],
+    "description": "CADTool fluid basic template",
+    "body": [
+      "{",
+      "  \"schemaVersion\": \"1.0\",",
+      "  \"projectName\": \"${1:MyFluidProject}\",",
+      "  \"ribSlice\": [",
+      "    {",
+      "      \"name\": \"${2:RibSlice1}\",",
+      "      \"iconSize\": 48,",
+      "      \"position\": [0, 0, 0],",
+      "      \"direction\": [0, 0, 0]",
+      "    }",
+      "  ],",
+      "  \"fluidPort\": [",
+      "    {",
+      "      \"name\": \"${3:Port1}\",",
+      "      \"portType\": \"variableTankLiquidPort\",",
+      "      \"ribSliceRef\": \"${2:RibSlice1}\"",
+      "    }",
+      "  ],",
+      "  \"medium\": [",
+      "    {",
+      "      \"name\": \"${4:Medium1}\",",
+      "      \"mediumType\": \"liquid\",",
+      "      \"density\": 1000.0,",
+      "      \"viscosity\": 0.001",
+      "    }",
+      "  ],",
+      "  \"gravity\": [",
+      "    {",
+      "      \"name\": \"gravityFluid\",",
+      "      \"gravityType\": \"constant\",",
+      "      \"target\": \"fluid\",",
+      "      \"gConst\": 9.81",
+      "    }",
+      "  ]",
+      "}"
+    ]
+  },
+  "cadtool-connector": {
+    "prefix": [
+      "connector",
+      "cadtool-connector"
+    ],
+    "description": "CADTool connector object",
+    "body": [
+      "{",
+      "  \"name\": \"${1:connector1}\",",
+      "  \"connectorType\": \"${2|fixed,spherical,planar,revolute,prismatic,cylindrical,universal,screw|}\",",
+      "  \"part1\": \"${3:PartA}\",",
+      "  \"part2\": \"${4:PartB}\",",
+      "  \"marker1\": \"${5:MarkerA}\",",
+      "  \"marker2\": \"${6:MarkerB}\",",
+      "  \"params\": {",
+      "    \"phi_rel_fixed\": 0.0,",
+      "    \"phi_rel_0\": 0.0,",
+      "    \"om_rel_fixed\": 0.0,",
+      "    \"om_rel_0\": 0.0,",
+      "    \"stateSelect\": \"default\"",
+      "  }",
+      "}"
+    ]
+  },
+  "cadtool-motion": {
+    "prefix": [
+      "motion",
+      "cadtool-motion"
+    ],
+    "description": "CADTool motion object",
+    "body": [
+      "{",
+      "  \"name\": \"${1:motion1}\",",
+      "  \"motionType\": \"${2|angle,angularVelocity,angularAcceleration,position,velocity,acceleration|}\",",
+      "  \"connectorRef\": \"${3:connector1}\",",
+      "  \"functionType\": \"${4|constant,harmonic,ramp,table|}\",",
+      "  \"start\": ${5:0.0},",
+      "  \"w\": ${6:0.0},",
+      "  \"a\": ${7:0.0}",
+      "}"
+    ]
+  },
+  "cadtool-contact": {
+    "prefix": [
+      "contact",
+      "cadtool-contact"
+    ],
+    "description": "CADTool contact object",
+    "body": [
+      "{",
+      "  \"name\": \"${1:contact1}\",",
+      "  \"partA\": \"${2:PartA}\",",
+      "  \"partB\": \"${3:PartB}\",",
+      "  \"params\": {",
+      "    \"k\": ${4:1e5},",
+      "    \"d\": ${5:100.0},",
+      "    \"n1\": ${6:1.0},",
+      "    \"n2\": ${7:1.0},",
+      "    \"p_max\": ${8:0.0},",
+      "    \"mue_k\": ${9:0.2},",
+      "    \"mue_s\": ${10:0.3},",
+      "    \"mue_r\": ${11:0.0},",
+      "    \"k_v\": ${12:0.0},",
+      "    \"v_e1\": ${13:0.0},",
+      "    \"v_e2\": ${14:0.0}",
+      "  }",
+      "}"
+    ]
+  },
+  "cadtool-fluid-port": {
+    "prefix": [
+      "fluid-port",
+      "cadtool-fluid-port"
+    ],
+    "description": "CADTool fluid port object",
+    "body": [
+      "{",
+      "  \"name\": \"${1:port1}\",",
+      "  \"portType\": \"${2|variableTankGasPort,variableTankLiquidPort,variableTankFillingPort|}\",",
+      "  \"ribSliceRef\": \"${3:RibSlice1}\",",
+      "  \"params\": {",
+      "    \"Lambda_Crit\": ${4:0.0},",
+      "    \"Cqmax\": ${5:1.0},",
+      "    \"Cq_Gas\": ${6:1.0},",
+      "    \"Sigmin\": ${7:0.0},",
+      "    \"Sigmax\": ${8:1.0}",
+      "  }",
+      "}"
+    ]
+  },
+  "cadtool-gravity-uniform": {
+    "prefix": [
+      "gravity-uniform",
+      "cadtool-gravity-uniform"
+    ],
+    "description": "CADTool uniform gravity object",
+    "body": [
+      "{",
+      "  \"name\": \"${1:gravityUniform}\",",
+      "  \"gravityType\": \"uniform\",",
+      "  \"target\": \"multibody\",",
+      "  \"g\": ${2:9.81},",
+      "  \"n\": [${3:0}, ${4:0}, ${5:-1}],",
+      "  \"mu\": ${6:0.0}",
+      "}"
+    ]
+  },
+  "cadtool-gravity-table": {
+    "prefix": [
+      "gravity-table",
+      "cadtool-gravity-table"
+    ],
+    "description": "CADTool table gravity object",
+    "body": [
+      "{",
+      "  \"name\": \"${1:gravityTable}\",",
+      "  \"gravityType\": \"table\",",
+      "  \"target\": \"fluid\",",
+      "  \"gTable\": [",
+      "    { \"time\": 0.0, \"value\": 9.81 },",
+      "    { \"time\": 1.0, \"value\": 9.81 }",
+      "  ],",
+      "  \"extrapolation\": \"${2|hold,linear,periodic|}\",",
+      "  \"timeScale\": ${3:1.0}",
+      "}"
+    ]
+  }
+}

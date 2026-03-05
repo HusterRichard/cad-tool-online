@@ -207,22 +207,23 @@ export class CadEditorPanel {
                 });
                 break;
 
-            // 关节设计
+            // 连接设计
             case 'createJoint_revolute':
             case 'createJoint_prismatic':
             case 'createJoint_cylindrical':
             case 'createJoint_spherical':
             case 'createJoint_universal':
             case 'createJoint_planar':
-            case 'createJoint_fixed':
+            case 'createJoint_fixed': {
                 const jointType = params?.jointType as string;
-                vscode.window.showInformationMessage(`创建 ${jointType} 关节`);
+                vscode.window.showInformationMessage(`创建 ${jointType} 连接`);
                 this._panel.webview.postMessage({
                     command: 'mbsAction',
                     action: 'createJoint',
                     jointType: jointType
                 });
                 break;
+            }
 
             // 驱动设计
             case 'createMotion_rotational':
@@ -249,7 +250,17 @@ export class CadEditorPanel {
                 });
                 break;
 
+            // 占位动作（尚未实现）
+            case 'fluidTankSlice':
+            case 'fluidPort':
+            case 'measureTool':
+            case 'surfaceThicken':
+            case 'planarRingProcess':
+                vscode.window.showInformationMessage(`功能开发中：${action}`);
+                break;
+
             default:
+                vscode.window.showInformationMessage(`未识别的 Ribbon 动作：${action}`);
                 console.log('Unknown ribbon action:', action, params);
         }
     }
@@ -791,131 +802,164 @@ export class CadEditorPanel {
         <div class="viewport">
             <!-- Ribbon Bar -->
             <div class="ribbon-bar">
-                <!-- File Group -->
+                <!-- 文件 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" id="btn-import">
-                            <span class="ribbon-btn-icon">📥</span>
+                            <span class="ribbon-btn-icon">IMP</span>
                             <span class="ribbon-btn-text">导入</span>
                         </button>
                         <button class="ribbon-btn" id="btn-export">
-                            <span class="ribbon-btn-icon">📤</span>
+                            <span class="ribbon-btn-icon">EXP</span>
                             <span class="ribbon-btn-text">导出</span>
                         </button>
                         <button class="ribbon-btn" id="btn-fit">
-                            <span class="ribbon-btn-icon">🔍</span>
+                            <span class="ribbon-btn-icon">FIT</span>
                             <span class="ribbon-btn-text">适应</span>
                         </button>
                         <button class="ribbon-btn" id="btn-clear">
-                            <span class="ribbon-btn-icon">🗑️</span>
+                            <span class="ribbon-btn-icon">CLR</span>
                             <span class="ribbon-btn-text">清空</span>
                         </button>
                     </div>
                     <div class="ribbon-tab-label">文件</div>
                 </div>
                 <div class="ribbon-separator"></div>
-                <!-- Group Design -->
+
+                <!-- 多体设计：分组设计 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createGroup">
-                            <span class="ribbon-btn-icon">➕</span>
+                            <span class="ribbon-btn-icon">+</span>
                             <span class="ribbon-btn-text">新建</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createChildGroup">
-                            <span class="ribbon-btn-icon">📂</span>
+                            <span class="ribbon-btn-icon">+</span>
                             <span class="ribbon-btn-text">子分组</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="groupProperties">
-                            <span class="ribbon-btn-icon">⚙️</span>
+                            <span class="ribbon-btn-icon">i</span>
                             <span class="ribbon-btn-text">属性</span>
                         </button>
                     </div>
                     <div class="ribbon-tab-label">分组设计</div>
                 </div>
-                <!-- Frame Design -->
+
+                <!-- 多体设计：标架设计 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createFrame">
-                            <span class="ribbon-btn-icon">➕</span>
+                            <span class="ribbon-btn-icon">+</span>
                             <span class="ribbon-btn-text">新建</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="editFrame">
-                            <span class="ribbon-btn-icon">✏️</span>
+                            <span class="ribbon-btn-icon">E</span>
                             <span class="ribbon-btn-text">编辑</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="deleteFrame">
-                            <span class="ribbon-btn-icon">🗑️</span>
+                            <span class="ribbon-btn-icon">-</span>
                             <span class="ribbon-btn-text">删除</span>
                         </button>
                     </div>
                     <div class="ribbon-tab-label">标架设计</div>
                 </div>
-                <!-- Joint Design -->
+
+                <!-- 多体设计：连接设计 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createJoint_revolute">
-                            <span class="ribbon-btn-icon">🔄</span>
-                            <span class="ribbon-btn-text">旋转</span>
+                            <span class="ribbon-btn-icon">R</span>
+                            <span class="ribbon-btn-text">转动</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_prismatic">
-                            <span class="ribbon-btn-icon">↔️</span>
+                            <span class="ribbon-btn-icon">P</span>
                             <span class="ribbon-btn-text">移动</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
-                            <span class="ribbon-btn-icon">🔵</span>
+                            <span class="ribbon-btn-icon">C</span>
                             <span class="ribbon-btn-text">圆柱</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_spherical">
-                            <span class="ribbon-btn-icon">⚪</span>
-                            <span class="ribbon-btn-text">球</span>
+                            <span class="ribbon-btn-icon">S</span>
+                            <span class="ribbon-btn-text">球形</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_universal">
-                            <span class="ribbon-btn-icon">✚</span>
+                            <span class="ribbon-btn-icon">U</span>
                             <span class="ribbon-btn-text">万向</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_planar">
-                            <span class="ribbon-btn-icon">▭</span>
+                            <span class="ribbon-btn-icon">L</span>
                             <span class="ribbon-btn-text">平面</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_fixed">
-                            <span class="ribbon-btn-icon">🔒</span>
+                            <span class="ribbon-btn-icon">F</span>
                             <span class="ribbon-btn-text">固定</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">关节设计</div>
+                    <div class="ribbon-tab-label">连接设计</div>
                 </div>
-                <!-- Motion Design -->
+
+                <!-- 多体设计：驱动设计 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createMotion_rotational">
-                            <span class="ribbon-btn-icon">🔄</span>
+                            <span class="ribbon-btn-icon">R</span>
                             <span class="ribbon-btn-text">旋转</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createMotion_translational">
-                            <span class="ribbon-btn-icon">➡️</span>
+                            <span class="ribbon-btn-icon">T</span>
                             <span class="ribbon-btn-text">平移</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="motionProperties">
-                            <span class="ribbon-btn-icon">⚙️</span>
+                            <span class="ribbon-btn-icon">i</span>
                             <span class="ribbon-btn-text">属性</span>
                         </button>
                     </div>
                     <div class="ribbon-tab-label">驱动设计</div>
                 </div>
                 <div class="ribbon-separator"></div>
-                <!-- Tools -->
+
+                <!-- 流体设计 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" id="btn-explode">
-                            <span class="ribbon-btn-icon">💥</span>
-                            <span class="ribbon-btn-text">爆炸图</span>
+                        <button class="ribbon-btn" data-action-id="fluidTankSlice">
+                            <span class="ribbon-btn-icon">F1</span>
+                            <span class="ribbon-btn-text">油箱切片</span>
                         </button>
-                        <button class="ribbon-btn" id="btn-render-config">
-                            <span class="ribbon-btn-icon">🎛️</span>
-                            <span class="ribbon-btn-text">渲染</span>
+                        <button class="ribbon-btn" data-action-id="fluidPort">
+                            <span class="ribbon-btn-icon">F2</span>
+                            <span class="ribbon-btn-text">流体端口</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">工具</div>
+                    <div class="ribbon-tab-label">流体设计</div>
+                </div>
+                <div class="ribbon-separator"></div>
+
+                <!-- 设计工具 -->
+                <div class="ribbon-tab-group">
+                    <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" data-action-id="measureTool">
+                            <span class="ribbon-btn-icon">M</span>
+                            <span class="ribbon-btn-text">测量</span>
+                        </button>
+                        <button class="ribbon-btn" id="btn-explode">
+                            <span class="ribbon-btn-icon">X</span>
+                            <span class="ribbon-btn-text">爆炸视图</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="surfaceThicken">
+                            <span class="ribbon-btn-icon">S+</span>
+                            <span class="ribbon-btn-text">曲面加厚</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="planarRingProcess">
+                            <span class="ribbon-btn-icon">P</span>
+                            <span class="ribbon-btn-text">平面环处理</span>
+                        </button>
+                        <button class="ribbon-btn" id="btn-render-config">
+                            <span class="ribbon-btn-icon">CFG</span>
+                            <span class="ribbon-btn-text">渲染配置</span>
+                        </button>
+                    </div>
+                    <div class="ribbon-tab-label">设计工具</div>
                 </div>
             </div>
             <div id="canvas-container">
@@ -940,10 +984,10 @@ export class CadEditorPanel {
                         <span class="render-config-close" id="render-config-close">×</span>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-visual-preset">Visual Preset</label>
+                        <label for="render-visual-preset">视觉预设</label>
                         <select id="render-visual-preset">
                             <option value="cad" selected>CAD</option>
-                            <option value="cinematic">Cinematic</option>
+                            <option value="cinematic">电影感</option>
                         </select>
                     </div>
                     <div class="render-config-row">
@@ -1006,6 +1050,10 @@ export class CadEditorPanel {
             });
 
             function handleRibbonAction(actionId) {
+                if (!actionId) {
+                    return;
+                }
+
                 const params = {};
 
                 if (actionId.startsWith('createJoint_')) {

@@ -1,0 +1,765 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cadtool-online/schemas/cadtool-config.schema.json",
+  "title": "CADTool Config Schema",
+  "description": "Schema for cadtool.config.json and .cadtoolrc.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "default": "1.0"
+    },
+    "projectName": {
+      "type": "string"
+    },
+    "group": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/group"
+      }
+    },
+    "marker": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/marker"
+      }
+    },
+    "designPoint": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/designPoint"
+      }
+    },
+    "connector": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/connector"
+      }
+    },
+    "motion": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/motion"
+      }
+    },
+    "contact": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/contact"
+      }
+    },
+    "fluidPort": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/fluidPort"
+      }
+    },
+    "ribSlice": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ribSlice"
+      }
+    },
+    "gravity": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/gravity"
+      }
+    },
+    "medium": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/medium"
+      }
+    }
+  },
+  "definitions": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "Must start with a letter or underscore and contain only letters, digits, underscore."
+    },
+    "iconSize": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50000,
+      "description": "Valid range: 1..50000"
+    },
+    "positionValue": {
+      "type": "number",
+      "minimum": -1000,
+      "maximum": 1000
+    },
+    "directionValue": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    },
+    "positionArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/positionValue"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "positionObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/definitions/positionValue"
+        },
+        "y": {
+          "$ref": "#/definitions/positionValue"
+        },
+        "z": {
+          "$ref": "#/definitions/positionValue"
+        }
+      }
+    },
+    "position": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/positionArray"
+        },
+        {
+          "$ref": "#/definitions/positionObject"
+        }
+      ]
+    },
+    "directionArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/directionValue"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "directionObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/definitions/directionValue"
+        },
+        "y": {
+          "$ref": "#/definitions/directionValue"
+        },
+        "z": {
+          "$ref": "#/definitions/directionValue"
+        }
+      }
+    },
+    "direction": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/directionArray"
+        },
+        {
+          "$ref": "#/definitions/directionObject"
+        }
+      ]
+    },
+    "connectorType": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "spherical",
+        "planar",
+        "revolute",
+        "prismatic",
+        "cylindrical",
+        "universal",
+        "screw"
+      ]
+    },
+    "motionType": {
+      "type": "string",
+      "enum": [
+        "angle",
+        "angularVelocity",
+        "angularAcceleration",
+        "position",
+        "velocity",
+        "acceleration"
+      ]
+    },
+    "portType": {
+      "type": "string",
+      "enum": [
+        "variableTankGasPort",
+        "variableTankLiquidPort",
+        "variableTankFillingPort"
+      ]
+    },
+    "gravityType": {
+      "type": "string",
+      "enum": [
+        "uniform",
+        "none",
+        "point",
+        "constant",
+        "table"
+      ]
+    },
+    "stateSelect": {
+      "type": "string",
+      "enum": [
+        "never",
+        "avoid",
+        "default",
+        "prefer",
+        "always"
+      ]
+    },
+    "baseObjectProperties": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "designPoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "marker": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "groupRef": {
+          "type": "string"
+        },
+        "partRef": {
+          "type": "string"
+        }
+      }
+    },
+    "designPoint": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "groupRef": {
+          "type": "string"
+        },
+        "markerRef": {
+          "type": "string"
+        }
+      }
+    },
+    "connector": {
+      "type": "object",
+      "required": [
+        "name",
+        "connectorType",
+        "part1",
+        "part2"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "connectorType": {
+          "$ref": "#/definitions/connectorType"
+        },
+        "part1": {
+          "type": "string"
+        },
+        "part2": {
+          "type": "string"
+        },
+        "marker1": {
+          "type": "string"
+        },
+        "marker2": {
+          "type": "string"
+        },
+        "stateSelect": {
+          "$ref": "#/definitions/stateSelect"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "phi_rel_fixed": {
+              "type": "number"
+            },
+            "phi_rel_0": {
+              "type": "number"
+            },
+            "om_rel_fixed": {
+              "type": "number"
+            },
+            "om_rel_0": {
+              "type": "number"
+            },
+            "stateSelect": {
+              "$ref": "#/definitions/stateSelect"
+            }
+          }
+        }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "required": [
+        "name",
+        "motionType",
+        "connectorRef"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "motionType": {
+          "$ref": "#/definitions/motionType"
+        },
+        "connectorRef": {
+          "type": "string"
+        },
+        "functionType": {
+          "type": "string",
+          "enum": [
+            "constant",
+            "harmonic",
+            "ramp",
+            "table"
+          ]
+        },
+        "start": {
+          "type": "number"
+        },
+        "w": {
+          "type": "number"
+        },
+        "a": {
+          "type": "number"
+        }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "required": [
+        "name",
+        "partA",
+        "partB"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "partA": {
+          "type": "string"
+        },
+        "partB": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "k": {
+              "type": "number"
+            },
+            "d": {
+              "type": "number"
+            },
+            "n1": {
+              "type": "number"
+            },
+            "n2": {
+              "type": "number"
+            },
+            "p_max": {
+              "type": "number"
+            },
+            "mue_k": {
+              "type": "number"
+            },
+            "mue_s": {
+              "type": "number"
+            },
+            "mue_r": {
+              "type": "number"
+            },
+            "k_v": {
+              "type": "number"
+            },
+            "v_e1": {
+              "type": "number"
+            },
+            "v_e2": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "fluidPort": {
+      "type": "object",
+      "required": [
+        "name",
+        "portType"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "portType": {
+          "$ref": "#/definitions/portType"
+        },
+        "ribSliceRef": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "Lambda_Crit": {
+              "type": "number"
+            },
+            "Cqmax": {
+              "type": "number"
+            },
+            "Cq_Gas": {
+              "type": "number"
+            },
+            "Sigmin": {
+              "type": "number"
+            },
+            "Sigmax": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "ribSlice": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "tankRef": {
+          "type": "string"
+        },
+        "thickness": {
+          "type": "number"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "Lambda_Crit": {
+              "type": "number"
+            },
+            "Cqmax": {
+              "type": "number"
+            },
+            "Cq_Gas": {
+              "type": "number"
+            },
+            "Sigmin": {
+              "type": "number"
+            },
+            "Sigmax": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "gravity": {
+      "type": "object",
+      "required": [
+        "name",
+        "gravityType"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "gravityType": {
+          "$ref": "#/definitions/gravityType"
+        },
+        "target": {
+          "type": "string",
+          "enum": [
+            "multibody",
+            "fluid"
+          ]
+        },
+        "g": {
+          "type": "number"
+        },
+        "n": {
+          "$ref": "#/definitions/directionArray"
+        },
+        "mu": {
+          "type": "number"
+        },
+        "gConst": {
+          "type": "number"
+        },
+        "gTable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "time",
+              "value"
+            ],
+            "properties": {
+              "time": {
+                "type": "number"
+              },
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "extrapolation": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "linear",
+            "periodic"
+          ]
+        },
+        "timeScale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "medium": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/name"
+        },
+        "iconSize": {
+          "$ref": "#/definitions/iconSize"
+        },
+        "visibility": {
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/definitions/position"
+        },
+        "direction": {
+          "$ref": "#/definitions/direction"
+        },
+        "mediumType": {
+          "type": "string",
+          "enum": [
+            "idealGas",
+            "liquid",
+            "custom"
+          ]
+        },
+        "density": {
+          "type": "number"
+        },
+        "viscosity": {
+          "type": "number"
+        },
+        "bulkModulus": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

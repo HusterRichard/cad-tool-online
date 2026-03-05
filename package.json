@@ -14,7 +14,11 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:json",
+    "onLanguage:jsonc",
+    "onCommand:cadtool-online.openCadtoolDocs"
+  ],
   "main": "./dist/extension.cjs",
   "contributes": {
     "commands": [
@@ -22,6 +26,31 @@
         "command": "cadtool-online.openEditor",
         "title": "Open CAD Editor",
         "category": "CadToolOnline"
+      },
+      {
+        "command": "cadtool-online.openCadtoolDocs",
+        "title": "Open CADTool Docs",
+        "category": "CadToolOnline"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "**/cadtool.config.json",
+        "url": "./schemas/cadtool-config.schema.json"
+      },
+      {
+        "fileMatch": "**/.cadtoolrc.json",
+        "url": "./schemas/cadtool-config.schema.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "json",
+        "path": "./snippets/cadtool.code-snippets"
+      },
+      {
+        "language": "jsonc",
+        "path": "./snippets/cadtool.code-snippets"
       }
     ]
   },
