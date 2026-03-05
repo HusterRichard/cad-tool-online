@@ -20,6 +20,11 @@ export interface MeshData {
     indices: Uint32Array;
 }
 
+export interface EdgeData {
+    // Flattened line-segment endpoints: [x1,y1,z1,x2,y2,z2,...]
+    vertices: Float32Array;
+}
+
 export interface BoundingBox {
     min: Vec3;
     max: Vec3;

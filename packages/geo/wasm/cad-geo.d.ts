@@ -331,6 +331,13 @@ export type MeshShapeDataResult = {
   error: EmbindString | undefined
 };
 
+export type BRepEdgesDataResult = {
+  success: boolean,
+  vertices: any,
+  segmentCount: number,
+  error: EmbindString | undefined
+};
+
 interface EmbindModule {
   VectorDouble: {
     new(): VectorDouble;
@@ -408,6 +415,7 @@ interface EmbindModule {
   readStepFromBuffer(_0: Uint8Array, _1: EmbindString): string;
   meshShapeData(_0: EmbindString, _1: number, _2: number): MeshShapeDataResult;
   meshShapesData(_0: any, _1: number, _2: number): any;
+  brepEdgesData(_0: EmbindString, _1: number): BRepEdgesDataResult;
   meshShape(_0: EmbindString, _1: number, _2: number): string;
   meshShapeDefault(_0: EmbindString): string;
   calculateMassProperties(_0: EmbindString, _1: number): string;

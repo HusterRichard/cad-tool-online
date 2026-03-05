@@ -1,4 +1,4 @@
-import type { MeshData } from '@cadtool-online/core';
+import type { MeshData, EdgeData } from '@cadtool-online/core';
 import type { MassProperties, StepReadResult, MeshResult, MassPropertiesResult, FaceNormalResult } from './types';
 
 // WASM module interface (extended with new functions)
@@ -47,6 +47,12 @@ interface CadGeoModule {
     }>;
     meshShape(id: string, linearDeflection: number, angularDeflection: number): string;
     meshShapeDefault(id: string): string;
+    brepEdgesData?: (id: string, linearDeflection: number) => {
+        success: boolean;
+        vertices: number[];
+        segmentCount: number;
+        error?: string;
+    };
 
     // T2.4: Mass properties
     calculateMassProperties(id: string, density: number): string;
@@ -63,6 +69,7 @@ export interface IOcctWrapper {
     readStep(data: ArrayBuffer, baseId?: string): Promise<StepReadResult>;
     getMesh(shapeId: string, linearDeflection?: number, angularDeflection?: number): MeshData | null;
     getMeshes(shapeIds: string[], linearDeflection?: number, angularDeflection?: number): Map<string, MeshData | null>;
+    getBrepEdges(shapeId: string, linearDeflection?: number): EdgeData | null;
     getMassProperties(shapeId: string, density?: number): MassProperties | null;
     getFaceNormalAtPoint(shapeId: string, rayOrigin: { x: number; y: number; z: number }, rayDir: { x: number; y: number; z: number }): FaceNormalResult | null;
     deleteShape(shapeId: string): void;
@@ -211,6 +218,25 @@ export class OcctWrapper implements IOcctWrapper {
             result.set(shapeId, this.getMesh(shapeId, linearDeflection, angularDeflection));
         }
         return result;
+    }
+
+    getBrepEdges(shapeId: string, linearDeflection: number = 0.0005): EdgeData | null {
+        this.ensureInitialized();
+
+        const brepEdgesData = wasmModule!.brepEdgesData;
+        if (!brepEdgesData) {
+            return null;
+        }
+
+        const result = brepEdgesData(shapeId, linearDeflection);
+        if (!result.success) {
+            console.error('BRep edge extraction failed:', result.error);
+            return null;
+        }
+
+        return {
+            vertices: new Float32Array(result.vertices)
+        };
     }
 
     // ========================================================================

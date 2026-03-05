@@ -3,7 +3,7 @@
 
 import { ThreeViewer } from '@cadtool-online/three';
 import { OcctWrapper, type StepReadResult } from '@cadtool-online/geo';
-import type { MeshData } from '@cadtool-online/core';
+import type { EdgeData, MeshData } from '@cadtool-online/core';
 import { markerCreator, type MbsMarker } from '@cadtool-online/core';
 
 declare function acquireVsCodeApi(): {
@@ -34,6 +34,7 @@ interface LoadedShape {
     shapeId?: string;
     meshId?: string;
     meshData?: MeshData;
+    edgeData?: EdgeData;
     color?: string;
     children?: LoadedShape[];
     visible: boolean;
@@ -61,9 +62,11 @@ interface ExplodeData {
 const explodeDataMap: Map<string, ExplodeData> = new Map();
 
 type MaterialMode = 'matcap' | 'pbr' | 'flat' | 'phong';
+type VisualPreset = 'cad' | 'cinematic';
 type PrecisionPreset = 'coarse' | 'balanced' | 'fine';
 
 interface RenderConfigState {
+    visualPreset: VisualPreset;
     materialMode: MaterialMode;
     postProcessing: boolean;
     edgeLayerVisible: boolean;
@@ -71,6 +74,7 @@ interface RenderConfigState {
 }
 
 const DEFAULT_RENDER_CONFIG: RenderConfigState = {
+    visualPreset: 'cad',
     materialMode: 'phong',
     postProcessing: true,
     edgeLayerVisible: true,
@@ -80,6 +84,7 @@ const DEFAULT_RENDER_CONFIG: RenderConfigState = {
 let renderConfig: RenderConfigState = loadRenderConfigState();
 
 interface ViewerCapabilityMethods {
+    setVisualPreset: (preset: VisualPreset) => void;
     setMaterialMode: (mode: MaterialMode) => void;
     setPostProcessingEnabled: (enabled: boolean) => void;
     setOutlineEnabled: (enabled: boolean) => void;
@@ -89,30 +94,53 @@ interface ViewerCapabilityMethods {
 }
 
 function loadRenderConfigState(): RenderConfigState {
-    const state = vscode.getState() as { renderConfig?: Partial<RenderConfigState> } | undefined;
-    const stored = state?.renderConfig;
-    if (!stored) {
+    try {
+        const state = vscode.getState() as { renderConfig?: Partial<RenderConfigState> } | undefined;
+        return normalizeRenderConfig(state?.renderConfig);
+    } catch (error) {
+        console.warn('[render-config] Failed to load persisted state, fallback to defaults:', error);
         return { ...DEFAULT_RENDER_CONFIG };
     }
-
-    return {
-        materialMode: isMaterialMode(stored.materialMode) ? stored.materialMode : DEFAULT_RENDER_CONFIG.materialMode,
-        postProcessing: typeof stored.postProcessing === 'boolean' ? stored.postProcessing : DEFAULT_RENDER_CONFIG.postProcessing,
-        edgeLayerVisible: typeof stored.edgeLayerVisible === 'boolean' ? stored.edgeLayerVisible : DEFAULT_RENDER_CONFIG.edgeLayerVisible,
-        precisionPreset: isPrecisionPreset(stored.precisionPreset) ? stored.precisionPreset : DEFAULT_RENDER_CONFIG.precisionPreset
-    };
 }
 
 function saveRenderConfigState(): void {
-    const existingState = vscode.getState() as Record<string, unknown> | undefined;
+    const currentConfig = normalizeRenderConfig(renderConfig);
+    renderConfig = currentConfig;
+
+    const existingStateRaw = vscode.getState();
+    const existingState = (
+        existingStateRaw !== null
+        && typeof existingStateRaw === 'object'
+    )
+        ? existingStateRaw as Record<string, unknown>
+        : {};
+
     vscode.setState({
-        ...(existingState ?? {}),
-        renderConfig
+        ...existingState,
+        renderConfig: currentConfig
     });
+}
+
+function normalizeRenderConfig(config: Partial<RenderConfigState> | null | undefined): RenderConfigState {
+    return {
+        visualPreset: isVisualPreset(config?.visualPreset) ? config.visualPreset : DEFAULT_RENDER_CONFIG.visualPreset,
+        materialMode: isMaterialMode(config?.materialMode) ? config.materialMode : DEFAULT_RENDER_CONFIG.materialMode,
+        postProcessing: typeof config?.postProcessing === 'boolean' ? config.postProcessing : DEFAULT_RENDER_CONFIG.postProcessing,
+        edgeLayerVisible: typeof config?.edgeLayerVisible === 'boolean'
+            ? config.edgeLayerVisible
+            : DEFAULT_RENDER_CONFIG.edgeLayerVisible,
+        precisionPreset: isPrecisionPreset(config?.precisionPreset)
+            ? config.precisionPreset
+            : DEFAULT_RENDER_CONFIG.precisionPreset
+    };
 }
 
 function isMaterialMode(value: unknown): value is MaterialMode {
     return value === 'matcap' || value === 'pbr' || value === 'flat' || value === 'phong';
+}
+
+function isVisualPreset(value: unknown): value is VisualPreset {
+    return value === 'cad' || value === 'cinematic';
 }
 
 function isPrecisionPreset(value: unknown): value is PrecisionPreset {
@@ -137,17 +165,22 @@ function invokeViewerMethod(methodNames: Array<keyof ViewerCapabilityMethods>, .
 }
 
 function applyRenderConfigToViewer(): void {
-    const materialApplied = invokeViewerMethod(['setMaterialMode'], renderConfig.materialMode);
-    const postApplied =
-        invokeViewerMethod(['setPostProcessingEnabled'], renderConfig.postProcessing)
-        || invokeViewerMethod(['setOutlineEnabled'], renderConfig.postProcessing);
-    const edgeApplied =
-        invokeViewerMethod(['setEdgeLayerVisible'], renderConfig.edgeLayerVisible)
-        || invokeViewerMethod(['setEdgesVisible'], renderConfig.edgeLayerVisible)
-        || invokeViewerMethod(['setEdgeVisibility'], renderConfig.edgeLayerVisible);
+    const config = normalizeRenderConfig(renderConfig);
+    renderConfig = config;
 
-    if (!materialApplied || !postApplied || !edgeApplied) {
+    const presetApplied = invokeViewerMethod(['setVisualPreset'], config.visualPreset);
+    const materialApplied = invokeViewerMethod(['setMaterialMode'], config.materialMode);
+    const postApplied =
+        invokeViewerMethod(['setPostProcessingEnabled'], config.postProcessing)
+        || invokeViewerMethod(['setOutlineEnabled'], config.postProcessing);
+    const edgeApplied =
+        invokeViewerMethod(['setEdgeLayerVisible'], config.edgeLayerVisible)
+        || invokeViewerMethod(['setEdgesVisible'], config.edgeLayerVisible)
+        || invokeViewerMethod(['setEdgeVisibility'], config.edgeLayerVisible);
+
+    if (!presetApplied || !materialApplied || !postApplied || !edgeApplied) {
         const missing: string[] = [];
+        if (!presetApplied) missing.push('visual preset');
         if (!materialApplied) missing.push('材质');
         if (!postApplied) missing.push('后处理');
         if (!edgeApplied) missing.push('边线');
@@ -239,6 +272,7 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
         return;
     }
 
+    renderConfig = normalizeRenderConfig(renderConfig);
     const remeshTargets = Array.from(loadedShapes.values()).filter(
         (shape): shape is LoadedShape & { shapeId: string; meshId: string } => {
             if (!shape.shapeId || !shape.meshId) {
@@ -267,15 +301,17 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
         for (let i = 0; i < remeshTargets.length; i++) {
             const shape = remeshTargets[i];
             const meshData = meshByShapeId.get(shape.shapeId) ?? null;
+            const edgeData = occt.getBrepEdges(shape.shapeId, linearDeflection);
             if (meshData && meshData.vertices.length > 0) {
                 viewer.removeMesh(shape.meshId);
-                viewer.addMeshFromData(shape.meshId, meshData);
+                viewer.addMeshFromData(shape.meshId, meshData, undefined, edgeData ?? undefined);
                 viewer.setVisibility(shape.meshId, shape.visible);
                 if (shape.color) {
                     const colorHex = parseInt(shape.color.replace('#', ''), 16);
                     viewer.setMeshColor(shape.meshId, colorHex);
                 }
                 shape.meshData = meshData;
+                shape.edgeData = edgeData ?? undefined;
                 meshIdToShapeId.set(shape.meshId, shape.id);
                 updatedCount++;
             }
@@ -311,6 +347,7 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
 }
 
 async function applyPrecisionPreset(preset: PrecisionPreset): Promise<void> {
+    renderConfig = normalizeRenderConfig(renderConfig);
     if (renderConfig.precisionPreset === preset) {
         return;
     }
@@ -327,18 +364,31 @@ async function applyPrecisionPreset(preset: PrecisionPreset): Promise<void> {
 }
 
 function applyRenderControls(
-    updates: Partial<Pick<RenderConfigState, 'materialMode' | 'postProcessing' | 'edgeLayerVisible'>>
+    updates: Partial<Pick<RenderConfigState, 'visualPreset' | 'materialMode' | 'postProcessing' | 'edgeLayerVisible'>>
 ): void {
-    renderConfig = { ...renderConfig, ...updates };
+    renderConfig = normalizeRenderConfig({ ...normalizeRenderConfig(renderConfig), ...updates });
     saveRenderConfigState();
     applyRenderConfigToViewer();
 }
 
 function setupRenderConfigUI(): void {
+    renderConfig = normalizeRenderConfig(renderConfig);
+    const presetSelect = document.getElementById('render-visual-preset') as HTMLSelectElement | null;
     const materialSelect = document.getElementById('render-material-mode') as HTMLSelectElement | null;
     const postCheckbox = document.getElementById('render-postprocessing') as HTMLInputElement | null;
     const edgeCheckbox = document.getElementById('render-edge-layer') as HTMLInputElement | null;
     const precisionSelect = document.getElementById('render-precision') as HTMLSelectElement | null;
+
+    if (presetSelect) {
+        presetSelect.value = renderConfig.visualPreset;
+        presetSelect.addEventListener('change', () => {
+            const preset = presetSelect.value;
+            if (!isVisualPreset(preset)) {
+                return;
+            }
+            applyRenderControls({ visualPreset: preset });
+        });
+    }
 
     if (materialSelect) {
         materialSelect.value = renderConfig.materialMode;
@@ -749,6 +799,7 @@ function toArrayBuffer(fileContent: unknown): ArrayBuffer {
 
 async function loadStepFile(fileName: string, fileContent: unknown): Promise<void> {
     console.log('[loadStepFile] Starting to load:', fileName);
+    renderConfig = normalizeRenderConfig(renderConfig);
 
     // Always wait for OCCT to be fully initialized
     await initOcct();
@@ -792,28 +843,41 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
         if (result.rootNodes && result.rootNodes.length > 0) {
             console.log('[loadStepFile] Building hierarchy from', result.rootNodes.length, 'root nodes');
 
-            // Collect all shapes that need meshing
-            const shapesToMesh: Array<{node: any, path: string}> = [];
-            const collectShapes = (node: any, path: string) => {
-                if (node.shapeId) {
-                    shapesToMesh.push({node, path});
+            // Collect only leaf renderable shapes.
+            // This avoids rendering both parent and child solids at the same time (z-fighting / ghosting).
+            const shapesToMesh: Array<{ node: any }> = [];
+            const hasRenderableDescendant = (node: any): boolean => {
+                if (!node?.children || !Array.isArray(node.children)) {
+                    return false;
+                }
+                return node.children.some((child: any) => Boolean(child.shapeId) || hasRenderableDescendant(child));
+            };
+            const collectShapes = (node: any) => {
+                if (node.shapeId && !hasRenderableDescendant(node)) {
+                    shapesToMesh.push({ node });
                 }
                 if (node.children) {
-                    node.children.forEach((child: any, idx: number) => {
-                        collectShapes(child, `${path}/${child.name || idx}`);
+                    node.children.forEach((child: any) => {
+                        collectShapes(child);
                     });
                 }
             };
-            result.rootNodes.forEach((root, idx) => collectShapes(root, root.name || `Root${idx}`));
+            result.rootNodes.forEach((root) => collectShapes(root));
 
             showProgress(40, `Generating meshes (0/${shapesToMesh.length})...`);
             console.log('[loadStepFile] Total shapes to mesh:', shapesToMesh.length);
 
-            const validShapeIds = shapesToMesh
-                .map(({ node }) => node.shapeId as string | undefined)
-                .filter((shapeId): shapeId is string => Boolean(shapeId) && occt!.hasShape(shapeId));
+            const validShapeIds = Array.from(new Set(
+                shapesToMesh
+                    .map(({ node }) => node.shapeId as string | undefined)
+                    .filter((shapeId): shapeId is string => Boolean(shapeId) && occt!.hasShape(shapeId))
+            ));
             const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
             const meshByShapeId = occt!.getMeshes(validShapeIds, linearDeflection, angularDeflection);
+            const edgeByShapeId = new Map<string, EdgeData | null>();
+            validShapeIds.forEach((shapeId) => {
+                edgeByShapeId.set(shapeId, occt!.getBrepEdges(shapeId, linearDeflection));
+            });
 
             // Attach meshes to all nodes
             for (let i = 0; i < shapesToMesh.length; i++) {
@@ -822,6 +886,10 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                     const meshData = meshByShapeId.get(node.shapeId) ?? null;
                     if (meshData && meshData.vertices.length > 0) {
                         node._meshData = meshData;
+                    }
+                    const edgeData = edgeByShapeId.get(node.shapeId) ?? null;
+                    if (edgeData && edgeData.vertices.length > 0) {
+                        node._edgeData = edgeData;
                     }
                 }
 
@@ -858,7 +926,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                 if (node._meshData) {
                     const meshId = `mesh_${node.id}`;
                     if (viewer) {
-                        viewer.addMeshFromData(meshId, node._meshData);
+                        viewer.addMeshFromData(meshId, node._meshData, undefined, node._edgeData);
 
                         // Apply color if available
                         if (node.color) {
@@ -868,6 +936,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                     }
                     shape.meshId = meshId;
                     shape.meshData = node._meshData;
+                    shape.edgeData = node._edgeData;
 
                     // Register mesh ID to shape ID mapping for selection sync
                     meshIdToShapeId.set(meshId, shape.id);
@@ -929,6 +998,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             for (let i = 0; i < totalShapes; i++) {
                 const shapeId = result.shapes[i];
                 const meshData = meshByShapeId.get(shapeId) ?? null;
+                const edgeData = occt!.getBrepEdges(shapeId, linearDeflection);
                 if (meshData && meshData.vertices.length > 0) {
                     const meshId = `mesh_${shapeId}`;
                     const shape: LoadedShape = {
@@ -938,12 +1008,13 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                         shapeId,
                         meshId,
                         meshData,
+                        edgeData: edgeData ?? undefined,
                         visible: true
                     };
 
                     // Add to viewer
                     if (viewer) {
-                        viewer.addMeshFromData(meshId, meshData);
+                        viewer.addMeshFromData(meshId, meshData, undefined, edgeData ?? undefined);
                     }
 
                     // Register mesh ID to shape ID mapping for selection sync
@@ -1635,9 +1706,13 @@ function handleMessage(event: MessageEvent): void {
 async function initViewer(): Promise<void> {
     const container = document.getElementById('canvas-container');
     if (container) {
+        const config = normalizeRenderConfig(renderConfig);
+        renderConfig = config;
+
         viewer = new ThreeViewer(container, {
             backgroundColor: 0x2a2a2a,
-            enableSelection: true
+            enableSelection: true,
+            visualPreset: config.visualPreset
         });
 
         // Listen for selection changes from 3D viewer

@@ -48,12 +48,17 @@
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Edge.hxx>
 #include <BRep_Tool.hxx>
 #include <Poly_Triangulation.hxx>
 #include <Bnd_Box.hxx>
 #include <TopLoc_Location.hxx>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <GCPnts_AbscissaPoint.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <Geom_Curve.hxx>
 
 // T2.4: Mass properties
 #include <GProp_GProps.hxx>
@@ -811,6 +816,140 @@ struct MeshShapeDataResult {
     std::optional<std::string> error;
 };
 
+struct BRepEdgesDataResult {
+    bool success;
+    val vertices;
+    int segmentCount;
+    std::optional<std::string> error;
+};
+
+int getCurveSampleCount(const BRepAdaptor_Curve& curveAdaptor,
+                        Standard_Real first,
+                        Standard_Real last,
+                        double targetDeflection)
+{
+    int sampleCount = 24;
+    try {
+        const double length = GCPnts_AbscissaPoint::Length(curveAdaptor, first, last);
+        if (length > Precision::Confusion()) {
+            const double safeDeflection = std::max(targetDeflection, static_cast<double>(Precision::Confusion()) * 10.0);
+            sampleCount = static_cast<int>(std::ceil(length / safeDeflection)) + 1;
+        }
+    } catch (...) {
+        // Keep fallback sample count.
+    }
+
+    switch (curveAdaptor.GetType()) {
+        case GeomAbs_Line:
+            sampleCount = 2;
+            break;
+        case GeomAbs_Circle:
+        case GeomAbs_Ellipse:
+            sampleCount = std::max(sampleCount, 48);
+            break;
+        default:
+            break;
+    }
+
+    return std::max(2, std::min(sampleCount, 256));
+}
+
+BRepEdgesDataResult brepEdgesData(const std::string& id, double linearDeflection)
+{
+    auto& store = geo::ShapeStore::instance();
+    auto shapeOpt = store.getShape(id);
+
+    if (!shapeOpt.has_value()) {
+        return {
+            false,
+            val::array(std::vector<double>()),
+            0,
+            std::optional<std::string>("Shape not found")
+        };
+    }
+
+    const TopoDS_Shape shape = shapeOpt.value();
+    try {
+        const double resolvedLinearDeflection = resolveLinearDeflection(shape, linearDeflection);
+        std::vector<double> vertices;
+        int segmentCount = 0;
+
+        TopExp_Explorer edgeExplorer(shape, TopAbs_EDGE);
+        for (; edgeExplorer.More(); edgeExplorer.Next()) {
+            TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
+            if (BRep_Tool::Degenerated(edge)) {
+                continue;
+            }
+
+            TopLoc_Location location;
+            Standard_Real first = 0.0;
+            Standard_Real last = 0.0;
+            Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, location, first, last);
+            if (curve.IsNull()) {
+                continue;
+            }
+
+            BRepAdaptor_Curve curveAdaptor(edge);
+            Standard_Real start = curveAdaptor.FirstParameter();
+            Standard_Real end = curveAdaptor.LastParameter();
+            if (!std::isfinite(start) || !std::isfinite(end) || std::abs(end - start) <= Precision::Confusion()) {
+                start = first;
+                end = last;
+            }
+            if (!std::isfinite(start) || !std::isfinite(end) || std::abs(end - start) <= Precision::Confusion()) {
+                continue;
+            }
+
+            const int sampleCount = getCurveSampleCount(curveAdaptor, start, end, resolvedLinearDeflection);
+            const gp_Trsf locationTransform = location.Transformation();
+
+            gp_Pnt previousPoint;
+            bool hasPreviousPoint = false;
+            for (int i = 0; i < sampleCount; ++i) {
+                const double t = static_cast<double>(i) / static_cast<double>(sampleCount - 1);
+                const Standard_Real param = start + (end - start) * t;
+                // Use raw geometric curve + edge location once.
+                // Avoid applying assembly/location transform twice.
+                gp_Pnt point = curve->Value(param).Transformed(locationTransform);
+
+                if (hasPreviousPoint && point.Distance(previousPoint) > Precision::Confusion()) {
+                    vertices.push_back(previousPoint.X());
+                    vertices.push_back(previousPoint.Y());
+                    vertices.push_back(previousPoint.Z());
+                    vertices.push_back(point.X());
+                    vertices.push_back(point.Y());
+                    vertices.push_back(point.Z());
+                    segmentCount++;
+                }
+
+                previousPoint = point;
+                hasPreviousPoint = true;
+            }
+        }
+
+        return {
+            true,
+            val::array(vertices),
+            segmentCount,
+            std::nullopt
+        };
+    } catch (const std::exception& e) {
+        return {
+            false,
+            val::array(std::vector<double>()),
+            0,
+            std::optional<std::string>(e.what())
+        };
+    } catch (...) {
+        return {
+            false,
+            val::array(std::vector<double>()),
+            0,
+            std::optional<std::string>("Unknown error during BRep edge extraction")
+        };
+    }
+}
+
 MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection, double angularDeflection) {
     auto& store = geo::ShapeStore::instance();
     auto shapeOpt = store.getShape(id);
@@ -1300,8 +1439,14 @@ EMSCRIPTEN_BINDINGS(geo_module) {
         .field("vertexCount", &MeshShapeDataResult::vertexCount)
         .field("triangleCount", &MeshShapeDataResult::triangleCount)
         .field("error", &MeshShapeDataResult::error);
+    value_object<BRepEdgesDataResult>("BRepEdgesDataResult")
+        .field("success", &BRepEdgesDataResult::success)
+        .field("vertices", &BRepEdgesDataResult::vertices)
+        .field("segmentCount", &BRepEdgesDataResult::segmentCount)
+        .field("error", &BRepEdgesDataResult::error);
     function("meshShapeData", &meshShapeData);
     function("meshShapesData", &meshShapesData);
+    function("brepEdgesData", &brepEdgesData);
     function("meshShape", &meshShape);
     function("meshShapeDefault", &meshShapeDefault);
 

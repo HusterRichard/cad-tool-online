@@ -940,6 +940,13 @@ export class CadEditorPanel {
                         <span class="render-config-close" id="render-config-close">×</span>
                     </div>
                     <div class="render-config-row">
+                        <label for="render-visual-preset">Visual Preset</label>
+                        <select id="render-visual-preset">
+                            <option value="cad" selected>CAD</option>
+                            <option value="cinematic">Cinematic</option>
+                        </select>
+                    </div>
+                    <div class="render-config-row">
                         <label for="render-material-mode">材质模式</label>
                         <select id="render-material-mode">
                             <option value="matcap">Matcap</option>

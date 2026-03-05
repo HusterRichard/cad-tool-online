@@ -1,6 +1,6 @@
 import type { Vec3, Mat3 } from '@cadtool-online/core';
 
-export type { MeshData } from '@cadtool-online/core';
+export type { MeshData, EdgeData } from '@cadtool-online/core';
 
 export interface MassProperties {
     mass: number;
