@@ -38,11 +38,13 @@ export class ThreeViewer {
     private controls: OrbitControls;
     private container: HTMLElement;
     private meshes: Map<string, THREE.Mesh> = new Map();
+    private meshEdges: Map<string, THREE.LineSegments> = new Map();
 
     private materialMode: MaterialMode;
     private postProcessingEnabled: boolean;
     private outlineEnabled: boolean;
     private useEnvironmentMap: boolean;
+    private edgeLayerVisible = true;
 
     private composer: EffectComposer | null = null;
     private outlinePass: OutlinePass | null = null;
@@ -60,7 +62,7 @@ export class ThreeViewer {
 
     constructor(container: HTMLElement, options: ThreeViewerOptions = {}) {
         this.container = container;
-        this.materialMode = options.materialMode ?? 'matcap';
+        this.materialMode = options.materialMode ?? 'phong';
         this.postProcessingEnabled = options.enablePostProcessing ?? true;
         this.outlineEnabled = options.enableOutline ?? (options.selectionOptions?.outlineEnabled ?? true);
         this.useEnvironmentMap = options.useEnvironmentMap ?? true;
@@ -85,7 +87,7 @@ export class ThreeViewer {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.0;
+        this.renderer.toneMappingExposure = 1.08;
         // Set clear color with alpha = 0 for full transparency
         this.renderer.setClearColor(0x000000, 0);
         container.appendChild(this.renderer.domElement);
@@ -123,28 +125,32 @@ export class ThreeViewer {
 
     private setupLights(): void {
         // 环境光 - 提供基础照明，确保所有面都能被照亮
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
         this.scene.add(ambientLight);
 
         // 半球光 - 模拟天空和地面的反射光，提供更自然的照明
-        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+        const hemisphereLight = new THREE.HemisphereLight(0xe6edf7, 0x5d4b35, 0.55);
         hemisphereLight.position.set(0, 0, 1); // Z-up
         this.scene.add(hemisphereLight);
 
         // 主方向光 - 从右上方照射
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        directionalLight.position.set(100, 100, 100);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.25);
+        directionalLight.position.set(180, 120, 200);
         this.scene.add(directionalLight);
 
         // 辅助方向光 - 从左下方照射，填补阴影
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
-        directionalLight2.position.set(-100, -100, -100);
+        const directionalLight2 = new THREE.DirectionalLight(0xbfd8ff, 0.42);
+        directionalLight2.position.set(-160, -90, 70);
         this.scene.add(directionalLight2);
 
         // 侧面补光 - 增强侧面细节
-        const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight3.position.set(-100, 100, 0);
+        const directionalLight3 = new THREE.DirectionalLight(0xfff4dc, 0.6);
+        directionalLight3.position.set(-90, 170, -120);
         this.scene.add(directionalLight3);
+
+        const directionalLight4 = new THREE.DirectionalLight(0xffffff, 0.35);
+        directionalLight4.position.set(0, 0, 260);
+        this.scene.add(directionalLight4);
     }
 
     private setupGrid(): void {
@@ -262,36 +268,38 @@ export class ThreeViewer {
                 return new THREE.MeshMatcapMaterial({
                     color,
                     matcap: this.matcapTexture,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
             case 'pbr':
                 return new THREE.MeshPhysicalMaterial({
                     color,
-                    roughness: 0.38,
-                    metalness: 0.18,
-                    clearcoat: 0.08,
-                    clearcoatRoughness: 0.45,
-                    envMapIntensity: 1.2,
-                    side: THREE.DoubleSide
+                    roughness: 0.55,
+                    metalness: 0.05,
+                    clearcoat: 0.02,
+                    clearcoatRoughness: 0.7,
+                    envMapIntensity: 0.8,
+                    side: THREE.FrontSide
                 });
             case 'flat':
                 return new THREE.MeshStandardMaterial({
                     color,
                     metalness: 0,
-                    roughness: 0.95,
+                    roughness: 0.88,
                     flatShading: true,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
             case 'phong':
                 return new THREE.MeshPhongMaterial({
                     color,
-                    side: THREE.DoubleSide
+                    shininess: 36,
+                    specular: new THREE.Color(0x2f2f2f),
+                    side: THREE.FrontSide
                 });
             default:
                 return new THREE.MeshMatcapMaterial({
                     color,
                     matcap: this.matcapTexture,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
         }
     }
@@ -388,6 +396,22 @@ export class ThreeViewer {
             baseMaterial
         } as ViewerManagedMaterialState;
 
+        const edgesGeometry = new THREE.EdgesGeometry(geometry, 25);
+        const edgeMaterial = new THREE.LineBasicMaterial({
+            color: 0x1a1a1a,
+            transparent: true,
+            opacity: 0.75,
+            depthTest: true,
+            depthWrite: false,
+            toneMapped: false
+        });
+        const edgeOverlay = new THREE.LineSegments(edgesGeometry, edgeMaterial);
+        edgeOverlay.visible = this.edgeLayerVisible;
+        edgeOverlay.renderOrder = 2;
+        edgeOverlay.raycast = () => undefined;
+        mesh.add(edgeOverlay);
+        this.meshEdges.set(id, edgeOverlay);
+
         this.scene.add(mesh);
         this.meshes.set(id, mesh);
 
@@ -407,6 +431,16 @@ export class ThreeViewer {
             // 从选择管理器注销
             if (this.selectionManager) {
                 this.selectionManager.unregisterObject(id);
+            }
+
+            const edgeOverlay = this.meshEdges.get(id);
+            if (edgeOverlay) {
+                mesh.remove(edgeOverlay);
+                edgeOverlay.geometry.dispose();
+                if (edgeOverlay.material instanceof THREE.Material) {
+                    edgeOverlay.material.dispose();
+                }
+                this.meshEdges.delete(id);
             }
 
             this.scene.remove(mesh);
@@ -432,6 +466,10 @@ export class ThreeViewer {
         const mesh = this.meshes.get(id);
         if (mesh) {
             mesh.visible = visible;
+        }
+        const edgeOverlay = this.meshEdges.get(id);
+        if (edgeOverlay) {
+            edgeOverlay.visible = visible && this.edgeLayerVisible;
         }
     }
 
@@ -505,6 +543,14 @@ export class ThreeViewer {
 
     getMaterialMode(): MaterialMode {
         return this.materialMode;
+    }
+
+    setEdgeLayerVisible(visible: boolean): void {
+        this.edgeLayerVisible = visible;
+        this.meshEdges.forEach((edgeOverlay, id) => {
+            const mesh = this.meshes.get(id);
+            edgeOverlay.visible = visible && (mesh?.visible ?? true);
+        });
     }
 
     setPostProcessingEnabled(enabled: boolean): void {
@@ -729,4 +775,3 @@ export class ThreeViewer {
         };
     }
 }
-

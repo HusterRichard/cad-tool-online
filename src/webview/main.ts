@@ -71,7 +71,7 @@ interface RenderConfigState {
 }
 
 const DEFAULT_RENDER_CONFIG: RenderConfigState = {
-    materialMode: 'matcap',
+    materialMode: 'phong',
     postProcessing: true,
     edgeLayerVisible: true,
     precisionPreset: 'balanced'

@@ -534,6 +534,73 @@ std::string escapeJsonString(const std::string& input) {
     return output;
 }
 
+bool tryGetColorFromLabel(const Handle(XCAFDoc_ColorTool)& colorTool,
+                          const TDF_Label& label,
+                          Quantity_Color& color)
+{
+    return colorTool->GetColor(label, XCAFDoc_ColorSurf, color)
+        || colorTool->GetColor(label, XCAFDoc_ColorGen, color)
+        || colorTool->GetColor(label, XCAFDoc_ColorCurv, color);
+}
+
+bool tryResolveNodeColor(const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                         const Handle(XCAFDoc_ColorTool)& colorTool,
+                         const TDF_Label& label,
+                         Quantity_Color& color)
+{
+    // 1) Direct color on current label.
+    if (tryGetColorFromLabel(colorTool, label, color)) {
+        return true;
+    }
+
+    // 2) If current label is a reference, try its referred shape label.
+    if (shapeTool->IsReference(label)) {
+        TDF_Label referred;
+        if (shapeTool->GetReferredShape(label, referred)) {
+            if (tryGetColorFromLabel(colorTool, referred, color)) {
+                return true;
+            }
+        }
+    }
+
+    // 3) Try color bound directly on shape.
+    TopoDS_Shape shape = shapeTool->GetShape(label);
+    if (!shape.IsNull()) {
+        if (colorTool->GetColor(shape, XCAFDoc_ColorSurf, color)
+            || colorTool->GetColor(shape, XCAFDoc_ColorGen, color)
+            || colorTool->GetColor(shape, XCAFDoc_ColorCurv, color)) {
+            return true;
+        }
+    }
+
+    // 4) Inherit from parent labels.
+    TDF_Label parent = label.Father();
+    while (!parent.IsNull()) {
+        if (tryGetColorFromLabel(colorTool, parent, color)) {
+            return true;
+        }
+
+        const TDF_Label nextParent = parent.Father();
+        if (nextParent == parent) {
+            break;
+        }
+        parent = nextParent;
+    }
+
+    return false;
+}
+
+std::string toHexColor(const Quantity_Color& color)
+{
+    int r = static_cast<int>(color.Red() * 255.0);
+    int g = static_cast<int>(color.Green() * 255.0);
+    int b = static_cast<int>(color.Blue() * 255.0);
+
+    char hexColor[8];
+    snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
+    return std::string(hexColor);
+}
+
 // Helper function to recursively build hierarchy JSON
 void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
                         const Handle(XCAFDoc_ColorTool)& colorTool,
@@ -578,32 +645,15 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
     Quantity_Color color;
     bool hasColor = false;
 
-    // Try to get color from the label
-    if (colorTool->GetColor(label, XCAFDoc_ColorSurf, color)) {
-        hasColor = true;
-    } else if (colorTool->GetColor(label, XCAFDoc_ColorGen, color)) {
-        hasColor = true;
-    } else if (colorTool->GetColor(label, XCAFDoc_ColorCurv, color)) {
-        hasColor = true;
-    }
+    hasColor = tryResolveNodeColor(shapeTool, colorTool, label, color);
 
     // Output color as hex RGB
     if (hasColor) {
-        // Use color from STEP file
-        int r = static_cast<int>(color.Red() * 255.0);
-        int g = static_cast<int>(color.Green() * 255.0);
-        int b = static_cast<int>(color.Blue() * 255.0);
-
-        // Format as hex color
-        char hexColor[8];
-        snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
-        result << ",\"color\":\"" << hexColor << "\"";
+        result << ",\"color\":\"" << toHexColor(color) << "\"";
     } else {
-        // Generate a smart random color for parts without color info
-        // Only assign color to actual parts (not assemblies)
+        // Deterministic fallback colors avoid random "rainbow" appearance.
         if (isSimpleShape || (!isAssembly && nodeType == "part")) {
-            std::string smartColor = g_colorGenerator.getNextColor();
-            result << ",\"color\":\"" << smartColor << "\"";
+            result << ",\"color\":\"#D4A017\"";
         } else {
             // Assemblies get a neutral gray
             result << ",\"color\":\"#C0C0C0\"";
