@@ -17,7 +17,9 @@
   "activationEvents": [
     "onLanguage:json",
     "onLanguage:jsonc",
-    "onCommand:cadtool-online.openCadtoolDocs"
+    "onLanguage:modelica",
+    "onCommand:cadtool-online.openCadtoolDocs",
+    "onCommand:cadtool-online.refreshCadtoolIndex"
   ],
   "main": "./dist/extension.cjs",
   "contributes": {
@@ -30,6 +32,11 @@
       {
         "command": "cadtool-online.openCadtoolDocs",
         "title": "Open CADTool Docs",
+        "category": "CadToolOnline"
+      },
+      {
+        "command": "cadtool-online.refreshCadtoolIndex",
+        "title": "Refresh CADTool Index",
         "category": "CadToolOnline"
       }
     ],

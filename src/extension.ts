@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import { CadEditorPanel } from './panels/CadEditorPanel';
 import { registerCadtoolLanguageFeatures } from './language/cadtoolLanguageFeatures';
+import { registerModelicaCadtoolFeatures } from './language/modelicaCadtoolFeatures';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('CadToolOnline extension is now active');
     vscode.window.showInformationMessage('CadToolOnline extension activated!');
 
     registerCadtoolLanguageFeatures(context);
+    registerModelicaCadtoolFeatures(context);
 
     const openEditorCommand = vscode.commands.registerCommand(
         'cadtool-online.openEditor',
