@@ -6,6 +6,7 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GammaCorrectionShader } from 'three/examples/jsm/shaders/GammaCorrectionShader.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import type { EdgeData, MeshData } from '@cadtool-online/core';
 import { SelectionManager, type SelectionCallback, type SelectionOptions } from './SelectionManager';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
@@ -51,6 +52,7 @@ export class ThreeViewer {
 
     private composer: EffectComposer | null = null;
     private outlinePass: OutlinePass | null = null;
+    private fxaaPass: ShaderPass | null = null;
 
     private pmremGenerator: THREE.PMREMGenerator | null = null;
     private environmentTexture: THREE.Texture | null = null;
@@ -64,6 +66,10 @@ export class ThreeViewer {
     private topLight: THREE.DirectionalLight | null = null;
 
     private readonly onResizeHandler: () => void;
+    private readonly onControlStartHandler: () => void;
+    private readonly onControlEndHandler: () => void;
+    private sceneBoundsSphere: THREE.Sphere | null = null;
+    private sceneBoundsDirty = true;
 
     // MBS 可视化组件
     private selectionManager: SelectionManager | null = null;
@@ -92,10 +98,11 @@ export class ThreeViewer {
         // Renderer with alpha enabled for transparent background
         this.renderer = new THREE.WebGLRenderer({
             antialias: options.antialias ?? true,
-            alpha: true // Enable transparency
+            alpha: true, // Enable transparency
+            logarithmicDepthBuffer: true
         });
         this.renderer.setSize(container.clientWidth, container.clientHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.08;
@@ -106,6 +113,15 @@ export class ThreeViewer {
         // Controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
+        this.onControlStartHandler = () => {
+            this.selectionManager?.setHoverEnabled(false);
+        };
+        this.onControlEndHandler = () => {
+            this.selectionManager?.setHoverEnabled(true);
+            this.updateCameraClippingRange();
+        };
+        this.controls.addEventListener('start', this.onControlStartHandler);
+        this.controls.addEventListener('end', this.onControlEndHandler);
 
         this.setupLights();
         this.setupGrid();
@@ -266,6 +282,7 @@ export class ThreeViewer {
         if (!this.postProcessingEnabled) {
             this.composer = null;
             this.outlinePass = null;
+            this.fxaaPass = null;
             return;
         }
 
@@ -299,6 +316,10 @@ export class ThreeViewer {
 
         const gammaPass = new ShaderPass(GammaCorrectionShader);
         this.composer.addPass(gammaPass);
+
+        this.fxaaPass = new ShaderPass(FXAAShader);
+        this.updateFxaaResolution();
+        this.composer.addPass(this.fxaaPass);
     }
 
     private createDefaultMatcapTexture(size: number = 128): THREE.DataTexture {
@@ -475,12 +496,23 @@ export class ThreeViewer {
         this.outlinePass.selectedObjects = selectedObjects;
     }
 
+    private shouldUsePostProcessing(): boolean {
+        if (!this.postProcessingEnabled || !this.composer) {
+            return false;
+        }
+
+        // Keep CAD preset crisp by default; cinematic can use full post stack.
+        return this.visualPreset === 'cinematic';
+    }
+
     private animate(): void {
         requestAnimationFrame(this.animate.bind(this));
         this.controls.update();
+        this.updateCameraClippingRange();
 
-        if (this.composer && this.postProcessingEnabled) {
-            this.composer.render();
+        const composer = this.composer;
+        if (this.shouldUsePostProcessing() && composer) {
+            composer.render();
         } else {
             this.renderer.render(this.scene, this.camera);
         }
@@ -495,6 +527,21 @@ export class ThreeViewer {
         this.renderer.setSize(width, height);
         this.composer?.setSize(width, height);
         this.outlinePass?.setSize(width, height);
+        this.updateFxaaResolution();
+    }
+
+    private updateFxaaResolution(): void {
+        if (!this.fxaaPass) {
+            return;
+        }
+
+        const width = Math.max(this.container.clientWidth, 1);
+        const height = Math.max(this.container.clientHeight, 1);
+        const pixelRatio = this.renderer.getPixelRatio();
+        this.fxaaPass.material.uniforms['resolution'].value.set(
+            1 / (width * pixelRatio),
+            1 / (height * pixelRatio)
+        );
     }
 
     addMeshFromData(id: string, meshData: MeshData, material?: THREE.Material, edgeData?: EdgeData): THREE.Mesh {
@@ -520,8 +567,8 @@ export class ThreeViewer {
             : new THREE.EdgesGeometry(geometry, 3);
         const edgeMaterial = new THREE.LineBasicMaterial({
             color: 0x2b2b2b,
-            transparent: true,
-            opacity: 0.95,
+            transparent: false,
+            opacity: 1.0,
             depthTest: true,
             depthWrite: false,
             toneMapped: false
@@ -535,6 +582,7 @@ export class ThreeViewer {
 
         this.scene.add(mesh);
         this.meshes.set(id, mesh);
+        this.markSceneBoundsDirty();
 
         // 注册到选择管理器
         if (this.selectionManager) {
@@ -576,6 +624,7 @@ export class ThreeViewer {
 
             this.meshes.delete(id);
             this.updateOutlineTargets();
+            this.markSceneBoundsDirty();
         }
     }
 
@@ -587,6 +636,7 @@ export class ThreeViewer {
         const mesh = this.meshes.get(id);
         if (mesh) {
             mesh.visible = visible;
+            this.markSceneBoundsDirty();
         }
         const edgeOverlay = this.meshEdges.get(id);
         if (edgeOverlay) {
@@ -628,6 +678,7 @@ export class ThreeViewer {
         const mesh = this.meshes.get(id);
         if (mesh) {
             mesh.position.set(offset.x, offset.y, offset.z);
+            this.markSceneBoundsDirty();
         }
     }
 
@@ -649,6 +700,9 @@ export class ThreeViewer {
             );
             this.controls.target.copy(center);
             this.controls.update();
+            this.sceneBoundsSphere = box.getBoundingSphere(new THREE.Sphere());
+            this.sceneBoundsDirty = false;
+            this.updateCameraClippingRange();
         }
     }
 
@@ -720,8 +774,57 @@ export class ThreeViewer {
         this.updateOutlineTargets();
     }
 
+    private markSceneBoundsDirty(): void {
+        this.sceneBoundsDirty = true;
+    }
+
+    private rebuildSceneBoundsIfNeeded(): void {
+        if (!this.sceneBoundsDirty) {
+            return;
+        }
+
+        const box = new THREE.Box3();
+        this.meshes.forEach((mesh) => {
+            if (mesh.visible) {
+                box.expandByObject(mesh);
+            }
+        });
+
+        if (box.isEmpty()) {
+            this.sceneBoundsSphere = null;
+        } else {
+            this.sceneBoundsSphere = box.getBoundingSphere(new THREE.Sphere());
+        }
+        this.sceneBoundsDirty = false;
+    }
+
+    private updateCameraClippingRange(): void {
+        this.rebuildSceneBoundsIfNeeded();
+        if (!this.sceneBoundsSphere) {
+            return;
+        }
+
+        const distance = this.camera.position.distanceTo(this.sceneBoundsSphere.center);
+        const radius = Math.max(this.sceneBoundsSphere.radius, 1e-3);
+        const targetNear = Math.max(0.01, distance - radius * 2.5);
+        const targetFar = Math.max(targetNear + 10, distance + radius * 3.0);
+
+        if (
+            Math.abs(this.camera.near - targetNear) < 1e-3
+            && Math.abs(this.camera.far - targetFar) < 1e-2
+        ) {
+            return;
+        }
+
+        this.camera.near = targetNear;
+        this.camera.far = targetFar;
+        this.camera.updateProjectionMatrix();
+    }
+
     dispose(): void {
         window.removeEventListener('resize', this.onResizeHandler);
+        this.controls.removeEventListener('start', this.onControlStartHandler);
+        this.controls.removeEventListener('end', this.onControlEndHandler);
         this.meshes.forEach((_mesh, id) => this.removeMesh(id));
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();

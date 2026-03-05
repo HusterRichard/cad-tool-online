@@ -33,6 +33,10 @@ export class SelectionManager {
 
     private callbacks: SelectionCallback[] = [];
     private enabled: boolean = true;
+    private hoverEnabled: boolean = true;
+
+    private readonly onClickHandler: (event: MouseEvent) => void;
+    private readonly onMouseMoveHandler: (event: MouseEvent) => void;
 
     constructor(
         _scene: THREE.Scene,
@@ -61,12 +65,14 @@ export class SelectionManager {
             side: THREE.DoubleSide
         });
 
+        this.onClickHandler = this.onClick.bind(this);
+        this.onMouseMoveHandler = this.onMouseMove.bind(this);
         this.setupEventListeners();
     }
 
     private setupEventListeners(): void {
-        this.domElement.addEventListener('click', this.onClick.bind(this));
-        this.domElement.addEventListener('mousemove', this.onMouseMove.bind(this));
+        this.domElement.addEventListener('click', this.onClickHandler);
+        this.domElement.addEventListener('mousemove', this.onMouseMoveHandler);
     }
 
     private updateMouse(event: MouseEvent): void {
@@ -123,7 +129,7 @@ export class SelectionManager {
     }
 
     private onMouseMove(event: MouseEvent): void {
-        if (!this.enabled) return;
+        if (!this.enabled || !this.hoverEnabled) return;
 
         this.updateMouse(event);
         const intersects = this.raycast();
@@ -270,9 +276,23 @@ export class SelectionManager {
         this.enabled = enabled;
     }
 
+    setHoverEnabled(enabled: boolean): void {
+        if (this.hoverEnabled === enabled) {
+            return;
+        }
+
+        this.hoverEnabled = enabled;
+        if (!enabled) {
+            if (this.hoveredId && !this.selectedIds.has(this.hoveredId)) {
+                this.restoreMaterial(this.hoveredId);
+            }
+            this.hoveredId = null;
+        }
+    }
+
     dispose(): void {
-        this.domElement.removeEventListener('click', this.onClick.bind(this));
-        this.domElement.removeEventListener('mousemove', this.onMouseMove.bind(this));
+        this.domElement.removeEventListener('click', this.onClickHandler);
+        this.domElement.removeEventListener('mousemove', this.onMouseMoveHandler);
         this.highlightMaterial.dispose();
         this.hoverMaterial.dispose();
         this.selectableObjects.clear();

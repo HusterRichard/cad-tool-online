@@ -76,7 +76,7 @@ interface RenderConfigState {
 const DEFAULT_RENDER_CONFIG: RenderConfigState = {
     visualPreset: 'cad',
     materialMode: 'phong',
-    postProcessing: true,
+    postProcessing: false,
     edgeLayerVisible: true,
     precisionPreset: 'balanced'
 };
@@ -301,7 +301,8 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
         for (let i = 0; i < remeshTargets.length; i++) {
             const shape = remeshTargets[i];
             const meshData = meshByShapeId.get(shape.shapeId) ?? null;
-            const edgeData = occt.getBrepEdges(shape.shapeId, linearDeflection);
+            const edgeLinearDeflection = Math.max(linearDeflection * 0.35, 1e-6);
+            const edgeData = occt.getBrepEdges(shape.shapeId, edgeLinearDeflection);
             if (meshData && meshData.vertices.length > 0) {
                 viewer.removeMesh(shape.meshId);
                 viewer.addMeshFromData(shape.meshId, meshData, undefined, edgeData ?? undefined);
@@ -876,7 +877,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             const meshByShapeId = occt!.getMeshes(validShapeIds, linearDeflection, angularDeflection);
             const edgeByShapeId = new Map<string, EdgeData | null>();
             validShapeIds.forEach((shapeId) => {
-                edgeByShapeId.set(shapeId, occt!.getBrepEdges(shapeId, linearDeflection));
+                const edgeLinearDeflection = Math.max(linearDeflection * 0.35, 1e-6);
+                edgeByShapeId.set(shapeId, occt!.getBrepEdges(shapeId, edgeLinearDeflection));
             });
 
             // Attach meshes to all nodes
@@ -998,7 +1000,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             for (let i = 0; i < totalShapes; i++) {
                 const shapeId = result.shapes[i];
                 const meshData = meshByShapeId.get(shapeId) ?? null;
-                const edgeData = occt!.getBrepEdges(shapeId, linearDeflection);
+                const edgeLinearDeflection = Math.max(linearDeflection * 0.35, 1e-6);
+                const edgeData = occt!.getBrepEdges(shapeId, edgeLinearDeflection);
                 if (meshData && meshData.vertices.length > 0) {
                     const meshId = `mesh_${shapeId}`;
                     const shape: LoadedShape = {

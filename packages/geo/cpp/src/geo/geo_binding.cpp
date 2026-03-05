@@ -832,7 +832,8 @@ int getCurveSampleCount(const BRepAdaptor_Curve& curveAdaptor,
     try {
         const double length = GCPnts_AbscissaPoint::Length(curveAdaptor, first, last);
         if (length > Precision::Confusion()) {
-            const double safeDeflection = std::max(targetDeflection, static_cast<double>(Precision::Confusion()) * 10.0);
+            // Make BRep edge display smoother than shaded mesh tessellation.
+            const double safeDeflection = std::max(targetDeflection * 0.45, static_cast<double>(Precision::Confusion()) * 10.0);
             sampleCount = static_cast<int>(std::ceil(length / safeDeflection)) + 1;
         }
     } catch (...) {
@@ -844,14 +845,25 @@ int getCurveSampleCount(const BRepAdaptor_Curve& curveAdaptor,
             sampleCount = 2;
             break;
         case GeomAbs_Circle:
+        {
+            constexpr double kTwoPi = 6.28318530717958647692;
+            const double span = std::abs(last - first);
+            const int spanSamples = static_cast<int>(std::ceil((span / kTwoPi) * 256.0));
+            sampleCount = std::max(sampleCount, std::max(96, spanSamples));
+            break;
+        }
         case GeomAbs_Ellipse:
-            sampleCount = std::max(sampleCount, 48);
+            sampleCount = std::max(sampleCount, 128);
+            break;
+        case GeomAbs_BSplineCurve:
+        case GeomAbs_BezierCurve:
+            sampleCount = std::max(sampleCount, 80);
             break;
         default:
             break;
     }
 
-    return std::max(2, std::min(sampleCount, 256));
+    return std::max(2, std::min(sampleCount, 1024));
 }
 
 BRepEdgesDataResult brepEdgesData(const std::string& id, double linearDeflection)
