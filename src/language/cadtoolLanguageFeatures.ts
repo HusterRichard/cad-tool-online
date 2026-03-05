@@ -84,10 +84,42 @@ const DIAGNOSTIC_CODE_ICON_SIZE_RANGE = 'cadtool.iconSize.range';
 const DIAGNOSTIC_CODE_POSITION_RANGE = 'cadtool.position.range';
 const DIAGNOSTIC_CODE_DIRECTION_RANGE = 'cadtool.direction.range';
 const DIAGNOSTIC_CODE_UNRESOLVED_REFERENCE = 'cadtool.unresolvedReference';
+const DIAGNOSTIC_CODE_MISSING_REQUIRED_FIELD = 'cadtool.missingRequiredField';
+
+type CadtoolObjectType =
+    | 'group'
+    | 'marker'
+    | 'designPoint'
+    | 'connector'
+    | 'motion'
+    | 'contact'
+    | 'fluidPort'
+    | 'ribSlice'
+    | 'gravity'
+    | 'medium';
+
+interface CadtoolObjectContext {
+    rootField: string;
+    objectType: CadtoolObjectType | undefined;
+    node: JsonObjectNode;
+}
 
 type ReferenceCollectionKey = 'group' | 'marker' | 'connector' | 'ribSlice' | 'part';
 
 type CadtoolReferenceIndex = Readonly<Record<ReferenceCollectionKey, ReadonlySet<string>>>;
+
+const REQUIRED_FIELDS_BY_OBJECT_TYPE: Readonly<Record<CadtoolObjectType, readonly string[]>> = {
+    group: ['name'],
+    marker: ['name'],
+    designPoint: ['name'],
+    connector: ['name', 'connectorType', 'part1', 'part2'],
+    motion: ['name', 'motionType', 'connectorRef'],
+    contact: ['name', 'partA', 'partB'],
+    fluidPort: ['name', 'portType'],
+    ribSlice: ['name'],
+    gravity: ['name', 'gravityType'],
+    medium: ['name']
+};
 
 const REFERENCE_TARGETS_BY_FIELD: Readonly<Record<string, readonly ReferenceCollectionKey[]>> = {
     groupRef: ['group'],
@@ -436,9 +468,10 @@ function createCadtoolDiagnostics(document: vscode.TextDocument): vscode.Diagnos
     const diagnostics: vscode.Diagnostic[] = [];
     const names = new Map<string, JsonStringNode[]>();
     const referenceIndex = buildCadtoolReferenceIndex(root);
-    const objectNodes = collectRootObjectNodes(root);
+    const objectContexts = collectRootObjectContexts(root);
 
-    for (const objectNode of objectNodes) {
+    for (const objectContext of objectContexts) {
+        const objectNode = objectContext.node;
         const nameProperty = getObjectProperty(objectNode, 'name');
         if (nameProperty?.value.kind === 'string') {
             const nameNode = nameProperty.value;
@@ -523,6 +556,7 @@ function createCadtoolDiagnostics(document: vscode.TextDocument): vscode.Diagnos
             );
         }
 
+        addMissingRequiredFieldDiagnostics(diagnostics, document, objectContext);
         addUnresolvedReferenceDiagnostics(diagnostics, document, objectNode, referenceIndex);
     }
 
@@ -560,6 +594,10 @@ function addUnresolvedReferenceDiagnostics(
         }
 
         const value = property.value.value;
+        if (value.trim().length === 0) {
+            continue;
+        }
+
         if (isReferenceResolved(referenceIndex, property.key, value)) {
             continue;
         }
@@ -572,6 +610,40 @@ function addUnresolvedReferenceDiagnostics(
                 valueOffsets.end,
                 `Unresolved reference for ${property.key}: "${value}".`,
                 DIAGNOSTIC_CODE_UNRESOLVED_REFERENCE
+            )
+        );
+    }
+}
+
+function addMissingRequiredFieldDiagnostics(
+    diagnostics: vscode.Diagnostic[],
+    document: vscode.TextDocument,
+    objectContext: CadtoolObjectContext
+): void {
+    const { objectType, node } = objectContext;
+    if (!objectType) {
+        return;
+    }
+
+    const requiredFields = REQUIRED_FIELDS_BY_OBJECT_TYPE[objectType];
+    if (!requiredFields) {
+        return;
+    }
+
+    const missingFields = requiredFields.filter((field) => !getObjectProperty(node, field));
+    if (missingFields.length === 0) {
+        return;
+    }
+
+    const insertionOffset = Math.max(node.start + 1, node.end - 1);
+    for (const field of missingFields) {
+        diagnostics.push(
+            createDiagnostic(
+                document,
+                insertionOffset,
+                insertionOffset,
+                `Missing required field "${field}" for ${objectType}.`,
+                `${DIAGNOSTIC_CODE_MISSING_REQUIRED_FIELD}:${objectType}:${field}`
             )
         );
     }
@@ -594,8 +666,8 @@ function addObjectCoordinateRangeDiagnostics(
     }
 }
 
-function collectRootObjectNodes(root: JsonObjectNode): JsonObjectNode[] {
-    const objectNodes: JsonObjectNode[] = [];
+function collectRootObjectContexts(root: JsonObjectNode): CadtoolObjectContext[] {
+    const contexts: CadtoolObjectContext[] = [];
 
     for (const property of root.properties) {
         const key = property.key;
@@ -608,12 +680,16 @@ function collectRootObjectNodes(root: JsonObjectNode): JsonObjectNode[] {
 
         for (const element of property.value.elements) {
             if (element.kind === 'object') {
-                objectNodes.push(element);
+                contexts.push({
+                    rootField: key,
+                    objectType: resolveCadtoolObjectType(key, element),
+                    node: element
+                });
             }
         }
     }
 
-    return objectNodes;
+    return contexts;
 }
 
 function buildCadtoolReferenceIndex(root: JsonObjectNode): CadtoolReferenceIndex {
@@ -623,37 +699,28 @@ function buildCadtoolReferenceIndex(root: JsonObjectNode): CadtoolReferenceIndex
     const ribSlices = new Set<string>();
     const parts = new Set<string>();
 
-    for (const property of root.properties) {
-        if (property.value.kind !== 'array') {
+    const objectContexts = collectRootObjectContexts(root);
+    for (const objectContext of objectContexts) {
+        const objectType = objectContext.objectType;
+        if (!objectType) {
             continue;
         }
 
-        for (const element of property.value.elements) {
-            if (element.kind !== 'object') {
-                continue;
-            }
-
-            const objectType = resolveObjectTypeForReferenceCollection(property.key, element);
-            if (!objectType) {
-                continue;
-            }
-
-            const name = getStringPropertyValue(element, 'name');
-            if (name) {
-                if (objectType === 'group') {
-                    groups.add(name);
-                } else if (objectType === 'marker') {
-                    markers.add(name);
-                } else if (objectType === 'connector') {
-                    connectors.add(name);
-                } else if (objectType === 'ribSlice') {
-                    ribSlices.add(name);
-                }
-            }
-
+        const name = getStringPropertyValue(objectContext.node, 'name');
+        if (name) {
             if (objectType === 'group') {
-                collectGroupPartNames(parts, element);
+                groups.add(name);
+            } else if (objectType === 'marker') {
+                markers.add(name);
+            } else if (objectType === 'connector') {
+                connectors.add(name);
+            } else if (objectType === 'ribSlice') {
+                ribSlices.add(name);
             }
+        }
+
+        if (objectType === 'group') {
+            collectGroupPartNames(parts, objectContext.node);
         }
     }
 
@@ -666,11 +733,22 @@ function buildCadtoolReferenceIndex(root: JsonObjectNode): CadtoolReferenceIndex
     };
 }
 
-function resolveObjectTypeForReferenceCollection(
+function resolveCadtoolObjectType(
     rootField: string,
     objectNode: JsonObjectNode
-): 'group' | 'marker' | 'connector' | 'ribSlice' | undefined {
-    if (rootField === 'group' || rootField === 'marker' || rootField === 'connector' || rootField === 'ribSlice') {
+): CadtoolObjectType | undefined {
+    if (
+        rootField === 'group' ||
+        rootField === 'marker' ||
+        rootField === 'designPoint' ||
+        rootField === 'connector' ||
+        rootField === 'motion' ||
+        rootField === 'contact' ||
+        rootField === 'fluidPort' ||
+        rootField === 'ribSlice' ||
+        rootField === 'gravity' ||
+        rootField === 'medium'
+    ) {
         return rootField;
     }
 
@@ -679,7 +757,18 @@ function resolveObjectTypeForReferenceCollection(
     }
 
     const objectType = getStringPropertyValue(objectNode, 'type');
-    if (objectType === 'group' || objectType === 'marker' || objectType === 'connector' || objectType === 'ribSlice') {
+    if (
+        objectType === 'group' ||
+        objectType === 'marker' ||
+        objectType === 'designPoint' ||
+        objectType === 'connector' ||
+        objectType === 'motion' ||
+        objectType === 'contact' ||
+        objectType === 'fluidPort' ||
+        objectType === 'ribSlice' ||
+        objectType === 'gravity' ||
+        objectType === 'medium'
+    ) {
         return objectType;
     }
 
@@ -832,6 +921,19 @@ class CadtoolCodeActionProvider implements vscode.CodeActionProvider {
                 continue;
             }
 
+            if (diagnostic.code.startsWith(`${DIAGNOSTIC_CODE_MISSING_REQUIRED_FIELD}:`)) {
+                const fix = createMissingRequiredFieldQuickFix(document, diagnostic);
+                if (fix) {
+                    actions.push(fix);
+                }
+                continue;
+            }
+
+            if (diagnostic.code === DIAGNOSTIC_CODE_UNRESOLVED_REFERENCE) {
+                actions.push(...createReferenceReplaceQuickFixes(document, diagnostic));
+                continue;
+            }
+
             const rangeRule = RANGE_FIX_RULES[diagnostic.code];
             if (!rangeRule) {
                 continue;
@@ -867,6 +969,194 @@ function createNameQuickFix(
     action.diagnostics = [diagnostic];
     action.isPreferred = true;
     return action;
+}
+
+function createMissingRequiredFieldQuickFix(
+    document: vscode.TextDocument,
+    diagnostic: vscode.Diagnostic
+): vscode.CodeAction | undefined {
+    if (typeof diagnostic.code !== 'string') {
+        return undefined;
+    }
+
+    const codeParts = diagnostic.code.split(':');
+    if (codeParts.length !== 3 || codeParts[0] !== DIAGNOSTIC_CODE_MISSING_REQUIRED_FIELD) {
+        return undefined;
+    }
+
+    const objectType = codeParts[1] as CadtoolObjectType;
+    const field = codeParts[2];
+    if (!Object.prototype.hasOwnProperty.call(REQUIRED_FIELDS_BY_OBJECT_TYPE, objectType)) {
+        return undefined;
+    }
+
+    const insertion = buildMissingRequiredFieldInsertText(document, diagnostic.range.start, objectType, field);
+    if (!insertion) {
+        return undefined;
+    }
+
+    const action = new vscode.CodeAction(
+        `Add required field "${field}"`,
+        vscode.CodeActionKind.QuickFix
+    );
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(document.uri, diagnostic.range.start, insertion);
+    action.edit = edit;
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+    return action;
+}
+
+function buildMissingRequiredFieldInsertText(
+    document: vscode.TextDocument,
+    insertionPosition: vscode.Position,
+    objectType: CadtoolObjectType,
+    field: string
+): string | undefined {
+    const defaultValue = getDefaultValueForRequiredField(objectType, field);
+    if (defaultValue === undefined) {
+        return undefined;
+    }
+
+    const text = document.getText();
+    const insertionOffset = document.offsetAt(insertionPosition);
+    const hasExistingProperties = objectHasExistingProperties(text, insertionOffset);
+    const baseIndent = getLineIndent(document.lineAt(insertionPosition.line).text);
+    const fieldIndent = resolveObjectFieldIndent(document, insertionPosition, baseIndent);
+    const fieldLiteral = `"${field}": ${defaultValue}`;
+
+    if (hasExistingProperties) {
+        return `,\n${fieldIndent}${fieldLiteral}\n${baseIndent}`;
+    }
+
+    return `\n${fieldIndent}${fieldLiteral}\n${baseIndent}`;
+}
+
+function getDefaultValueForRequiredField(
+    objectType: CadtoolObjectType,
+    field: string
+): string | undefined {
+    if (field === 'name') {
+        return `"${objectType}_1"`;
+    }
+
+    if (field === 'connectorType') {
+        return '"fixed"';
+    }
+
+    if (field === 'motionType') {
+        return '"angle"';
+    }
+
+    if (field === 'portType') {
+        return '"variableTankGasPort"';
+    }
+
+    if (field === 'gravityType') {
+        return '"uniform"';
+    }
+
+    if (
+        field === 'part1' ||
+        field === 'part2' ||
+        field === 'partA' ||
+        field === 'partB' ||
+        field === 'partRef' ||
+        field === 'groupRef' ||
+        field === 'markerRef' ||
+        field === 'connectorRef' ||
+        field === 'ribSliceRef' ||
+        field === 'tankRef'
+    ) {
+        return '""';
+    }
+
+    return undefined;
+}
+
+function objectHasExistingProperties(text: string, insertionOffset: number): boolean {
+    let index = insertionOffset - 1;
+    while (index >= 0 && /\s/.test(text[index])) {
+        index -= 1;
+    }
+
+    if (index < 0) {
+        return false;
+    }
+
+    return text[index] !== '{';
+}
+
+function resolveObjectFieldIndent(
+    document: vscode.TextDocument,
+    insertionPosition: vscode.Position,
+    baseIndent: string
+): string {
+    for (let lineNumber = insertionPosition.line - 1; lineNumber >= 0; lineNumber -= 1) {
+        const lineText = document.lineAt(lineNumber).text;
+        if (lineText.trim().length === 0) {
+            continue;
+        }
+
+        const indent = getLineIndent(lineText);
+        if (indent.length > baseIndent.length) {
+            return indent;
+        }
+        break;
+    }
+
+    return `${baseIndent}  `;
+}
+
+function getLineIndent(lineText: string): string {
+    const match = lineText.match(/^\s*/);
+    return match ? match[0] : '';
+}
+
+function createReferenceReplaceQuickFixes(
+    document: vscode.TextDocument,
+    diagnostic: vscode.Diagnostic
+): vscode.CodeAction[] {
+    const parsed = parseUnresolvedReferenceDiagnosticMessage(diagnostic.message);
+    if (!parsed) {
+        return [];
+    }
+
+    const root = parseJsonWithRanges(document.getText());
+    if (!root || root.kind !== 'object') {
+        return [];
+    }
+
+    const candidates = collectReferenceCandidates(buildCadtoolReferenceIndex(root), parsed.field)
+        .filter((candidate) => candidate !== parsed.value)
+        .slice(0, 5);
+
+    return candidates.map((candidate, index) => {
+        const action = new vscode.CodeAction(
+            `Replace with "${candidate}"`,
+            vscode.CodeActionKind.QuickFix
+        );
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(document.uri, diagnostic.range, candidate);
+        action.edit = edit;
+        action.diagnostics = [diagnostic];
+        action.isPreferred = index === 0;
+        return action;
+    });
+}
+
+function parseUnresolvedReferenceDiagnosticMessage(
+    message: string
+): { field: string; value: string } | undefined {
+    const match = message.match(/^Unresolved reference for ([A-Za-z0-9_]+): "([^"]+)"\.$/);
+    if (!match) {
+        return undefined;
+    }
+
+    return {
+        field: match[1],
+        value: match[2]
+    };
 }
 
 function createRangeClipQuickFix(
