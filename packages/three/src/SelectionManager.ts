@@ -28,8 +28,8 @@ export class SelectionManager {
     private hoveredId: string | null = null;
 
     private originalMaterials: Map<string, THREE.Material | THREE.Material[]> = new Map();
-    private highlightMaterial: THREE.MeshBasicMaterial;
-    private hoverMaterial: THREE.MeshBasicMaterial;
+    private highlightMaterial: THREE.MeshPhongMaterial;
+    private hoverMaterial: THREE.MeshPhongMaterial;
 
     private callbacks: SelectionCallback[] = [];
     private enabled: boolean = true;
@@ -50,19 +50,25 @@ export class SelectionManager {
         this.mouse = new THREE.Vector2();
 
         // 高亮材质
-        this.highlightMaterial = new THREE.MeshBasicMaterial({
-            color: options.highlightColor ?? 0x00ff00,
+        this.highlightMaterial = new THREE.MeshPhongMaterial({
+            color: options.highlightColor ?? 0x58a6ff,
+            emissive: options.highlightColor ?? 0x58a6ff,
+            emissiveIntensity: 0.22,
             transparent: true,
-            opacity: options.highlightOpacity ?? 0.8,
-            side: THREE.DoubleSide
+            opacity: options.highlightOpacity ?? 0.32,
+            depthWrite: false,
+            side: THREE.FrontSide
         });
 
         // 悬停材质
-        this.hoverMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffff00,
+        this.hoverMaterial = new THREE.MeshPhongMaterial({
+            color: 0x87c8ff,
+            emissive: 0x87c8ff,
+            emissiveIntensity: 0.1,
             transparent: true,
-            opacity: 0.6,
-            side: THREE.DoubleSide
+            opacity: 0.22,
+            depthWrite: false,
+            side: THREE.FrontSide
         });
 
         this.onClickHandler = this.onClick.bind(this);

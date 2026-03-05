@@ -2,7 +2,7 @@
 // This file will be bundled by Vite for the WebView
 
 import { ThreeViewer } from '@cadtool-online/three';
-import { OcctWrapper, type StepReadResult } from '@cadtool-online/geo';
+import { OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
 import type { EdgeData, MeshData } from '@cadtool-online/core';
 import { markerCreator, type MbsMarker } from '@cadtool-online/core';
 import {
@@ -17,6 +17,7 @@ import {
     type VisualPreset
 } from './renderConfig';
 import { invokeViewerMethod } from './viewerCapabilities';
+import { MassPropertiesCoordinator, createAfterRenderScheduler } from './massPropertiesCoordinator';
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -74,6 +75,7 @@ interface ExplodeData {
 const explodeDataMap: Map<string, ExplodeData> = new Map();
 
 let renderConfig: RenderConfigState = loadRenderConfigState();
+const massPropertiesCoordinator = new MassPropertiesCoordinator(createAfterRenderScheduler());
 
 function loadRenderConfigState(): RenderConfigState {
     try {
@@ -554,20 +556,26 @@ function changeShapeColor(shapeId: string, newColor: string): void {
     }
 }
 
-function updatePropertiesPanel(shapeId: string | null): void {
+type MassPropertiesViewState =
+    | { kind: 'hidden' }
+    | { kind: 'loading' }
+    | { kind: 'unavailable' }
+    | { kind: 'ready'; value: MassProperties };
+
+function bindColorChangeButtons(propsEl: HTMLElement): void {
+    propsEl.querySelectorAll('.color-change-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const targetShapeId = (e.target as HTMLElement).dataset.shapeId;
+            if (targetShapeId) {
+                showColorPicker(targetShapeId);
+            }
+        });
+    });
+}
+
+function renderPropertiesPanel(shape: LoadedShape, massState: MassPropertiesViewState): void {
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
-
-    if (!shapeId) {
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Select an object to view properties</div>';
-        return;
-    }
-
-    const shape = loadedShapes.get(shapeId);
-    if (!shape) {
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Shape not found</div>';
-        return;
-    }
 
     let html = '';
 
@@ -583,7 +591,7 @@ function updatePropertiesPanel(shapeId: string | null): void {
             <span class="property-value" style="display: flex; align-items: center; gap: 8px;">
                 <span style="display: inline-block; width: 20px; height: 20px; background: ${shape.color}; border: 1px solid #666; border-radius: 3px;"></span>
                 <span>${shape.color}</span>
-                <button class="color-change-btn" data-shape-id="${shapeId}" style="margin-left: auto; padding: 2px 8px; background: #007acc; border: none; color: white; border-radius: 3px; cursor: pointer; font-size: 11px;">Change</button>
+                <button class="color-change-btn" data-shape-id="${shape.id}" style="margin-left: auto; padding: 2px 8px; background: #007acc; border: none; color: white; border-radius: 3px; cursor: pointer; font-size: 11px;">Change</button>
             </span>
         </div>`;
     }
@@ -596,35 +604,89 @@ function updatePropertiesPanel(shapeId: string | null): void {
         html += createPropertyRow('Triangles', triangleCount.toLocaleString());
     }
 
-    // Try to get mass properties
-    if (occt && shape.shapeId && occt.hasShape(shape.shapeId)) {
-        try {
-            const massProps = occt.getMassProperties(shape.shapeId);
-            if (massProps) {
-                html += '<div style="margin-top: 8px; font-weight: bold; color: #9cdcfe;">Mass Properties</div>';
-                html += createPropertyRow('Volume', `${massProps.volume.toFixed(6)} mm³`);
-                html += createPropertyRow('Surface', `${massProps.surfaceArea.toFixed(6)} mm²`);
-                html += createPropertyRow('Mass', `${massProps.mass.toFixed(6)} kg`);
-                html += createPropertyRow('CoM X', `${massProps.centerOfMass.x.toFixed(4)} mm`);
-                html += createPropertyRow('CoM Y', `${massProps.centerOfMass.y.toFixed(4)} mm`);
-                html += createPropertyRow('CoM Z', `${massProps.centerOfMass.z.toFixed(4)} mm`);
-            }
-        } catch (e) {
-            console.warn('Failed to get mass properties:', e);
-        }
+    if (massState.kind !== 'hidden') {
+        html += '<div style="margin-top: 8px; font-weight: bold; color: #9cdcfe;">Mass Properties</div>';
+    }
+
+    if (massState.kind === 'loading') {
+        html += createPropertyRow('Status', 'Computing...');
+    } else if (massState.kind === 'unavailable') {
+        html += createPropertyRow('Status', 'Unavailable');
+    } else if (massState.kind === 'ready') {
+        html += createPropertyRow('Volume', `${massState.value.volume.toFixed(6)} mm^3`);
+        html += createPropertyRow('Surface', `${massState.value.surfaceArea.toFixed(6)} mm^2`);
+        html += createPropertyRow('Mass', `${massState.value.mass.toFixed(6)} kg`);
+        html += createPropertyRow('CoM X', `${massState.value.centerOfMass.x.toFixed(4)} mm`);
+        html += createPropertyRow('CoM Y', `${massState.value.centerOfMass.y.toFixed(4)} mm`);
+        html += createPropertyRow('CoM Z', `${massState.value.centerOfMass.z.toFixed(4)} mm`);
     }
 
     propsEl.innerHTML = html;
+    bindColorChangeButtons(propsEl);
+}
 
-    // Add event listeners for color change buttons
-    propsEl.querySelectorAll('.color-change-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const targetShapeId = (e.target as HTMLElement).dataset.shapeId;
-            if (targetShapeId) {
-                showColorPicker(targetShapeId);
+function updatePropertiesPanel(shapeId: string | null): void {
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    if (!shapeId) {
+        massPropertiesCoordinator.cancelPending();
+        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Select an object to view properties</div>';
+        return;
+    }
+
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) {
+        massPropertiesCoordinator.cancelPending();
+        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Shape not found</div>';
+        return;
+    }
+
+    const occtForRequest = occt;
+    const requestResult = massPropertiesCoordinator.request(
+        { uiShapeId: shape.id, kernelShapeId: shape.shapeId },
+        occtForRequest
+            ? {
+                hasShape: (targetShapeId: string) => occtForRequest.hasShape(targetShapeId),
+                getMass: (targetShapeId: string) => {
+                    try {
+                        return occtForRequest.getMassProperties(targetShapeId);
+                    } catch (error) {
+                        console.warn('Failed to get mass properties:', error);
+                        return null;
+                    }
+                }
             }
-        });
-    });
+            : null,
+        (resolvedShapeId, massProperties) => {
+            if (selectedShapeId !== resolvedShapeId) {
+                return;
+            }
+            const resolvedShape = loadedShapes.get(resolvedShapeId);
+            if (!resolvedShape) {
+                return;
+            }
+            if (massProperties) {
+                renderPropertiesPanel(resolvedShape, { kind: 'ready', value: massProperties });
+            } else {
+                renderPropertiesPanel(resolvedShape, { kind: 'unavailable' });
+            }
+        }
+    );
+
+    let massState: MassPropertiesViewState = shape.shapeId
+        ? { kind: 'unavailable' }
+        : { kind: 'hidden' };
+
+    if (requestResult.state === 'scheduled') {
+        massState = { kind: 'loading' };
+    } else if (requestResult.state === 'cached') {
+        massState = requestResult.massProperties
+            ? { kind: 'ready', value: requestResult.massProperties }
+            : { kind: 'unavailable' };
+    }
+
+    renderPropertiesPanel(shape, massState);
 }
 
 function createPropertyRow(label: string, value: string): string {
@@ -1413,6 +1475,7 @@ function clearScene(): void {
     selectedShapeId = null;
     meshIdToShapeId.clear();
     explodeDataMap.clear();
+    massPropertiesCoordinator.clear();
 
     // Reset explode state
     if (isExploded) {
@@ -1654,6 +1717,10 @@ async function initViewer(): Promise<void> {
         viewer = new ThreeViewer(container, {
             backgroundColor: 0x2a2a2a,
             enableSelection: true,
+            selectionOptions: {
+                highlightColor: 0x58a6ff,
+                highlightOpacity: 0.32
+            },
             visualPreset: config.visualPreset
         });
 
@@ -1761,4 +1828,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
