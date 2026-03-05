@@ -60,6 +60,113 @@ interface ExplodeData {
 }
 const explodeDataMap: Map<string, ExplodeData> = new Map();
 
+type MaterialMode = 'matcap' | 'pbr' | 'flat' | 'phong';
+type PrecisionPreset = 'coarse' | 'balanced' | 'fine';
+
+interface RenderConfigState {
+    materialMode: MaterialMode;
+    postProcessing: boolean;
+    edgeLayerVisible: boolean;
+    precisionPreset: PrecisionPreset;
+}
+
+const DEFAULT_RENDER_CONFIG: RenderConfigState = {
+    materialMode: 'matcap',
+    postProcessing: true,
+    edgeLayerVisible: true,
+    precisionPreset: 'balanced'
+};
+
+let renderConfig: RenderConfigState = loadRenderConfigState();
+
+interface ViewerCapabilityMethods {
+    setMaterialMode: (mode: MaterialMode) => void;
+    setPostProcessingEnabled: (enabled: boolean) => void;
+    setOutlineEnabled: (enabled: boolean) => void;
+    setEdgeLayerVisible: (visible: boolean) => void;
+    setEdgesVisible: (visible: boolean) => void;
+    setEdgeVisibility: (visible: boolean) => void;
+}
+
+function loadRenderConfigState(): RenderConfigState {
+    const state = vscode.getState() as { renderConfig?: Partial<RenderConfigState> } | undefined;
+    const stored = state?.renderConfig;
+    if (!stored) {
+        return { ...DEFAULT_RENDER_CONFIG };
+    }
+
+    return {
+        materialMode: isMaterialMode(stored.materialMode) ? stored.materialMode : DEFAULT_RENDER_CONFIG.materialMode,
+        postProcessing: typeof stored.postProcessing === 'boolean' ? stored.postProcessing : DEFAULT_RENDER_CONFIG.postProcessing,
+        edgeLayerVisible: typeof stored.edgeLayerVisible === 'boolean' ? stored.edgeLayerVisible : DEFAULT_RENDER_CONFIG.edgeLayerVisible,
+        precisionPreset: isPrecisionPreset(stored.precisionPreset) ? stored.precisionPreset : DEFAULT_RENDER_CONFIG.precisionPreset
+    };
+}
+
+function saveRenderConfigState(): void {
+    const existingState = vscode.getState() as Record<string, unknown> | undefined;
+    vscode.setState({
+        ...(existingState ?? {}),
+        renderConfig
+    });
+}
+
+function isMaterialMode(value: unknown): value is MaterialMode {
+    return value === 'matcap' || value === 'pbr' || value === 'flat' || value === 'phong';
+}
+
+function isPrecisionPreset(value: unknown): value is PrecisionPreset {
+    return value === 'coarse' || value === 'balanced' || value === 'fine';
+}
+
+function invokeViewerMethod(methodNames: Array<keyof ViewerCapabilityMethods>, ...args: unknown[]): boolean {
+    if (!viewer) {
+        return false;
+    }
+
+    const target = viewer as unknown as Record<string, unknown>;
+    for (const methodName of methodNames) {
+        const method = target[methodName as string];
+        if (typeof method === 'function') {
+            (method as (...fnArgs: unknown[]) => void)(...args);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function applyRenderConfigToViewer(): void {
+    const materialApplied = invokeViewerMethod(['setMaterialMode'], renderConfig.materialMode);
+    const postApplied =
+        invokeViewerMethod(['setPostProcessingEnabled'], renderConfig.postProcessing)
+        || invokeViewerMethod(['setOutlineEnabled'], renderConfig.postProcessing);
+    const edgeApplied =
+        invokeViewerMethod(['setEdgeLayerVisible'], renderConfig.edgeLayerVisible)
+        || invokeViewerMethod(['setEdgesVisible'], renderConfig.edgeLayerVisible)
+        || invokeViewerMethod(['setEdgeVisibility'], renderConfig.edgeLayerVisible);
+
+    if (!materialApplied || !postApplied || !edgeApplied) {
+        const missing: string[] = [];
+        if (!materialApplied) missing.push('材质');
+        if (!postApplied) missing.push('后处理');
+        if (!edgeApplied) missing.push('边线');
+        setStatusInfo(`部分渲染能力尚未接入：${missing.join(' / ')}`);
+    }
+}
+
+function getMeshingParamsFromPreset(preset: PrecisionPreset): { linearDeflection: number; angularDeflection: number } {
+    switch (preset) {
+        case 'coarse':
+            return { linearDeflection: 0.002, angularDeflection: 0.45 };
+        case 'fine':
+            return { linearDeflection: 0.0002, angularDeflection: 0.1 };
+        case 'balanced':
+        default:
+            return { linearDeflection: 0.0005, angularDeflection: 0.2 };
+    }
+}
+
 // ============================================================================
 // UI Helpers
 // ============================================================================
@@ -115,6 +222,167 @@ function showProgress(percent: number, text?: string): void {
     if (progressText) {
         progressText.textContent = text || `${Math.round(percent)}%`;
     }
+}
+
+function toggleRenderConfigPanel(forceVisible?: boolean): void {
+    const panel = document.getElementById('render-config-panel');
+    if (!panel) return;
+
+    const shouldShow = typeof forceVisible === 'boolean'
+        ? forceVisible
+        : !panel.classList.contains('show');
+    panel.classList.toggle('show', shouldShow);
+}
+
+async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
+    if (!viewer || !occt || loadedShapes.size === 0) {
+        return;
+    }
+
+    const remeshTargets = Array.from(loadedShapes.values()).filter(
+        (shape): shape is LoadedShape & { shapeId: string; meshId: string } => {
+            if (!shape.shapeId || !shape.meshId) {
+                return false;
+            }
+            return occt.hasShape(shape.shapeId);
+        }
+    );
+
+    if (remeshTargets.length === 0) {
+        return;
+    }
+
+    const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
+    showLoading('Updating mesh precision...');
+    showProgress(5, 'Preparing remesh...');
+    setStatus('Updating mesh precision...');
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    try {
+        const shapeIds = remeshTargets.map(shape => shape.shapeId);
+        const meshByShapeId = occt.getMeshes(shapeIds, linearDeflection, angularDeflection);
+        let updatedCount = 0;
+
+        for (let i = 0; i < remeshTargets.length; i++) {
+            const shape = remeshTargets[i];
+            const meshData = meshByShapeId.get(shape.shapeId) ?? null;
+            if (meshData && meshData.vertices.length > 0) {
+                viewer.removeMesh(shape.meshId);
+                viewer.addMeshFromData(shape.meshId, meshData);
+                viewer.setVisibility(shape.meshId, shape.visible);
+                if (shape.color) {
+                    const colorHex = parseInt(shape.color.replace('#', ''), 16);
+                    viewer.setMeshColor(shape.meshId, colorHex);
+                }
+                shape.meshData = meshData;
+                meshIdToShapeId.set(shape.meshId, shape.id);
+                updatedCount++;
+            }
+
+            const progress = 10 + ((i + 1) / remeshTargets.length) * 85;
+            showProgress(progress, `Remeshing (${i + 1}/${remeshTargets.length})...`);
+            if (i % 5 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        applyRenderConfigToViewer();
+        if (selectedShapeId) {
+            const selectedShape = loadedShapes.get(selectedShapeId);
+            if (selectedShape?.meshId) {
+                viewer.clearSelection();
+                viewer.select(selectedShape.meshId);
+            }
+        }
+        showProgress(100, 'Complete');
+        setStatus('Ready');
+        setStatusInfo(`精度已更新：${updatedCount}/${remeshTargets.length} 个部件`);
+    } catch (error) {
+        console.error('Failed to remesh with precision preset:', error);
+        setStatus('Mesh precision update failed');
+        vscode.postMessage({
+            command: 'alert',
+            text: `Failed to update mesh precision: ${error}`
+        });
+    } finally {
+        hideLoading();
+    }
+}
+
+async function applyPrecisionPreset(preset: PrecisionPreset): Promise<void> {
+    if (renderConfig.precisionPreset === preset) {
+        return;
+    }
+
+    renderConfig.precisionPreset = preset;
+    saveRenderConfigState();
+
+    if (loadedShapes.size > 0) {
+        await remeshLoadedModelWithCurrentPrecision();
+        return;
+    }
+
+    setStatusInfo(`网格精度预设：${preset}`);
+}
+
+function applyRenderControls(
+    updates: Partial<Pick<RenderConfigState, 'materialMode' | 'postProcessing' | 'edgeLayerVisible'>>
+): void {
+    renderConfig = { ...renderConfig, ...updates };
+    saveRenderConfigState();
+    applyRenderConfigToViewer();
+}
+
+function setupRenderConfigUI(): void {
+    const materialSelect = document.getElementById('render-material-mode') as HTMLSelectElement | null;
+    const postCheckbox = document.getElementById('render-postprocessing') as HTMLInputElement | null;
+    const edgeCheckbox = document.getElementById('render-edge-layer') as HTMLInputElement | null;
+    const precisionSelect = document.getElementById('render-precision') as HTMLSelectElement | null;
+
+    if (materialSelect) {
+        materialSelect.value = renderConfig.materialMode;
+        materialSelect.addEventListener('change', () => {
+            const mode = materialSelect.value;
+            if (!isMaterialMode(mode)) {
+                return;
+            }
+            applyRenderControls({ materialMode: mode });
+        });
+    }
+
+    if (postCheckbox) {
+        postCheckbox.checked = renderConfig.postProcessing;
+        postCheckbox.addEventListener('change', () => {
+            applyRenderControls({ postProcessing: postCheckbox.checked });
+        });
+    }
+
+    if (edgeCheckbox) {
+        edgeCheckbox.checked = renderConfig.edgeLayerVisible;
+        edgeCheckbox.addEventListener('change', () => {
+            applyRenderControls({ edgeLayerVisible: edgeCheckbox.checked });
+        });
+    }
+
+    if (precisionSelect) {
+        precisionSelect.value = renderConfig.precisionPreset;
+        precisionSelect.addEventListener('change', () => {
+            const preset = precisionSelect.value;
+            if (isPrecisionPreset(preset)) {
+                void applyPrecisionPreset(preset);
+            }
+        });
+    }
+
+    document.getElementById('btn-render-config')?.addEventListener('click', () => {
+        toggleRenderConfigPanel();
+    });
+    document.getElementById('render-config-close')?.addEventListener('click', () => {
+        toggleRenderConfigPanel(false);
+    });
+
+    applyRenderConfigToViewer();
 }
 
 function updateModelTree(): void {
@@ -544,7 +812,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             const validShapeIds = shapesToMesh
                 .map(({ node }) => node.shapeId as string | undefined)
                 .filter((shapeId): shapeId is string => Boolean(shapeId) && occt!.hasShape(shapeId));
-            const meshByShapeId = occt!.getMeshes(validShapeIds);
+            const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
+            const meshByShapeId = occt!.getMeshes(validShapeIds, linearDeflection, angularDeflection);
 
             // Attach meshes to all nodes
             for (let i = 0; i < shapesToMesh.length; i++) {
@@ -625,6 +894,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             if (viewer && meshCount > 0) {
                 viewer.fitToView();
             }
+            applyRenderConfigToViewer();
 
             // Update UI
             updateModelTree();
@@ -654,7 +924,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             loadedShapes.clear();
 
             const totalShapes = result.shapes.length;
-            const meshByShapeId = occt!.getMeshes(result.shapes);
+            const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
+            const meshByShapeId = occt!.getMeshes(result.shapes, linearDeflection, angularDeflection);
             for (let i = 0; i < totalShapes; i++) {
                 const shapeId = result.shapes[i];
                 const meshData = meshByShapeId.get(shapeId) ?? null;
@@ -699,6 +970,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             if (viewer && addedCount > 0) {
                 viewer.fitToView();
             }
+            applyRenderConfigToViewer();
 
             // Update UI
             updateModelTree();
@@ -1391,6 +1663,8 @@ async function initViewer(): Promise<void> {
 
         // Add click listener for marker creation
         container.addEventListener('click', handleCanvasClick);
+
+        applyRenderConfigToViewer();
     }
 }
 
@@ -1427,6 +1701,7 @@ async function init(): Promise<void> {
 window.addEventListener('message', handleMessage);
 
 document.addEventListener('DOMContentLoaded', () => {
+    setupRenderConfigUI();
     init();
 
     // Button handlers
@@ -1469,3 +1744,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+

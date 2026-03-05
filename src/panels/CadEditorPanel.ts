@@ -709,6 +709,67 @@ export class CadEditorPanel {
             color: #cccccc;
             font-weight: 600;
         }
+        /* Render config panel */
+        .render-config-panel {
+            position: absolute;
+            top: 90px;
+            right: 320px;
+            background-color: rgba(37, 37, 38, 0.96);
+            border: 1px solid #3c3c3c;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            z-index: 101;
+            display: none;
+            min-width: 290px;
+            padding: 14px 16px;
+        }
+        .render-config-panel.show {
+            display: block;
+        }
+        .render-config-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #cccccc;
+        }
+        .render-config-close {
+            cursor: pointer;
+            font-size: 18px;
+            color: #888;
+            line-height: 1;
+            padding: 0 4px;
+        }
+        .render-config-close:hover {
+            color: #ccc;
+        }
+        .render-config-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        .render-config-row label {
+            color: #b8b8b8;
+            flex: 1;
+        }
+        .render-config-row select {
+            min-width: 140px;
+            background: #2d2d2d;
+            color: #cccccc;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 12px;
+        }
+        .render-config-row input[type='checkbox'] {
+            width: 14px;
+            height: 14px;
+        }
     </style>
 </head>
 <body>
@@ -849,6 +910,10 @@ export class CadEditorPanel {
                             <span class="ribbon-btn-icon">💥</span>
                             <span class="ribbon-btn-text">爆炸图</span>
                         </button>
+                        <button class="ribbon-btn" id="btn-render-config">
+                            <span class="ribbon-btn-icon">🎛️</span>
+                            <span class="ribbon-btn-text">渲染</span>
+                        </button>
                     </div>
                     <div class="ribbon-tab-label">工具</div>
                 </div>
@@ -867,6 +932,37 @@ export class CadEditorPanel {
                             <span>100%</span>
                         </div>
                         <div class="explode-slider-value" id="explode-slider-value">0%</div>
+                    </div>
+                </div>
+                <div class="render-config-panel" id="render-config-panel">
+                    <div class="render-config-header">
+                        <span>渲染配置</span>
+                        <span class="render-config-close" id="render-config-close">×</span>
+                    </div>
+                    <div class="render-config-row">
+                        <label for="render-material-mode">材质模式</label>
+                        <select id="render-material-mode">
+                            <option value="matcap">Matcap</option>
+                            <option value="pbr">PBR</option>
+                            <option value="flat">Flat</option>
+                            <option value="phong">Phong</option>
+                        </select>
+                    </div>
+                    <div class="render-config-row">
+                        <label for="render-postprocessing">后处理</label>
+                        <input id="render-postprocessing" type="checkbox" checked>
+                    </div>
+                    <div class="render-config-row">
+                        <label for="render-edge-layer">边线层</label>
+                        <input id="render-edge-layer" type="checkbox" checked>
+                    </div>
+                    <div class="render-config-row">
+                        <label for="render-precision">网格精度</label>
+                        <select id="render-precision">
+                            <option value="coarse">粗略</option>
+                            <option value="balanced" selected>平衡</option>
+                            <option value="fine">精细</option>
+                        </select>
                     </div>
                 </div>
             </div>

@@ -142,7 +142,7 @@ export class OcctWrapper implements IOcctWrapper {
     // T2.3: Mesh Generation
     // ========================================================================
 
-    getMesh(shapeId: string, linearDeflection: number = 0.1, angularDeflection: number = 0.5): MeshData | null {
+    getMesh(shapeId: string, linearDeflection: number = 0.0005, angularDeflection: number = 0.2): MeshData | null {
         this.ensureInitialized();
 
         // Prefer structured WASM return to avoid huge JSON serialization/deserialization overhead.
@@ -179,7 +179,7 @@ export class OcctWrapper implements IOcctWrapper {
         };
     }
 
-    getMeshes(shapeIds: string[], linearDeflection: number = 0.1, angularDeflection: number = 0.5): Map<string, MeshData | null> {
+    getMeshes(shapeIds: string[], linearDeflection: number = 0.0005, angularDeflection: number = 0.2): Map<string, MeshData | null> {
         this.ensureInitialized();
 
         const result = new Map<string, MeshData | null>();

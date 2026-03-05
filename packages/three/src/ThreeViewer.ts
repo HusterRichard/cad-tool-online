@@ -1,9 +1,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GammaCorrectionShader } from 'three/examples/jsm/shaders/GammaCorrectionShader.js';
 import type { MeshData } from '@cadtool-online/core';
 import { SelectionManager, type SelectionCallback, type SelectionOptions } from './SelectionManager';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
 import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
+
+export type MaterialMode = 'matcap' | 'pbr' | 'flat' | 'phong';
 
 export interface ThreeViewerOptions {
     backgroundColor?: number;
@@ -12,6 +20,15 @@ export interface ThreeViewerOptions {
     selectionOptions?: SelectionOptions;
     frameOptions?: FrameVisualizerOptions;
     jointOptions?: JointVisualizerOptions;
+    materialMode?: MaterialMode;
+    enablePostProcessing?: boolean;
+    enableOutline?: boolean;
+    useEnvironmentMap?: boolean;
+}
+
+interface ViewerManagedMaterialState {
+    managedByViewer: boolean;
+    baseMaterial: THREE.Material;
 }
 
 export class ThreeViewer {
@@ -22,6 +39,20 @@ export class ThreeViewer {
     private container: HTMLElement;
     private meshes: Map<string, THREE.Mesh> = new Map();
 
+    private materialMode: MaterialMode;
+    private postProcessingEnabled: boolean;
+    private outlineEnabled: boolean;
+    private useEnvironmentMap: boolean;
+
+    private composer: EffectComposer | null = null;
+    private outlinePass: OutlinePass | null = null;
+
+    private pmremGenerator: THREE.PMREMGenerator | null = null;
+    private environmentTexture: THREE.Texture | null = null;
+    private matcapTexture: THREE.DataTexture;
+
+    private readonly onResizeHandler: () => void;
+
     // MBS 可视化组件
     private selectionManager: SelectionManager | null = null;
     private frameVisualizer: FrameVisualizer;
@@ -29,6 +60,11 @@ export class ThreeViewer {
 
     constructor(container: HTMLElement, options: ThreeViewerOptions = {}) {
         this.container = container;
+        this.materialMode = options.materialMode ?? 'matcap';
+        this.postProcessingEnabled = options.enablePostProcessing ?? true;
+        this.outlineEnabled = options.enableOutline ?? (options.selectionOptions?.outlineEnabled ?? true);
+        this.useEnvironmentMap = options.useEnvironmentMap ?? true;
+        this.matcapTexture = this.createDefaultMatcapTexture();
 
         // Scene
         this.scene = new THREE.Scene();
@@ -47,6 +83,9 @@ export class ThreeViewer {
         });
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
         // Set clear color with alpha = 0 for full transparency
         this.renderer.setClearColor(0x000000, 0);
         container.appendChild(this.renderer.domElement);
@@ -57,6 +96,8 @@ export class ThreeViewer {
 
         this.setupLights();
         this.setupGrid();
+        this.setupPostProcessing();
+        this.updateSceneEnvironment();
 
         // MBS 可视化组件
         if (options.enableSelection !== false) {
@@ -66,6 +107,9 @@ export class ThreeViewer {
                 this.renderer.domElement,
                 options.selectionOptions
             );
+            this.selectionManager.onSelectionChange(() => {
+                this.updateOutlineTargets();
+            });
         }
         this.frameVisualizer = new FrameVisualizer(this.scene, options.frameOptions);
         this.jointVisualizer = new JointVisualizer(this.scene, options.jointOptions);
@@ -73,7 +117,8 @@ export class ThreeViewer {
         this.animate();
 
         // Handle resize
-        window.addEventListener('resize', this.onResize.bind(this));
+        this.onResizeHandler = this.onResize.bind(this);
+        window.addEventListener('resize', this.onResizeHandler);
     }
 
     private setupLights(): void {
@@ -111,10 +156,211 @@ export class ThreeViewer {
         this.scene.add(axesHelper);
     }
 
+    private setupPostProcessing(): void {
+        if (!this.postProcessingEnabled) {
+            this.composer = null;
+            this.outlinePass = null;
+            return;
+        }
+
+        const renderTarget = new THREE.WebGLRenderTarget(this.container.clientWidth, this.container.clientHeight, {
+            format: THREE.RGBAFormat,
+            type: THREE.HalfFloatType,
+            depthBuffer: true,
+            stencilBuffer: false
+        });
+        renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+        renderTarget.samples = 4;
+
+        this.composer = new EffectComposer(this.renderer, renderTarget);
+
+        const renderPass = new RenderPass(this.scene, this.camera);
+        this.composer.addPass(renderPass);
+
+        if (this.outlineEnabled) {
+            this.outlinePass = new OutlinePass(
+                new THREE.Vector2(this.container.clientWidth, this.container.clientHeight),
+                this.scene,
+                this.camera
+            );
+            this.outlinePass.visibleEdgeColor.set(0x6ec8ff);
+            this.outlinePass.hiddenEdgeColor.set(0x1d4e6b);
+            this.outlinePass.edgeStrength = 4.5;
+            this.outlinePass.edgeThickness = 1.2;
+            this.outlinePass.pulsePeriod = 0;
+            this.composer.addPass(this.outlinePass);
+        }
+
+        const gammaPass = new ShaderPass(GammaCorrectionShader);
+        this.composer.addPass(gammaPass);
+    }
+
+    private createDefaultMatcapTexture(size: number = 128): THREE.DataTexture {
+        const data = new Uint8Array(size * size * 4);
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const u = (x / (size - 1)) * 2 - 1;
+                const v = (y / (size - 1)) * 2 - 1;
+                const r2 = u * u + v * v;
+                const idx = (y * size + x) * 4;
+
+                if (r2 > 1.0) {
+                    data[idx] = 0;
+                    data[idx + 1] = 0;
+                    data[idx + 2] = 0;
+                    data[idx + 3] = 0;
+                    continue;
+                }
+
+                const nz = Math.sqrt(1 - r2);
+                const key = 0.35 + 0.65 * Math.max(0, nz);
+                const rim = Math.pow(1 - nz, 1.8);
+                const spec = Math.pow(Math.max(0, nz), 18.0);
+
+                const base = 0.22 + 0.58 * key;
+                const red = Math.min(1, base + 0.16 * spec + 0.08 * rim);
+                const green = Math.min(1, base + 0.20 * spec + 0.12 * rim);
+                const blue = Math.min(1, base + 0.24 * spec + 0.16 * rim);
+
+                data[idx] = Math.floor(red * 255);
+                data[idx + 1] = Math.floor(green * 255);
+                data[idx + 2] = Math.floor(blue * 255);
+                data[idx + 3] = 255;
+            }
+        }
+
+        const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        return texture;
+    }
+
+    private ensureEnvironmentMap(): THREE.Texture {
+        if (this.environmentTexture) {
+            return this.environmentTexture;
+        }
+
+        this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+        const environmentScene = new RoomEnvironment();
+        const envRT = this.pmremGenerator.fromScene(environmentScene, 0.04);
+        this.environmentTexture = envRT.texture;
+        return this.environmentTexture;
+    }
+
+    private updateSceneEnvironment(): void {
+        if (this.materialMode === 'pbr' && this.useEnvironmentMap) {
+            this.scene.environment = this.ensureEnvironmentMap();
+        } else {
+            this.scene.environment = null;
+        }
+    }
+
+    private createSurfaceMaterial(color: number): THREE.Material {
+        switch (this.materialMode) {
+            case 'matcap':
+                return new THREE.MeshMatcapMaterial({
+                    color,
+                    matcap: this.matcapTexture,
+                    side: THREE.DoubleSide
+                });
+            case 'pbr':
+                return new THREE.MeshPhysicalMaterial({
+                    color,
+                    roughness: 0.38,
+                    metalness: 0.18,
+                    clearcoat: 0.08,
+                    clearcoatRoughness: 0.45,
+                    envMapIntensity: 1.2,
+                    side: THREE.DoubleSide
+                });
+            case 'flat':
+                return new THREE.MeshStandardMaterial({
+                    color,
+                    metalness: 0,
+                    roughness: 0.95,
+                    flatShading: true,
+                    side: THREE.DoubleSide
+                });
+            case 'phong':
+                return new THREE.MeshPhongMaterial({
+                    color,
+                    side: THREE.DoubleSide
+                });
+            default:
+                return new THREE.MeshMatcapMaterial({
+                    color,
+                    matcap: this.matcapTexture,
+                    side: THREE.DoubleSide
+                });
+        }
+    }
+
+    private extractMaterialColor(material: THREE.Material | THREE.Material[] | undefined): number {
+        const candidate = Array.isArray(material) ? material[0] : material;
+        if (!candidate) {
+            return 0x808080;
+        }
+        const meshMaterial = candidate as THREE.MeshStandardMaterial;
+        if (meshMaterial.color instanceof THREE.Color) {
+            return meshMaterial.color.getHex();
+        }
+        return 0x808080;
+    }
+
+    private applyMeshMaterial(mesh: THREE.Mesh, nextBaseMaterial: THREE.Material): void {
+        const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
+
+        if (state?.managedByViewer && state.baseMaterial !== nextBaseMaterial) {
+            state.baseMaterial.dispose();
+        }
+
+        mesh.userData.viewerMaterialState = {
+            managedByViewer: true,
+            baseMaterial: nextBaseMaterial
+        } as ViewerManagedMaterialState;
+
+        mesh.material = nextBaseMaterial;
+    }
+
+    private updateManagedMeshMaterials(): void {
+        this.selectionManager?.clearSelection();
+
+        this.meshes.forEach((mesh) => {
+            const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
+            if (!state?.managedByViewer) {
+                return;
+            }
+
+            const color = this.extractMaterialColor(state.baseMaterial);
+            const nextMaterial = this.createSurfaceMaterial(color);
+            this.applyMeshMaterial(mesh, nextMaterial);
+        });
+
+        this.updateOutlineTargets();
+    }
+
+    private updateOutlineTargets(): void {
+        if (!this.outlinePass) {
+            return;
+        }
+
+        const selectedObjects = this.getSelectedIds()
+            .map(id => this.meshes.get(id))
+            .filter((mesh): mesh is THREE.Mesh => Boolean(mesh));
+
+        this.outlinePass.selectedObjects = selectedObjects;
+    }
+
     private animate(): void {
         requestAnimationFrame(this.animate.bind(this));
         this.controls.update();
-        this.renderer.render(this.scene, this.camera);
+
+        if (this.composer && this.postProcessingEnabled) {
+            this.composer.render();
+        } else {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 
     private onResize(): void {
@@ -124,6 +370,8 @@ export class ThreeViewer {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
+        this.composer?.setSize(width, height);
+        this.outlinePass?.setSize(width, height);
     }
 
     addMeshFromData(id: string, meshData: MeshData, material?: THREE.Material): THREE.Mesh {
@@ -132,12 +380,14 @@ export class ThreeViewer {
         geometry.setAttribute('normal', new THREE.BufferAttribute(meshData.normals, 3));
         geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
 
-        const mat = material ?? new THREE.MeshPhongMaterial({
-            color: 0x808080,
-            side: THREE.DoubleSide
-        });
+        const baseMaterial = material ?? this.createSurfaceMaterial(0x808080);
 
-        const mesh = new THREE.Mesh(geometry, mat);
+        const mesh = new THREE.Mesh(geometry, baseMaterial);
+        mesh.userData.viewerMaterialState = {
+            managedByViewer: !material,
+            baseMaterial
+        } as ViewerManagedMaterialState;
+
         this.scene.add(mesh);
         this.meshes.set(id, mesh);
 
@@ -145,6 +395,8 @@ export class ThreeViewer {
         if (this.selectionManager) {
             this.selectionManager.registerObject(id, mesh);
         }
+
+        this.updateOutlineTargets();
 
         return mesh;
     }
@@ -159,10 +411,16 @@ export class ThreeViewer {
 
             this.scene.remove(mesh);
             mesh.geometry.dispose();
-            if (mesh.material instanceof THREE.Material) {
+
+            const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
+            if (state?.baseMaterial) {
+                state.baseMaterial.dispose();
+            } else if (mesh.material instanceof THREE.Material) {
                 mesh.material.dispose();
             }
+
             this.meshes.delete(id);
+            this.updateOutlineTargets();
         }
     }
 
@@ -179,8 +437,31 @@ export class ThreeViewer {
 
     setMeshColor(id: string, color: number): void {
         const mesh = this.meshes.get(id);
-        if (mesh && mesh.material instanceof THREE.MeshPhongMaterial) {
-            mesh.material.color.setHex(color);
+        if (!mesh) {
+            return;
+        }
+
+        const updateColor = (mat: THREE.Material): void => {
+            const typed = mat as THREE.MeshStandardMaterial;
+            if (typed.color instanceof THREE.Color) {
+                typed.color.setHex(color);
+                typed.needsUpdate = true;
+            }
+        };
+
+        if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(updateColor);
+        } else {
+            updateColor(mesh.material);
+        }
+
+        const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
+        if (state?.baseMaterial) {
+            const base = state.baseMaterial as THREE.MeshStandardMaterial;
+            if (base.color instanceof THREE.Color) {
+                base.color.setHex(color);
+                base.needsUpdate = true;
+            }
         }
     }
 
@@ -212,12 +493,64 @@ export class ThreeViewer {
         }
     }
 
+    setMaterialMode(mode: MaterialMode): void {
+        if (this.materialMode === mode) {
+            return;
+        }
+
+        this.materialMode = mode;
+        this.updateSceneEnvironment();
+        this.updateManagedMeshMaterials();
+    }
+
+    getMaterialMode(): MaterialMode {
+        return this.materialMode;
+    }
+
+    setPostProcessingEnabled(enabled: boolean): void {
+        if (this.postProcessingEnabled === enabled) {
+            return;
+        }
+
+        this.postProcessingEnabled = enabled;
+
+        if (!enabled) {
+            this.composer = null;
+            this.outlinePass = null;
+            return;
+        }
+
+        this.setupPostProcessing();
+        this.updateOutlineTargets();
+    }
+
+    setOutlineEnabled(enabled: boolean): void {
+        if (this.outlineEnabled === enabled) {
+            return;
+        }
+
+        this.outlineEnabled = enabled;
+
+        if (!this.postProcessingEnabled) {
+            return;
+        }
+
+        this.setupPostProcessing();
+        this.updateOutlineTargets();
+    }
+
     dispose(): void {
-        window.removeEventListener('resize', this.onResize.bind(this));
+        window.removeEventListener('resize', this.onResizeHandler);
         this.meshes.forEach((_mesh, id) => this.removeMesh(id));
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();
         this.jointVisualizer.dispose();
+
+        this.composer?.dispose();
+        this.pmremGenerator?.dispose();
+        this.environmentTexture?.dispose();
+        this.matcapTexture.dispose();
+
         this.renderer.dispose();
         this.controls.dispose();
     }
@@ -396,3 +729,4 @@ export class ThreeViewer {
         };
     }
 }
+

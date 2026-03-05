@@ -43,13 +43,17 @@
 
 // T2.3: Mesh generation
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepBndLib.hxx>
+#include <BRepLib_ToolTriangulatedShape.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <BRep_Tool.hxx>
 #include <Poly_Triangulation.hxx>
+#include <Bnd_Box.hxx>
 #include <TopLoc_Location.hxx>
 #include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 
 // T2.4: Mass properties
 #include <GProp_GProps.hxx>
@@ -81,6 +85,72 @@ public:
         setg(begin, begin, end);
     }
 };
+
+double resolveLinearDeflection(const TopoDS_Shape& shape, double linearDeflection)
+{
+    if (linearDeflection <= 0.0) {
+        return 0.1;
+    }
+
+    // Treat small values as relative sag and scale by average bounding-box size.
+    if (linearDeflection <= 0.01) {
+        Bnd_Box boundingBox;
+        BRepBndLib::Add(shape, boundingBox, false);
+        if (!boundingBox.IsVoid()) {
+            Standard_Real xMin, yMin, zMin, xMax, yMax, zMax;
+            boundingBox.Get(xMin, yMin, zMin, xMax, yMax, zMax);
+            const Standard_Real avgSize = ((xMax - xMin) + (yMax - yMin) + (zMax - zMin)) / 3.0;
+            const double scaled = static_cast<double>(avgSize) * linearDeflection;
+            if (scaled > Precision::Confusion()) {
+                return scaled;
+            }
+        }
+    }
+
+    // Treat larger values as absolute linear deflection.
+    return linearDeflection;
+}
+
+void appendFallbackNormals(const Handle(Poly_Triangulation)& triangulation,
+                           const gp_Trsf& transform,
+                           bool reversed,
+                           std::vector<double>& normals)
+{
+    gp_Vec normalVec(0.0, 0.0, 1.0);
+    bool found = false;
+
+    const int nbTriangles = triangulation->NbTriangles();
+    for (int i = 1; i <= nbTriangles; ++i) {
+        Poly_Triangle tri = triangulation->Triangle(i);
+        int n1, n2, n3;
+        tri.Get(n1, n2, n3);
+        gp_Pnt p1 = triangulation->Node(n1).Transformed(transform);
+        gp_Pnt p2 = triangulation->Node(n2).Transformed(transform);
+        gp_Pnt p3 = triangulation->Node(n3).Transformed(transform);
+        gp_Vec v12(p1, p2);
+        gp_Vec v13(p1, p3);
+        gp_Vec cross = v12.Crossed(v13);
+        if (cross.Magnitude() > Precision::Confusion()) {
+            normalVec = cross.Normalized();
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        normalVec = gp_Vec(0.0, 0.0, 1.0);
+    }
+    if (reversed) {
+        normalVec.Reverse();
+    }
+
+    const int nbNodes = triangulation->NbNodes();
+    for (int i = 0; i < nbNodes; ++i) {
+        normals.push_back(normalVec.X());
+        normals.push_back(normalVec.Y());
+        normals.push_back(normalVec.Z());
+    }
+}
 
 // ============================================================================
 // Part Name Counter - 用于无效名称的回退命名
@@ -710,7 +780,8 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
     TopoDS_Shape shape = shapeOpt.value();
 
     try {
-        BRepMesh_IncrementalMesh mesher(shape, linearDeflection, Standard_False, angularDeflection);
+        const double resolvedLinearDeflection = resolveLinearDeflection(shape, linearDeflection);
+        BRepMesh_IncrementalMesh mesher(shape, resolvedLinearDeflection, Standard_False, angularDeflection);
         mesher.Perform();
 
         if (!mesher.IsDone()) {
@@ -749,6 +820,10 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
                 vertices.push_back(p.Z());
             }
 
+            if (!triangulation->HasNormals()) {
+                BRepLib_ToolTriangulatedShape::ComputeNormals(face, triangulation);
+            }
+
             if (triangulation->HasNormals()) {
                 for (int i = 1; i <= nbNodes; ++i) {
                     gp_Dir n = triangulation->Normal(i);
@@ -763,11 +838,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
                     }
                 }
             } else {
-                for (int i = 1; i <= nbNodes; ++i) {
-                    normals.push_back(0.0);
-                    normals.push_back(0.0);
-                    normals.push_back(1.0);
-                }
+                appendFallbackNormals(triangulation, transform, reversed, normals);
             }
 
             int nbTriangles = triangulation->NbTriangles();
@@ -865,7 +936,8 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
 
     try {
         // Generate mesh
-        BRepMesh_IncrementalMesh mesher(shape, linearDeflection, Standard_False, angularDeflection);
+        const double resolvedLinearDeflection = resolveLinearDeflection(shape, linearDeflection);
+        BRepMesh_IncrementalMesh mesher(shape, resolvedLinearDeflection, Standard_False, angularDeflection);
         mesher.Perform();
 
         if (!mesher.IsDone()) {
@@ -899,6 +971,10 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
             }
 
             // Get normals if available
+            if (!triangulation->HasNormals()) {
+                BRepLib_ToolTriangulatedShape::ComputeNormals(face, triangulation);
+            }
+
             if (triangulation->HasNormals()) {
                 for (int i = 1; i <= nbNodes; ++i) {
                     gp_Dir n = triangulation->Normal(i);
@@ -913,12 +989,7 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
                     }
                 }
             } else {
-                // Generate flat normals
-                for (int i = 1; i <= nbNodes; ++i) {
-                    normals.push_back(0.0);
-                    normals.push_back(0.0);
-                    normals.push_back(1.0);
-                }
+                appendFallbackNormals(triangulation, transform, reversed, normals);
             }
 
             // Get triangles
@@ -974,7 +1045,7 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
 
 // Mesh with default parameters
 std::string meshShapeDefault(const std::string& id) {
-    return meshShape(id, 0.1, 0.5);  // Default: 0.1mm linear, 0.5 rad angular
+    return meshShape(id, 0.0005, 0.2);  // Default: adaptive sag 0.0005, 0.2 rad angular
 }
 
 // ============================================================================
