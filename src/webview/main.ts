@@ -16,6 +16,7 @@ import {
     type RenderConfigState,
     type VisualPreset
 } from './renderConfig';
+import { invokeViewerMethod } from './viewerCapabilities';
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -74,16 +75,6 @@ const explodeDataMap: Map<string, ExplodeData> = new Map();
 
 let renderConfig: RenderConfigState = loadRenderConfigState();
 
-interface ViewerCapabilityMethods {
-    setVisualPreset: (preset: VisualPreset) => void;
-    setMaterialMode: (mode: MaterialMode) => void;
-    setPostProcessingEnabled: (enabled: boolean) => void;
-    setOutlineEnabled: (enabled: boolean) => void;
-    setEdgeLayerVisible: (visible: boolean) => void;
-    setEdgesVisible: (visible: boolean) => void;
-    setEdgeVisibility: (visible: boolean) => void;
-}
-
 function loadRenderConfigState(): RenderConfigState {
     try {
         const state = vscode.getState() as { renderConfig?: Partial<RenderConfigState> } | undefined;
@@ -112,36 +103,19 @@ function saveRenderConfigState(): void {
     });
 }
 
-function invokeViewerMethod(methodNames: Array<keyof ViewerCapabilityMethods>, ...args: unknown[]): boolean {
-    if (!viewer) {
-        return false;
-    }
-
-    const target = viewer as unknown as Record<string, unknown>;
-    for (const methodName of methodNames) {
-        const method = target[methodName as string];
-        if (typeof method === 'function') {
-            (method as (...fnArgs: unknown[]) => void)(...args);
-            return true;
-        }
-    }
-
-    return false;
-}
-
 function applyRenderConfigToViewer(): void {
     const config = normalizeRenderConfig(renderConfig);
     renderConfig = config;
 
-    const presetApplied = invokeViewerMethod(['setVisualPreset'], config.visualPreset);
-    const materialApplied = invokeViewerMethod(['setMaterialMode'], config.materialMode);
+    const presetApplied = invokeViewerMethod(viewer, ['setVisualPreset'], config.visualPreset);
+    const materialApplied = invokeViewerMethod(viewer, ['setMaterialMode'], config.materialMode);
     const postApplied =
-        invokeViewerMethod(['setPostProcessingEnabled'], config.postProcessing)
-        || invokeViewerMethod(['setOutlineEnabled'], config.postProcessing);
+        invokeViewerMethod(viewer, ['setPostProcessingEnabled'], config.postProcessing)
+        || invokeViewerMethod(viewer, ['setOutlineEnabled'], config.postProcessing);
     const edgeApplied =
-        invokeViewerMethod(['setEdgeLayerVisible'], config.edgeLayerVisible)
-        || invokeViewerMethod(['setEdgesVisible'], config.edgeLayerVisible)
-        || invokeViewerMethod(['setEdgeVisibility'], config.edgeLayerVisible);
+        invokeViewerMethod(viewer, ['setEdgeLayerVisible'], config.edgeLayerVisible)
+        || invokeViewerMethod(viewer, ['setEdgesVisible'], config.edgeLayerVisible)
+        || invokeViewerMethod(viewer, ['setEdgeVisibility'], config.edgeLayerVisible);
 
     if (!presetApplied || !materialApplied || !postApplied || !edgeApplied) {
         const missing: string[] = [];
