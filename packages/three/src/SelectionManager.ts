@@ -27,9 +27,11 @@ export class SelectionManager {
     private selectedIds: Set<string> = new Set();
     private hoveredId: string | null = null;
 
-    private originalMaterials: Map<string, THREE.Material | THREE.Material[]> = new Map();
+    private originalMaterials: Map<string, Map<string, THREE.Material | THREE.Material[]>> = new Map();
     private highlightMaterial: THREE.MeshPhongMaterial;
     private hoverMaterial: THREE.MeshPhongMaterial;
+    private highlightLineMaterial: THREE.LineBasicMaterial;
+    private hoverLineMaterial: THREE.LineBasicMaterial;
 
     private callbacks: SelectionCallback[] = [];
     private enabled: boolean = true;
@@ -57,7 +59,8 @@ export class SelectionManager {
             transparent: true,
             opacity: options.highlightOpacity ?? 0.32,
             depthWrite: false,
-            side: THREE.FrontSide
+            depthTest: false,
+            side: THREE.DoubleSide
         });
 
         // 悬停材质
@@ -68,7 +71,26 @@ export class SelectionManager {
             transparent: true,
             opacity: 0.22,
             depthWrite: false,
-            side: THREE.FrontSide
+            depthTest: false,
+            side: THREE.DoubleSide
+        });
+
+        this.highlightLineMaterial = new THREE.LineBasicMaterial({
+            color: options.highlightColor ?? 0x58a6ff,
+            transparent: true,
+            opacity: 0.95,
+            depthWrite: false,
+            depthTest: false,
+            toneMapped: false
+        });
+
+        this.hoverLineMaterial = new THREE.LineBasicMaterial({
+            color: 0x87c8ff,
+            transparent: true,
+            opacity: 0.75,
+            depthWrite: false,
+            depthTest: false,
+            toneMapped: false
         });
 
         this.onClickHandler = this.onClick.bind(this);
@@ -168,12 +190,22 @@ export class SelectionManager {
         const object = this.selectableObjects.get(id);
         if (!object) return;
 
+        const cachedMaterials = this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
+        if (!this.originalMaterials.has(id)) {
+            this.originalMaterials.set(id, cachedMaterials);
+        }
+
         object.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                if (!this.originalMaterials.has(id)) {
-                    this.originalMaterials.set(id, child.material);
+            if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+                if (!cachedMaterials.has(child.uuid)) {
+                    cachedMaterials.set(child.uuid, child.material);
                 }
-                child.material = this.highlightMaterial;
+
+                if (child instanceof THREE.Mesh) {
+                    child.material = this.highlightMaterial;
+                } else {
+                    child.material = this.highlightLineMaterial;
+                }
             }
         });
     }
@@ -182,24 +214,37 @@ export class SelectionManager {
         const object = this.selectableObjects.get(id);
         if (!object) return;
 
+        const cachedMaterials = this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
+        if (!this.originalMaterials.has(id)) {
+            this.originalMaterials.set(id, cachedMaterials);
+        }
+
         object.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                if (!this.originalMaterials.has(id)) {
-                    this.originalMaterials.set(id, child.material);
+            if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+                if (!cachedMaterials.has(child.uuid)) {
+                    cachedMaterials.set(child.uuid, child.material);
                 }
-                child.material = this.hoverMaterial;
+
+                if (child instanceof THREE.Mesh) {
+                    child.material = this.hoverMaterial;
+                } else {
+                    child.material = this.hoverLineMaterial;
+                }
             }
         });
     }
 
     private restoreMaterial(id: string): void {
         const object = this.selectableObjects.get(id);
-        const originalMaterial = this.originalMaterials.get(id);
-        if (!object || !originalMaterial) return;
+        const originalMaterials = this.originalMaterials.get(id);
+        if (!object || !originalMaterials) return;
 
         object.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                child.material = originalMaterial;
+            if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+                const originalMaterial = originalMaterials.get(child.uuid);
+                if (originalMaterial) {
+                    child.material = originalMaterial;
+                }
             }
         });
         this.originalMaterials.delete(id);
@@ -301,6 +346,8 @@ export class SelectionManager {
         this.domElement.removeEventListener('mousemove', this.onMouseMoveHandler);
         this.highlightMaterial.dispose();
         this.hoverMaterial.dispose();
+        this.highlightLineMaterial.dispose();
+        this.hoverLineMaterial.dispose();
         this.selectableObjects.clear();
         this.selectedIds.clear();
         this.originalMaterials.clear();

@@ -6,3 +6,4 @@ dist
 packages/geo/cpp/build/
 .VSCodeCounter/
 nul
+ref/
