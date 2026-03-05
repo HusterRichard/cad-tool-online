@@ -5,6 +5,17 @@ import { ThreeViewer } from '@cadtool-online/three';
 import { OcctWrapper, type StepReadResult } from '@cadtool-online/geo';
 import type { EdgeData, MeshData } from '@cadtool-online/core';
 import { markerCreator, type MbsMarker } from '@cadtool-online/core';
+import {
+    DEFAULT_RENDER_CONFIG,
+    isMaterialMode,
+    isPrecisionPreset,
+    isVisualPreset,
+    normalizeRenderConfig,
+    type MaterialMode,
+    type PrecisionPreset,
+    type RenderConfigState,
+    type VisualPreset
+} from './renderConfig';
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -61,26 +72,6 @@ interface ExplodeData {
 }
 const explodeDataMap: Map<string, ExplodeData> = new Map();
 
-type MaterialMode = 'matcap' | 'pbr' | 'flat' | 'phong';
-type VisualPreset = 'cad' | 'cinematic';
-type PrecisionPreset = 'coarse' | 'balanced' | 'fine';
-
-interface RenderConfigState {
-    visualPreset: VisualPreset;
-    materialMode: MaterialMode;
-    postProcessing: boolean;
-    edgeLayerVisible: boolean;
-    precisionPreset: PrecisionPreset;
-}
-
-const DEFAULT_RENDER_CONFIG: RenderConfigState = {
-    visualPreset: 'cad',
-    materialMode: 'phong',
-    postProcessing: false,
-    edgeLayerVisible: true,
-    precisionPreset: 'balanced'
-};
-
 let renderConfig: RenderConfigState = loadRenderConfigState();
 
 interface ViewerCapabilityMethods {
@@ -119,32 +110,6 @@ function saveRenderConfigState(): void {
         ...existingState,
         renderConfig: currentConfig
     });
-}
-
-function normalizeRenderConfig(config: Partial<RenderConfigState> | null | undefined): RenderConfigState {
-    return {
-        visualPreset: isVisualPreset(config?.visualPreset) ? config.visualPreset : DEFAULT_RENDER_CONFIG.visualPreset,
-        materialMode: isMaterialMode(config?.materialMode) ? config.materialMode : DEFAULT_RENDER_CONFIG.materialMode,
-        postProcessing: typeof config?.postProcessing === 'boolean' ? config.postProcessing : DEFAULT_RENDER_CONFIG.postProcessing,
-        edgeLayerVisible: typeof config?.edgeLayerVisible === 'boolean'
-            ? config.edgeLayerVisible
-            : DEFAULT_RENDER_CONFIG.edgeLayerVisible,
-        precisionPreset: isPrecisionPreset(config?.precisionPreset)
-            ? config.precisionPreset
-            : DEFAULT_RENDER_CONFIG.precisionPreset
-    };
-}
-
-function isMaterialMode(value: unknown): value is MaterialMode {
-    return value === 'matcap' || value === 'pbr' || value === 'flat' || value === 'phong';
-}
-
-function isVisualPreset(value: unknown): value is VisualPreset {
-    return value === 'cad' || value === 'cinematic';
-}
-
-function isPrecisionPreset(value: unknown): value is PrecisionPreset {
-    return value === 'coarse' || value === 'balanced' || value === 'fine';
 }
 
 function invokeViewerMethod(methodNames: Array<keyof ViewerCapabilityMethods>, ...args: unknown[]): boolean {
