@@ -1,0 +1,14 @@
+{
+  "ruleId": "RIBBON_ACTION_ICON_COVERAGE",
+  "generatedAt": "2026-03-06T07:44:24.749Z",
+  "filePath": "C:\\11.gitlab\\CadToolOnline\\cadtoolonline.pen",
+  "summary": {
+    "groupCount": 402,
+    "actionCount": 1388,
+    "iconCount": 1388,
+    "missingGroupCount": 0,
+    "missingActionCount": 0,
+    "pass": true
+  },
+  "missingDetails": []
+}

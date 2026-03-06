@@ -1,0 +1,13 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" data-name="图层 1" id="图层_1">
+      <defs>
+        <linearGradient x2="33.26" x1="6.74" y1="22.66" y2="22.66" id="未命名的渐变_102" gradientUnits="userSpaceOnUse">
+          <stop offset="0.01" stop-color="#379e4e"/>
+          <stop offset="1" stop-color="#006837"/>
+        </linearGradient>
+        <linearGradient x2="29.29" x1="15" y1="13.95" y2="13.95" id="未命名的渐变_102-2" xlink:href="#未命名的渐变_102"/>
+      </defs>
+      <polygon points="26.92 29.85 6.74 29.85 13.08 15.48 33.26 15.48 26.92 29.85" style="fill:#d4ffec"/>
+      <path d="M31.73,16.48,26.27,28.85h-18l5.46-12.37h18m1.53-1H13.08L6.74,29.85H26.92l6.34-14.37Z" style="fill:url(#未命名的渐变_102)"/>
+      <circle cx="22.15" cy="13.95" r="7.14" style="fill:#d4ffec"/>
+      <path d="M22.15,7.81A6.14,6.14,0,1,1,16,14a6.15,6.15,0,0,1,6.15-6.14m0-1A7.14,7.14,0,1,0,29.29,14a7.15,7.15,0,0,0-7.14-7.14Z" style="fill:url(#未命名的渐变_102-2)"/>
+    </svg>

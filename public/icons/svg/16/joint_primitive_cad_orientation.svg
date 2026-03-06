@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="2.37" y2="19.59" y1="10.5" gradientUnits="userSpaceOnUse" x2="7.62" id="未命名的渐变_126">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x1="7.91" y2="8.26" y1="5.43" x2="18.47" id="未命名的渐变_126-2" xlink:href="#未命名的渐变_126"/>
+      </defs>
+      <rect y="11.19" height="7.7" x="1.14" style="fill:#d4edff" rx="0.04" width="7.7"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M7.85,12.19V17.9H2.14V12.19H7.85m1-1H1.19a0,0,0,0,0-.05.05v7.61a0,0,0,0,0,.05,0H8.8a0,0,0,0,0,0,0V11.24a0,0,0,0,0,0-.05Z"/>
+      <rect y="2.83" height="8.03" transform="translate(-0.97 11.33) rotate(-45)" x="9.17" style="fill:#d4edff" rx="0.04" width="8.03"/>
+      <path style="fill:url(#未命名的渐变_126-2)" d="M13.19,2.58l4.26,4.26-4.26,4.27L8.92,6.84l4.27-4.26m0-1.4h0L7.54,6.81s0,.05,0,.06l5.62,5.62h.06l5.62-5.62a.06.06,0,0,0,0-.06L13.22,1.19Z"/>
+    </svg>

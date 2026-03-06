@@ -1,0 +1,12 @@
+<svg id="图层_1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient x2="16.36" id="未命名的渐变_126" gradientUnits="userSpaceOnUse" x1="3.63" y2="16.37" y1="3.64">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x2="11.57" id="未命名的渐变_126-2" x1="5.55" y2="13.06" y1="7.04" xlink:href="#未命名的渐变_126"/>
+      </defs>
+      <circle cy="10" cx="10" r="9" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M10,2a8,8,0,1,1-8,8,8,8,0,0,1,8-8m0-1a9,9,0,1,0,9,9,9,9,0,0,0-9-9Z"/>
+      <polygon points="14.58 10.05 7.24 5.35 7.24 14.76 14.58 10.05" style="fill:url(#未命名的渐变_126-2)"/>
+    </svg>

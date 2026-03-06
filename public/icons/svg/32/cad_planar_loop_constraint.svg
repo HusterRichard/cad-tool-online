@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="10.04" y2="19.24" y1="26.34" gradientUnits="userSpaceOnUse" x2="18.34" id="未命名的渐变_72">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="31.87" y2="19.24" y1="26.34" gradientUnits="userSpaceOnUse" x2="23.57" id="未命名的渐变_126">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x1="14.43" y2="17.57" y1="17.57" x2="27.36" id="未命名的渐变_126-2" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x1="16.74" y2="17.57" y1="17.57" x2="25.05" id="未命名的渐变_126-4" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x1="17.54" y2="27.51" y1="14.05" gradientUnits="userSpaceOnUse" x2="25.31" id="未命名的渐变_178">
+          <stop offset="0.01" stop-color="#ff5559"/>
+          <stop offset="1" stop-color="#aa001c"/>
+        </linearGradient>
+      </defs>
+      <rect y="19.67" height="6.24" transform="translate(-11.41 14.69) rotate(-40.52)" x="8.73" style="fill:#fff" width="10.93"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M16.2,18.28,19,21.5l-6.78,5.8L9.42,24.08l6.78-5.8m.12-1.41L8,24l4.05,4.74,8.31-7.09-4.05-4.75Z"/>
+      <rect y="17.33" height="10.93" transform="translate(-7.62 29.06) rotate(-49.48)" x="24.72" style="fill:#d4edff" width="6"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M25.63,18.37l6.78,5.8-2.6,3L23,21.41l2.6-3M25.52,17l-3.9,4.56,8.3,7.1,3.9-4.56L25.52,17Z"/>
+      <circle r="6.46" cx="20.89" cy="17.57" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-2)" d="M20.89,12.11a5.47,5.47,0,1,1-5.46,5.46,5.47,5.47,0,0,1,5.46-5.46m0-1a6.47,6.47,0,1,0,6.47,6.46,6.46,6.46,0,0,0-6.47-6.46Z"/>
+      <circle r="6.46" cx="20.89" cy="17.57" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-2)" d="M20.89,12.11a5.47,5.47,0,1,1-5.46,5.46,5.47,5.47,0,0,1,5.46-5.46m0-1a6.47,6.47,0,1,0,6.47,6.46,6.46,6.46,0,0,0-6.47-6.46Z"/>
+      <circle r="4.16" cx="20.89" cy="17.57" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-4)" d="M20.89,14.42a3.16,3.16,0,1,1-3.15,3.15,3.16,3.16,0,0,1,3.15-3.15m0-1a4.16,4.16,0,1,0,4.16,4.15,4.15,4.15,0,0,0-4.16-4.15Z"/>
+      <polyline points="10.3 31.16 15.81 16.08 25.73 26.24 32.01 9.45" style="fill:none;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_178)"/>
+    </svg>

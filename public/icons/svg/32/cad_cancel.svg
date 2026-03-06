@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="7.85" y2="20.3" y1="20.3" gradientUnits="userSpaceOnUse" x2="22.85" id="未命名的渐变_22">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.9" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="15.85" y2="20.3" y1="20.3" gradientUnits="userSpaceOnUse" x2="33.99" id="未命名的渐变_178">
+          <stop offset="0.01" stop-color="#ff5559"/>
+          <stop offset="1" stop-color="#aa001c"/>
+        </linearGradient>
+      </defs>
+      <rect y="7.3" height="26" x="7.85" style="fill:#fff" rx="2" width="15"/>
+      <path style="fill:url(#未命名的渐变_22)" d="M20.85,8.3a1,1,0,0,1,1,1v22a1,1,0,0,1-1,1h-11a1,1,0,0,1-1-1V9.3a1,1,0,0,1,1-1h11m0-1h-11a2,2,0,0,0-2,2v22a2,2,0,0,0,2,2h11a2,2,0,0,0,2-2V9.3a2,2,0,0,0-2-2Z"/>
+      <polygon points="33.99 20.3 24.85 13.3 24.85 17.3 15.85 17.3 15.85 23.3 24.85 23.3 24.85 27.3 33.99 20.3" style="fill:#fcc5cd"/>
+      <path style="fill:url(#未命名的渐变_178)" d="M25.85,15.33l6.49,5-6.49,5v-3h-9v-4h9v-3m-1-2v4h-9v6h9v4l9.14-7-9.14-7Z"/>
+    </svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="19.16" y2="28.28" y1="22.54" gradientUnits="userSpaceOnUse" x2="22.47" id="未命名的渐变_72">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="1335.52" y2="5090.34" y1="2537.26" x2="2809.54" id="未命名的渐变_72-2" xlink:href="#未命名的渐变_72" gradientTransform="translate(-5560.88 -1585.16) rotate(-45)"/>
+        <linearGradient x1="8.58" y2="35.72" y1="29.16" x2="33.04" id="未命名的渐变_72-3" xlink:href="#未命名的渐变_72"/>
+        <linearGradient x1="13.94" y2="13.86" y1="13.86" gradientUnits="userSpaceOnUse" x2="26.22" id="未命名的渐变_89">
+          <stop offset="0.01" stop-color="#d4ffec"/>
+          <stop offset="1" stop-color="#a1ddaa"/>
+        </linearGradient>
+        <linearGradient x1="16.57" y2="19.97" y1="8.13" gradientUnits="userSpaceOnUse" x2="23.4" id="未命名的渐变_102">
+          <stop offset="0.01" stop-color="#379e4e"/>
+          <stop offset="1" stop-color="#006837"/>
+        </linearGradient>
+      </defs>
+      <line x1="20.81" y2="28.65" y1="22.17" x2="20.81" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_72)"/>
+      <polyline points="25.43 24.75 20.81 29.37 16.19 24.75" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_72-2)"/>
+      <line x1="7.83" y2="32.44" y1="32.44" x2="33.79" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-3)"/>
+      <circle r="6.14" cx="20.08" cy="13.86" style="fill:url(#未命名的渐变_89)"/>
+      <path style="fill:none;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_102)" d="M26,12.05a6.34,6.34,0,1,0,.32,2h-5.5"/>
+    </svg>

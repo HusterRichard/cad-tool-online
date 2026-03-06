@@ -1,0 +1,18 @@
+<svg data-name="图层 1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient cx="7.92" gradientUnits="userSpaceOnUse" cy="7.7" r="6.37" id="未命名的渐变_47">
+          <stop stop-color="#f2f2f2" offset="0"/>
+          <stop stop-color="#b3b3b3" offset="0.92"/>
+        </radialGradient>
+        <linearGradient gradientUnits="userSpaceOnUse" y1="7.7" x1="1.56" x2="14.29" y2="7.7" id="未命名的渐变_72">
+          <stop stop-color="#666" offset="0.12"/>
+          <stop stop-color="#333" offset="0.56"/>
+        </linearGradient>
+        <radialGradient cx="14.94" xlink:href="#未命名的渐变_47" cy="14.91" r="3.71" id="未命名的渐变_47-2"/>
+        <linearGradient xlink:href="#未命名的渐变_72" y1="14.91" x1="11.23" x2="18.65" y2="14.91" id="未命名的渐变_72-2"/>
+      </defs>
+      <circle style="fill:url(#未命名的渐变_47)" cx="7.92" cy="7.7" r="6.37"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M7.92,2.34A5.37,5.37,0,1,1,2.56,7.7,5.38,5.38,0,0,1,7.92,2.34m0-1A6.37,6.37,0,1,0,14.29,7.7,6.36,6.36,0,0,0,7.92,1.34Z"/>
+      <circle style="fill:url(#未命名的渐变_47-2)" cx="14.94" cy="14.91" r="3.71"/>
+      <path style="fill:url(#未命名的渐变_72-2)" d="M14.94,12.2a2.71,2.71,0,1,1-2.71,2.71,2.71,2.71,0,0,1,2.71-2.71m0-1a3.71,3.71,0,1,0,3.71,3.71,3.71,3.71,0,0,0-3.71-3.71Z"/>
+    </svg>

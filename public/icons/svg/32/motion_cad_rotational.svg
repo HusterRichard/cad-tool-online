@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="10.03" y2="22.8" y1="29.91" gradientUnits="userSpaceOnUse" x2="18.34" id="未命名的渐变_72">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="31.88" y2="22.8" y1="29.91" gradientUnits="userSpaceOnUse" x2="23.57" id="未命名的渐变_63">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+        <linearGradient x1="14.42" y2="21.13" y1="21.13" gradientUnits="userSpaceOnUse" x2="27.36" id="未命名的渐变_126">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x1="14.42" y2="21.13" y1="21.13" x2="27.36" id="未命名的渐变_63-2" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x1="16.73" y2="21.13" y1="21.13" x2="25.05" id="未命名的渐变_63-3" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x1="8.64" y2="14.34" y1="14.34" gradientUnits="userSpaceOnUse" x2="33.19" id="未命名的渐变_178">
+          <stop offset="0.01" stop-color="#ff5559"/>
+          <stop offset="1" stop-color="#aa001c"/>
+        </linearGradient>
+      </defs>
+      <rect y="23.23" height="6.25" transform="translate(-13.72 15.54) rotate(-40.52)" x="8.72" style="fill:#fff" width="10.93"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M16.2,21.84,19,25.07l-6.79,5.8L9.41,27.64l6.79-5.8m.11-1.41L8,27.53l4.06,4.75,8.31-7.1-4.06-4.75Z"/>
+      <rect y="20.89" height="10.93" transform="translate(-10.32 30.31) rotate(-49.48)" x="24.72" style="fill:#fcdb88" width="6"/>
+      <path style="fill:url(#未命名的渐变_63)" d="M25.63,21.93l6.79,5.8-2.6,3.05L23,25l2.6-3m-.11-1.41-3.9,4.56,8.31,7.11,3.9-4.57-8.31-7.1Z"/>
+      <circle r="6.47" cx="20.89" cy="21.13" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M20.89,15.66a5.47,5.47,0,1,1-5.47,5.47,5.48,5.48,0,0,1,5.47-5.47m0-1a6.47,6.47,0,1,0,6.47,6.47,6.47,6.47,0,0,0-6.47-6.47Z"/>
+      <circle r="6.47" cx="20.89" cy="21.13" style="fill:#fcdb88"/>
+      <path style="fill:url(#未命名的渐变_63-2)" d="M20.89,15.66a5.47,5.47,0,1,1-5.47,5.47,5.48,5.48,0,0,1,5.47-5.47m0-1a6.47,6.47,0,1,0,6.47,6.47,6.47,6.47,0,0,0-6.47-6.47Z"/>
+      <circle r="4.16" cx="20.89" cy="21.13" style="fill:#fcdb88"/>
+      <path style="fill:url(#未命名的渐变_63-3)" d="M20.89,18a3.16,3.16,0,1,1-3.16,3.16A3.16,3.16,0,0,1,20.89,18m0-1a4.16,4.16,0,1,0,4.16,4.16A4.17,4.17,0,0,0,20.89,17Z"/>
+      <path style="fill:#fcc5cd;stroke-linecap:round;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_178)" d="M32.69,17.37a.86.86,0,0,0-1.22,0l-.12.12a10.3,10.3,0,0,0-20.59.28l-.4-.4a.86.86,0,0,0-1.21,1.21l2.32,2.33,2.32-2.33a.86.86,0,0,0-1.21-1.21l-.05.05a8.56,8.56,0,0,1,17.11.34l-.39-.39A.86.86,0,0,0,28,18.58l2.32,2.33,2.33-2.33A.86.86,0,0,0,32.69,17.37Z"/>
+    </svg>

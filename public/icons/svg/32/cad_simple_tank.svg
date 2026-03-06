@@ -1,0 +1,46 @@
+<svg id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient cy="26.22" gradientTransform="matrix(-0.1, 0, 0, 2.98, -0.9, -53.41)" id="未命名的渐变_23" gradientUnits="userSpaceOnUse" cx="-128.48" r="4.69">
+          <stop offset="0" stop-color="#aa8900"/>
+          <stop offset="1" stop-color="#ffd555"/>
+        </radialGradient>
+        <radialGradient cy="26.18" gradientTransform="translate(51.77 -48.99) scale(0.1 2.82)" id="未命名的渐变_23-2" cx="-231.72" r="4.69" xlink:href="#未命名的渐变_23"/>
+        <radialGradient cy="22.05" gradientTransform="matrix(0.33, 0, 0, -2.99, 4.46, 89.15)" id="未命名的渐变_11" gradientUnits="userSpaceOnUse" cx="16.52" r="12.89">
+          <stop offset="0" stop-color="#fbebca"/>
+          <stop offset="1" stop-color="#ffd555"/>
+        </radialGradient>
+        <radialGradient cy="22.15" gradientTransform="translate(59.15 89.15) rotate(180) scale(0.33 2.99)" id="未命名的渐变_11-2" cx="87.52" r="12.89" xlink:href="#未命名的渐变_11"/>
+        <radialGradient cy="23.78" gradientTransform="translate(0 7.79) scale(1 0.77)" id="未命名的渐变_154" gradientUnits="userSpaceOnUse" cx="19.99" r="12.38">
+          <stop offset="0" stop-color="#fbebca"/>
+          <stop offset="0.57" stop-color="#ffd555"/>
+        </radialGradient>
+        <radialGradient cy="23.18" gradientTransform="matrix(1, 0, 0, -2.99, 0, 89.15)" id="未命名的渐变_11-3" cx="20" r="9.02" xlink:href="#未命名的渐变_11"/>
+        <radialGradient cy="27.01" gradientTransform="translate(57.76 -39.12) scale(0.38 2.47)" id="未命名的渐变_154-2" cx="-129.05" r="4.99" xlink:href="#未命名的渐变_154"/>
+        <radialGradient cy="27.01" gradientTransform="translate(57.76 -39.12) scale(0.38 2.47)" id="未命名的渐变_154-3" cx="-71.56" r="4.99" xlink:href="#未命名的渐变_154"/>
+      </defs>
+      <polygon points="11.78 29.41 13.13 24.7 13.13 20.26 11.78 24.97 11.78 29.41" style="fill:url(#未命名的渐变_23)"/>
+      <polygon points="28.36 29.24 27.01 24.79 27.01 20.58 28.36 25.04 28.36 29.24" style="fill:url(#未命名的渐变_23-2)"/>
+      <polygon points="13.33 20.2 10.32 20.2 6.61 26.12 11.29 26.12 13.33 20.2" style="fill:url(#未命名的渐变_11)"/>
+      <polygon points="26.62 19.91 29.63 19.91 33.34 25.83 28.66 25.83 26.62 19.91" style="fill:url(#未命名的渐变_11-2)"/>
+      <line x2="15.74" x1="15.74" y2="16.83" style="fill:none;stroke:#0063b1;stroke-miterlimit:10;stroke-width:0.5px" y1="9.99"/>
+      <line x2="24.27" x1="24.27" y2="16.83" style="fill:none;stroke:#0063b1;stroke-miterlimit:10;stroke-width:0.5px" y1="9.99"/>
+      <path style="fill:#0063b1" d="M25.89,12.37l1.7,3.87v9.19l-1.7-7V12.37M25.39,10v8.53l2.7,11.08V16.14L25.39,10Z"/>
+      <path style="fill:#0063b1" d="M14.09,12.37v6.09l-1.7,7V16.24l1.7-3.87m.5-2.38-2.7,6.15V29.6l2.7-11.08V10Z"/>
+      <rect x="12.97" height="6.88" width="14.04" style="opacity:0.63;fill:url(#未命名的渐变_154)" y="22.72"/>
+      <polygon points="24.53 16.83 15.5 16.83 12.98 22.75 27.02 22.75 24.53 16.83" style="opacity:0.63;fill:url(#未命名的渐变_11-3)"/>
+      <rect x="6.49" height="3.68" width="5.29" style="opacity:0.63;fill:url(#未命名的渐变_154-2)" y="25.74"/>
+      <rect x="28.15" height="3.68" width="5.29" style="opacity:0.63;fill:url(#未命名的渐变_154-3)" y="25.74"/>
+      <path style="fill:#0063b1" d="M24.15,10.49l2.12,5.15H13.72l2.11-5.15h8.32m.34-.5h-9L13,16.14H27L24.49,10Z"/>
+      <path style="fill:#0063b1" d="M26.51,16.64V29.1h-13V16.64h13m.5-.5H13V29.6H27V16.14Z"/>
+      <path style="fill:#0063b1" d="M33,16.64V29.1H28.59V16.64H33m.5-.5H28.09V29.6h5.42V16.14Z"/>
+      <path style="fill:#0063b1" d="M11.41,16.64V29.1H7V16.64h4.42m.5-.5H6.49V29.6h5.42V16.14Z"/>
+      <path style="fill:#0063b1" d="M13.81,10.49l-2.23,5.15H7.38l3.1-5.15h3.33m.76-.5H10.2L6.49,16.14h5.42L14.57,10Z"/>
+      <path style="fill:#0063b1" d="M29.48,10.49l3.11,5.15h-4.2l-2.23-5.15h3.32m.28-.5H25.39l2.67,6.15h5.41L29.76,10Z"/>
+      <path style="fill:#0063b1" d="M31.81,27.23a.51.51,0,1,1-.51.51.51.51,0,0,1,.51-.51m0-.5a1,1,0,1,0,1,1,1,1,0,0,0-1-1Z"/>
+      <path style="fill:#fff" d="M11.38,8c-.38,0-.59-.16-.6-.21s.2-.2.6-.2.59.16.59.2S11.75,8,11.38,8Z"/>
+      <path style="fill:#0063b1" d="M11.38,7.34c-.47,0-.85.2-.85.45s.38.46.85.46.84-.21.84-.46-.38-.45-.84-.45Z"/>
+      <path style="fill:#fff" d="M11.38,12.59c-.4,0-.6-.17-.6-.21V8H12v4.36S11.77,12.59,11.38,12.59Z"/>
+      <path style="fill:#0063b1" d="M11.72,8.27v4a.79.79,0,0,1-.34.07.88.88,0,0,1-.35-.07v-4h.69m.5-.5H10.53v4.61c0,.26.38.46.85.46s.84-.2.84-.46V7.77Z"/>
+      <line x2="10.5" x1="10.5" y2="20.2" style="fill:none;stroke:#0063b1;stroke-miterlimit:10;stroke-width:0.5px" y1="10.3"/>
+      <line x2="29.43" x1="29.43" y2="19.91" style="fill:none;stroke:#0063b1;stroke-miterlimit:10;stroke-width:0.5px" y1="10.37"/>
+    </svg>

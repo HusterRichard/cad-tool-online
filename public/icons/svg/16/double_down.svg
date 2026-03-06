@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="-5828.58" y2="-1713" y1="-1713" gradientUnits="userSpaceOnUse" x2="-5820.64" id="未命名的渐变_72" gradientTransform="translate(2917.29 5340.03) rotate(45)">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="-5832.26" y2="-1716.68" y1="-1716.68" x2="-5824.32" id="未命名的渐变_72-2" xlink:href="#未命名的渐变_72"/>
+      </defs>
+      <polyline points="14.86 10.13 9.95 15.04 5.04 10.13" style="fill:none;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_72)"/>
+      <polyline points="14.86 4.93 9.95 9.84 5.04 4.93" style="fill:none;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-2)"/>
+    </svg>

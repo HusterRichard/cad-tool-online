@@ -1,0 +1,10 @@
+<svg viewBox="0 0 40 40" id="图层_1" xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient x1="21.01" id="未命名的渐变_63" gradientUnits="userSpaceOnUse" y2="33.18" y1="7.42" x2="21.01">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+      </defs>
+      <polygon style="fill:#fcdb88" points="34.03 20.3 8 7.42 8 33.18 34.03 20.3"/>
+      <path style="fill:url(#未命名的渐变_63)" d="M9,9,31.77,20.3,9,31.57V9M8,7.42V33.18L34,20.3,8,7.42Z"/>
+    </svg>

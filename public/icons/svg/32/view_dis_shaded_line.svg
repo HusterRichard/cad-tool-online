@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="7.82" y2="20.32" y1="20.32" gradientUnits="userSpaceOnUse" x2="33.92" id="未命名的渐变_22">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.9" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="23.53" y2="12.77" y1="12.77" x2="33.31" id="未命名的渐变_22-2" xlink:href="#未命名的渐变_22"/>
+        <linearGradient x1="8.78" y2="24.66" y1="24.66" x2="24.27" id="未命名的渐变_22-3" xlink:href="#未命名的渐变_22"/>
+      </defs>
+      <polygon points="24.25 17.42 33.92 7.75 33.92 23.22 24.25 32.89 24.25 17.42" style="fill:#fff"/>
+      <polygon points="8.3 16.94 17.97 7.27 33.44 7.27 23.77 16.94 8.3 16.94" style="fill:#fff"/>
+      <rect y="16.94" height="16.44" x="7.82" style="fill:#fff" width="16.44"/>
+      <path style="fill:url(#未命名的渐变_22)" d="M32.92,8.27V22.92l-9.45,9.45H8.82V17.72l9.45-9.45H32.92m1-1H17.86l-10,10V33.37H23.88l10-10V7.27Z"/>
+      <line x1="32.96" y2="17.31" y1="8.23" x2="23.88" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-2)"/>
+      <polyline points="8.78 17.42 23.77 17.42 23.77 32.41" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-3)"/>
+    </svg>

@@ -1,0 +1,29 @@
+<svg data-name="图层 1" xmlns:xlink="http://www.w3.org/1999/xlink" id="图层_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+      <defs>
+        <linearGradient x2="19.56" id="未命名的渐变_126" y1="0.58" gradientUnits="userSpaceOnUse" y2="18.25" x1="1.89">
+          <stop stop-color="#0384c5" offset="0.12"/>
+          <stop stop-color="#0063b1" offset="0.9"/>
+        </linearGradient>
+        <linearGradient x2="14.11" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-2" y1="11.9" y2="19.86" x1="6.16"/>
+        <linearGradient x2="15.72" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-3" y1="4.67" y2="4.67" x1="4.07"/>
+        <linearGradient x2="8.62" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-4" y1="16.8" y2="16.8" x1="7.62"/>
+        <linearGradient x2="19.11" id="未命名的渐变_72" y1="10.01" gradientUnits="userSpaceOnUse" y2="10.01" x1="5.49">
+          <stop stop-color="#666" offset="0.12"/>
+          <stop stop-color="#333" offset="0.56"/>
+        </linearGradient>
+        <linearGradient x2="17.4" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-2" y1="10.01" y2="10.01" x1="7.2"/>
+        <linearGradient x2="17.4" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-3" y1="10.01" y2="10.01" x1="7.2"/>
+      </defs>
+      <path d="M4,19H18.63a.48.48,0,0,0,.48-.49v-17A.47.47,0,0,0,18.63,1h-17a.47.47,0,0,0-.48.48V15.78a.52.52,0,0,0,.11.32l2.37,2.72A.46.46,0,0,0,4,19Z" style="fill:#d4edff"/>
+      <path d="M18.11,2V18H4.24l-2.08-2.4V2h16m.52-1h-17a.47.47,0,0,0-.48.48V15.78a.52.52,0,0,0,.11.32l2.37,2.72A.46.46,0,0,0,4,19H18.63a.48.48,0,0,0,.48-.49v-17A.47.47,0,0,0,18.63,1Z" style="fill:url(#未命名的渐变_126)"/>
+      <path d="M15,19H5.28v-5.8a1,1,0,0,1,1-1H14a1,1,0,0,1,1,1Z" style="fill:#fff"/>
+      <path d="M14,13.19V18H6.28v-4.8H14m0-1H6.28a1,1,0,0,0-1,1V19H15v-5.8a1,1,0,0,0-1-1Z" style="fill:url(#未命名的渐变_126-2)"/>
+      <path d="M14.72,8.31H5.07a1,1,0,0,1-1-1V1H15.72V7.31A1,1,0,0,1,14.72,8.31Z" style="fill:#fff"/>
+      <path d="M14.72,2V7.31H5.07V2h9.65m1-1H4.07V7.31a1,1,0,0,0,1,1h9.65a1,1,0,0,0,1-1V1Z" style="fill:url(#未命名的渐变_126-3)"/>
+      <line x2="8.12" y1="18.24" y2="15.36" x1="8.12" style="fill:none;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_126-4)"/>
+      <rect height="4.95" y="7.53" rx="0.78" width="13.62" style="fill:#f7f7f7" x="5.49"/>
+      <path d="M18.11,8.53v3H6.49v-3H18.11m.23-1H6.27a.78.78,0,0,0-.78.78v3.4a.77.77,0,0,0,.78.77H18.34a.76.76,0,0,0,.77-.77V8.31a.77.77,0,0,0-.77-.78Z" style="fill:url(#未命名的渐变_72)"/>
+      <line x2="7.7" y1="10.01" y2="10.01" x1="7.2" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-2)"/>
+      <line x2="16.39" y1="10.01" y2="10.01" x1="8.72" style="fill:none;stroke-miterlimit:10;stroke-dasharray:1.0222183465957642,1.0222183465957642;stroke:url(#未命名的渐变_72-3)"/>
+      <line x2="17.4" y1="10.01" y2="10.01" x1="16.9" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-3)"/>
+    </svg>

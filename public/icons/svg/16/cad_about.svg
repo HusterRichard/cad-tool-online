@@ -1,0 +1,17 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" viewBox="0 0 20 20" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient x1="3.68" x2="16.41" gradientUnits="userSpaceOnUse" id="未命名的渐变_99" y2="16.39" y1="3.66">
+          <stop offset="0.08" stop-color="#379e4e"/>
+          <stop offset="0.81" stop-color="#006837"/>
+        </linearGradient>
+        <linearGradient x1="8.88" x2="11.21" gradientUnits="userSpaceOnUse" id="未命名的渐变_102" y2="6.59" y1="4.26">
+          <stop offset="0.01" stop-color="#379e4e"/>
+          <stop offset="1" stop-color="#006837"/>
+        </linearGradient>
+        <linearGradient x1="8.52" x2="11.48" xlink:href="#未命名的渐变_102" id="未命名的渐变_102-2" y2="12.31" y1="12.31"/>
+      </defs>
+      <circle style="fill:#fff" r="9" cx="10.05" cy="10.03"/>
+      <path d="M10.05,2a8,8,0,1,1-8,8,8,8,0,0,1,8-8m0-1a9,9,0,1,0,9,9,9,9,0,0,0-9-9Z" style="fill:url(#未命名的渐变_99)"/>
+      <circle style="fill:#d4ffec;stroke-miterlimit:10;stroke:url(#未命名的渐变_102)" r="1.15" cx="10.05" cy="5.43"/>
+      <rect style="fill:#d4ffec;stroke-miterlimit:10;stroke:url(#未命名的渐变_102-2)" height="7.45" width="1.95" x="9.02" y="8.59"/>
+    </svg>

@@ -1,0 +1,23 @@
+<svg data-name="图层 1" viewBox="0 0 20 20" id="图层_1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient x2="9.34" gradientUnits="userSpaceOnUse" id="未命名的渐变_35" x1="2.15" y2="12.63" y1="12.63">
+          <stop stop-color="#ccc" offset="0.1"/>
+          <stop stop-color="#999" offset="0.95"/>
+        </linearGradient>
+        <linearGradient x2="17.68" gradientUnits="userSpaceOnUse" id="未命名的渐变_41" x1="10.49" y2="12.63" y1="12.63">
+          <stop stop-color="gray" offset="0.12"/>
+          <stop stop-color="#4d4d4d" offset="0.9"/>
+        </linearGradient>
+        <linearGradient x2="16.27" id="未命名的渐变_35-2" x1="4.52" y2="0.82" xlink:href="#未命名的渐变_35" y1="9.19"/>
+        <linearGradient x2="-311.84" gradientUnits="userSpaceOnUse" id="未命名的渐变_22" x1="-319.7" y2="-334.23" gradientTransform="translate(415.7 415.94) scale(1.27 1.2)" y1="-334.23">
+          <stop stop-color="#666" offset="0.12"/>
+          <stop stop-color="#333" offset="0.9"/>
+        </linearGradient>
+      </defs>
+      <polygon points="9.34 18.96 2.15 14.65 2.15 6.3 9.34 10.61 9.34 18.96" style="fill:url(#未命名的渐变_35)"/>
+      <polygon points="10.49 18.96 17.68 14.65 17.68 6.3 10.49 10.61 10.49 18.96" style="fill:url(#未命名的渐变_41)"/>
+      <polygon points="9.88 9.7 2.67 5.37 9.88 1.04 17.09 5.37 9.88 9.7" style="fill:url(#未命名的渐变_35-2)"/>
+      <rect height="1.37" transform="translate(14.65 -5.55) rotate(45)" y="14.22" style="fill:#e5e5e5;stroke-linecap:round;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_22)" width="9.35" x="9.35"/>
+      <polygon points="7.95 11.69 5.08 11.68 6.83 9.41 5.96 6.68 8.65 7.65 10.97 5.97 10.89 8.83 13.21 10.52 10.46 11.33 9.56 14.05 7.95 11.69" style="fill:#e8e8e8"/>
+      <path d="M10.45,7l0,1.59v.52l.42.31,1.28.94-1.52.45-.51.15-.16.49-.5,1.51-.89-1.31-.3-.43H6.1l1-1.26.32-.41L7.23,9,6.74,7.5,8.24,8l.49.18.43-.31L10.45,7M11.5,5,8.57,7.09,5.17,5.87,6.28,9.31,4.07,12.18H7.68l2,3,1.13-3.43,3.47-1L11.4,8.58,11.5,5Z" style="fill:#727272"/>
+    </svg>

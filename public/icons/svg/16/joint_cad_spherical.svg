@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="1.14" y2="10.03" y1="10.03" gradientUnits="userSpaceOnUse" x2="10" id="未命名的渐变_72">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="6.17" y2="10.03" y1="10.03" x2="14.6" id="未命名的渐变_72-2" xlink:href="#未命名的渐变_72"/>
+        <linearGradient x1="8.83" y2="10.05" y1="10.05" gradientUnits="userSpaceOnUse" x2="18.96" id="未命名的渐变_126">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+      </defs>
+      <path style="fill:#fff" d="M10,18.9A8.87,8.87,0,0,1,10,1.17Z"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M9,2.24V17.83A7.86,7.86,0,0,1,9,2.24m1-1.07A8.87,8.87,0,0,0,10,18.9V1.17Z"/>
+      <ellipse cx="10.38" cy="10.03" style="fill:#fff" ry="8.86" rx="4.21"/>
+      <path style="fill:url(#未命名的渐变_72-2)" d="M10.38,2.17c1.52,0,3.22,3.37,3.22,7.86s-1.7,7.87-3.22,7.87S7.17,14.53,7.17,10s1.7-7.86,3.21-7.86m0-1c-2.32,0-4.21,4-4.21,8.86s1.89,8.87,4.21,8.87,4.22-4,4.22-8.87-1.89-8.86-4.22-8.86Z"/>
+      <path style="fill:#d4edff" d="M12.63,3.73c-2.1,0-3.8,2.83-3.8,6.32s1.7,6.33,3.8,6.33a6.33,6.33,0,1,0,0-12.65Z"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M12.63,4.73a5.33,5.33,0,1,1,0,10.65c-1.32,0-2.8-2.19-2.8-5.33s1.48-5.32,2.8-5.32m0-1c-2.1,0-3.8,2.83-3.8,6.32s1.7,6.33,3.8,6.33a6.33,6.33,0,1,0,0-12.65Z"/>
+    </svg>

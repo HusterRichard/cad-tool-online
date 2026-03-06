@@ -1,0 +1,38 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" data-name="图层 1" id="图层_1">
+      <defs>
+        <linearGradient x2="9.28" x1="5.82" y1="7.63" y2="7.63" id="未命名的渐变_63" gradientUnits="userSpaceOnUse">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+        <linearGradient x2="4.64" x1="1.14" y1="2.91" y2="2.91" id="未命名的渐变_126" gradientUnits="userSpaceOnUse">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x2="14.27" x1="10.82" y1="7.63" y2="7.63" id="未命名的渐变_63-2" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x2="9.28" x1="5.82" y1="12.46" y2="12.46" id="未命名的渐变_63-3" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x2="14.27" x1="10.82" y1="12.46" y2="12.46" id="未命名的渐变_63-4" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x2="5.46" x1="1.28" y1="3.39" y2="3.39" id="未命名的渐变_126-2" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="-8.61" x1="-12.11" y1="-235.2" y2="-235.2" gradientTransform="translate(6.75 -218.11) rotate(180)" id="未命名的渐变_126-3" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="-7.8" x1="-11.98" y1="-234.72" y2="-234.72" gradientTransform="translate(6.75 -218.11) rotate(180)" id="未命名的渐变_126-4" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="117.11" x1="113.61" y1="-98.62" y2="-98.62" gradientTransform="translate(-81.53 -112.47) rotate(90)" id="未命名的渐变_126-5" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="117.93" x1="113.75" y1="-98.14" y2="-98.14" gradientTransform="translate(-81.53 -112.47) rotate(90)" id="未命名的渐变_126-6" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="-121.08" x1="-124.58" y1="-133.66" y2="-133.66" gradientTransform="translate(136.58 -105.72) rotate(-90)" id="未命名的渐变_126-7" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="-120.26" x1="-124.45" y1="-133.19" y2="-133.19" gradientTransform="translate(136.58 -105.72) rotate(-90)" id="未命名的渐变_126-8" xlink:href="#未命名的渐变_126"/>
+      </defs>
+      <rect height="3.45" x="5.82" y="5.9" width="3.45" style="fill:#fcdb88"/>
+      <path d="M8.28,6.9V8.36H6.82V6.9H8.28m1-1H5.82V9.36H9.28V5.9Z" style="fill:url(#未命名的渐变_63)"/>
+      <polyline points="1.64 4.16 1.64 1.66 4.14 1.66" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126)"/>
+      <rect height="3.45" x="10.82" y="5.9" width="3.45" style="fill:#fcdb88"/>
+      <path d="M13.27,6.9V8.36H11.82V6.9h1.45m1-1H10.82V9.36h3.45V5.9Z" style="fill:url(#未命名的渐变_63-2)"/>
+      <rect height="3.45" x="5.82" y="10.74" width="3.45" style="fill:#fcdb88"/>
+      <path d="M8.28,11.74v1.45H6.82V11.74H8.28m1-1H5.82v3.45H9.28V10.74Z" style="fill:url(#未命名的渐变_63-3)"/>
+      <rect height="3.45" x="10.82" y="10.74" width="3.45" style="fill:#fcdb88"/>
+      <path d="M13.27,11.74v1.45H11.82V11.74h1.45m1-1H10.82v3.45h3.45V10.74Z" style="fill:url(#未命名的渐变_63-4)"/>
+      <line x2="1.78" x1="4.96" y1="4.98" y2="1.8" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-2)"/>
+      <polyline points="18.36 15.84 18.36 18.34 15.86 18.34" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-3)"/>
+      <line x2="18.22" x1="15.04" y1="15.02" y2="18.2" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-4)"/>
+      <polyline points="15.84 1.64 18.34 1.64 18.34 4.14" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-5)"/>
+      <line x2="18.2" x1="15.02" y1="4.96" y2="1.78" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-6)"/>
+      <polyline points="4.16 18.36 1.66 18.36 1.66 15.86" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-7)"/>
+      <line x2="1.8" x1="4.98" y1="15.04" y2="18.22" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-8)"/>
+    </svg>

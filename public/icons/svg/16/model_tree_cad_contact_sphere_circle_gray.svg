@@ -1,0 +1,23 @@
+<svg data-name="图层 1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient gradientUnits="userSpaceOnUse" y1="11.08" x1="1.56" x2="18.65" y2="11.08" id="未命名的渐变_72">
+          <stop stop-color="#666" offset="0.12"/>
+          <stop stop-color="#333" offset="0.56"/>
+        </linearGradient>
+        <radialGradient cx="10.1" gradientUnits="userSpaceOnUse" cy="4.04" r="2.7" id="未命名的渐变_47">
+          <stop stop-color="#f2f2f2" offset="0"/>
+          <stop stop-color="#b3b3b3" offset="0.92"/>
+        </radialGradient>
+        <linearGradient xlink:href="#未命名的渐变_72" y1="4.04" x1="7.41" x2="12.8" y2="4.04" id="未命名的渐变_72-2"/>
+        <linearGradient xlink:href="#未命名的渐变_72" y1="10.83" x1="9.6" x2="10.6" y2="10.83" id="未命名的渐变_72-3"/>
+        <linearGradient xlink:href="#未命名的渐变_72" y1="8.61" x1="9.6" x2="10.6" y2="8.61" id="未命名的渐变_72-4"/>
+        <linearGradient xlink:href="#未命名的渐变_72" y1="6.96" x1="9.6" x2="10.6" y2="6.96" id="未命名的渐变_72-5"/>
+      </defs>
+      <ellipse ry="7.04" style="fill:#ededed" cx="10.1" cy="11.08" rx="8.55"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M10.1,5c4.16,0,7.55,2.71,7.55,6s-3.39,6-7.55,6-7.54-2.7-7.54-6S5.94,5,10.1,5m0-1c-4.72,0-8.54,3.15-8.54,7s3.82,7,8.54,7,8.55-3.15,8.55-7S14.82,4,10.1,4Z"/>
+      <circle style="fill:url(#未命名的渐变_47)" cx="10.1" cy="4.04" r="2.7"/>
+      <path style="fill:url(#未命名的渐变_72-2)" d="M10.1,2.34A1.7,1.7,0,1,1,8.41,4a1.7,1.7,0,0,1,1.69-1.7m0-1A2.7,2.7,0,1,0,12.8,4a2.69,2.69,0,0,0-2.7-2.7Z"/>
+      <line style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-3)" y1="11.08" x1="10.1" x2="10.1" y2="10.58"/>
+      <line style="fill:none;stroke-miterlimit:10;stroke-dasharray:1.1205226182937622,1.1205226182937622;stroke:url(#未命名的渐变_72-4)" y1="9.46" x1="10.1" x2="10.1" y2="7.77"/>
+      <line style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-5)" y1="7.21" x1="10.1" x2="10.1" y2="6.71"/>
+    </svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="14.21" y2="27.17" y1="13.66" gradientUnits="userSpaceOnUse" x2="27.72" id="未命名的渐变_72">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="14" y2="27.38" y1="13.45" x2="27.93" id="未命名的渐变_72-3" xlink:href="#未命名的渐变_72"/>
+        <linearGradient x1="16.87" y2="20.42" y1="20.42" x2="25.06" id="未命名的渐变_72-4" xlink:href="#未命名的渐变_72"/>
+      </defs>
+      <line x1="8.16" y2="20.42" y1="20.42" x2="33.77" style="fill:#fff;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_72)"/>
+      <line x1="20.97" y2="33.22" y1="7.61" x2="20.97" style="fill:#fff;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_72)"/>
+      <circle r="9.85" cx="20.97" cy="20.42" style="fill:#fff"/>
+      <path style="fill:url(#未命名的渐变_72-3)" d="M21,11.57a8.85,8.85,0,1,1-8.85,8.85A8.86,8.86,0,0,1,21,11.57m0-1a9.85,9.85,0,1,0,9.85,9.85A9.85,9.85,0,0,0,21,10.57Z"/>
+      <path style="fill:url(#未命名的渐变_72-4)" d="M20.54,17.22C17,19.4,16.48,22.83,17.1,25.79c.55-2.49,2.09-4.18,4.82-5.35l.95,2.24,2.19-5.46L19.61,15l.93,2.18"/>
+    </svg>

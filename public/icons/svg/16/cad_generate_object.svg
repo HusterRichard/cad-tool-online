@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="1.2" y2="11.31" y1="11.31" gradientUnits="userSpaceOnUse" x2="14.94" id="未命名的渐变_126">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x1="1.2" y2="4.36" y1="4.36" x2="13.63" id="未命名的渐变_126-2" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x1="9.68" y2="11.12" y1="11.12" x2="18.85" id="未命名的渐变_126-3" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x1="9.7" y2="7.93" y1="7.93" x2="13.63" id="未命名的渐变_126-4" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x1="14.93" y2="14.62" y1="14.62" x2="18.86" id="未命名的渐变_126-5" xlink:href="#未命名的渐变_126"/>
+      </defs>
+      <polygon points="1.2 3.96 9.7 7.54 9.7 11.48 14.94 14.1 14.94 18.65 1.2 13.13 1.2 3.96" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M2.2,5.47,8.7,8.21V12.1l.56.27,4.68,2.34v2.46L2.2,12.46v-7M1.2,4v9.17l13.74,5.52V14.1L9.7,11.48V7.54L1.2,4Z"/>
+      <polygon points="4.93 1.18 13.63 4.4 9.7 7.54 1.2 3.96 4.93 1.18" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-2)" d="M5.1,2.3l6.53,2.42L9.54,6.39,3.2,3.72,5.1,2.3M4.93,1.17,1.2,4,9.7,7.54,13.63,4.4,4.93,1.17Z"/>
+      <polygon points="13.63 8.13 18.85 10.59 14.95 14.11 9.68 11.46 13.63 8.13" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-3)" d="M13.78,9.31l3.28,1.54-2.27,2.06-3.31-1.66,2.3-1.94m-.15-1.18-4,3.33L15,14.11l3.9-3.52L13.63,8.13Z"/>
+      <polygon points="13.63 4.39 13.63 8.13 9.7 11.48 9.7 7.46 13.63 4.39" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-4)" d="M12.63,6.44V7.67L10.7,9.31V8l1.93-1.51m1-2.05L9.7,7.46v4l3.93-3.35V4.39Z"/>
+      <polygon points="18.86 10.57 18.86 15.21 14.93 18.67 14.94 14.02 18.86 10.57" style="fill:#d4edff"/>
+      <path style="fill:url(#未命名的渐变_126-5)" d="M17.86,12.79v2l-1.93,1.69v-2l1.92-1.69m1-2.22L14.94,14v4.65l3.93-3.46V10.57Z"/>
+    </svg>

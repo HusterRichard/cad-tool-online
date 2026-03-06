@@ -1,0 +1,1274 @@
+[
+  {
+    "source": "cad_about.mwsvg",
+    "key": "cad_about",
+    "sizes": {
+      "16": "png/16/cad_about.png",
+      "32": "png/32/cad_about.png"
+    }
+  },
+  {
+    "source": "cad_accept.mwsvg",
+    "key": "cad_accept",
+    "sizes": {
+      "16": "png/16/cad_accept.png",
+      "32": "png/32/cad_accept.png"
+    }
+  },
+  {
+    "source": "cad_add.mwsvg",
+    "key": "cad_add",
+    "sizes": {
+      "16": "png/16/cad_add.png",
+      "32": "png/32/cad_add.png"
+    }
+  },
+  {
+    "source": "cad_browser.mwsvg",
+    "key": "cad_browser",
+    "sizes": {
+      "16": "png/16/cad_browser.png",
+      "32": "png/32/cad_browser.png"
+    }
+  },
+  {
+    "source": "cad_cancel.mwsvg",
+    "key": "cad_cancel",
+    "sizes": {
+      "16": "png/16/cad_cancel.png",
+      "32": "png/32/cad_cancel.png"
+    }
+  },
+  {
+    "source": "cad_clear.mwsvg",
+    "key": "cad_clear",
+    "sizes": {
+      "16": "png/16/cad_clear.png",
+      "32": "png/32/cad_clear.png"
+    }
+  },
+  {
+    "source": "cad_clear_group.mwsvg",
+    "key": "cad_clear_group",
+    "sizes": {
+      "16": "png/16/cad_clear_group.png",
+      "32": "png/32/cad_clear_group.png"
+    }
+  },
+  {
+    "source": "cad_confirm.mwsvg",
+    "key": "cad_confirm",
+    "sizes": {
+      "16": "png/16/cad_confirm.png",
+      "32": "png/32/cad_confirm.png"
+    }
+  },
+  {
+    "source": "cad_create_default_group.mwsvg",
+    "key": "cad_create_default_group",
+    "sizes": {
+      "16": "png/16/cad_create_default_group.png",
+      "32": "png/32/cad_create_default_group.png"
+    }
+  },
+  {
+    "source": "cad_create_group.mwsvg",
+    "key": "cad_create_group",
+    "sizes": {
+      "16": "png/16/cad_create_group.png",
+      "32": "png/32/cad_create_group.png"
+    }
+  },
+  {
+    "source": "cad_delete.mwsvg",
+    "key": "cad_delete",
+    "sizes": {
+      "16": "png/16/cad_delete.png",
+      "32": "png/32/cad_delete.png"
+    }
+  },
+  {
+    "source": "cad_design_pnt.mwsvg",
+    "key": "cad_design_pnt",
+    "sizes": {
+      "16": "png/16/cad_design_pnt.png",
+      "32": "png/32/cad_design_pnt.png"
+    }
+  },
+  {
+    "source": "cad_exploded_view.mwsvg",
+    "key": "cad_exploded_view",
+    "sizes": {
+      "16": "png/16/cad_exploded_view.png",
+      "32": "png/32/cad_exploded_view.png"
+    }
+  },
+  {
+    "source": "cad_feature_inference.mwsvg",
+    "key": "cad_feature_inference",
+    "sizes": {
+      "16": "png/16/cad_feature_inference.png",
+      "32": "png/32/cad_feature_inference.png"
+    }
+  },
+  {
+    "source": "cad_fluid_port.mwsvg",
+    "key": "cad_fluid_port",
+    "sizes": {
+      "16": "png/16/cad_fluid_port.png",
+      "32": "png/32/cad_fluid_port.png"
+    }
+  },
+  {
+    "source": "cad_generate_object.mwsvg",
+    "key": "cad_generate_object",
+    "sizes": {
+      "16": "png/16/cad_generate_object.png",
+      "32": "png/32/cad_generate_object.png"
+    }
+  },
+  {
+    "source": "cad_help.mwsvg",
+    "key": "cad_help",
+    "sizes": {
+      "16": "png/16/cad_help.png",
+      "32": "png/32/cad_help.png"
+    }
+  },
+  {
+    "source": "cad_import.mwsvg",
+    "key": "cad_import",
+    "sizes": {
+      "16": "png/16/cad_import.png",
+      "32": "png/32/cad_import.png"
+    }
+  },
+  {
+    "source": "cad_import_file.mwsvg",
+    "key": "cad_import_file",
+    "sizes": {
+      "16": "png/16/cad_import_file.png",
+      "32": "png/32/cad_import_file.png"
+    }
+  },
+  {
+    "source": "cad_instruction.mwsvg",
+    "key": "cad_instruction",
+    "sizes": {
+      "16": "png/16/cad_instruction.png",
+      "32": "png/32/cad_instruction.png"
+    }
+  },
+  {
+    "source": "cad_lightning_mode.mwsvg",
+    "key": "cad_lightning_mode",
+    "sizes": {
+      "16": "png/16/cad_lightning_mode.png",
+      "32": "png/32/cad_lightning_mode.png"
+    }
+  },
+  {
+    "source": "cad_measure.mwsvg",
+    "key": "cad_measure",
+    "sizes": {
+      "16": "png/16/cad_measure.png",
+      "32": "png/32/cad_measure.png"
+    }
+  },
+  {
+    "source": "cad_min.mwsvg",
+    "key": "cad_min",
+    "sizes": {
+      "16": "png/16/cad_min.png",
+      "32": "png/32/cad_min.png"
+    }
+  },
+  {
+    "source": "cad_open_file.mwsvg",
+    "key": "cad_open_file",
+    "sizes": {
+      "16": "png/16/cad_open_file.png",
+      "32": "png/32/cad_open_file.png"
+    }
+  },
+  {
+    "source": "cad_option.mwsvg",
+    "key": "cad_option",
+    "sizes": {
+      "16": "png/16/cad_option.png",
+      "32": "png/32/cad_option.png"
+    }
+  },
+  {
+    "source": "cad_place_marker.mwsvg",
+    "key": "cad_place_marker",
+    "sizes": {
+      "16": "png/16/cad_place_marker.png",
+      "32": "png/32/cad_place_marker.png"
+    }
+  },
+  {
+    "source": "cad_place_refmarker.mwsvg",
+    "key": "cad_place_refmarker",
+    "sizes": {
+      "16": "png/16/cad_place_refmarker.png",
+      "32": "png/32/cad_place_refmarker.png"
+    }
+  },
+  {
+    "source": "cad_planar_loop_constraint.mwsvg",
+    "key": "cad_planar_loop_constraint",
+    "sizes": {
+      "16": "png/16/cad_planar_loop_constraint.png",
+      "32": "png/32/cad_planar_loop_constraint.png"
+    }
+  },
+  {
+    "source": "cad_point_mass.mwsvg",
+    "key": "cad_point_mass",
+    "sizes": {
+      "16": "png/16/cad_point_mass.png",
+      "32": "png/32/cad_point_mass.png"
+    }
+  },
+  {
+    "source": "cad_reset.mwsvg",
+    "key": "cad_reset",
+    "sizes": {
+      "16": "png/16/cad_reset.png",
+      "32": "png/32/cad_reset.png"
+    }
+  },
+  {
+    "source": "cad_rib.mwsvg",
+    "key": "cad_rib",
+    "sizes": {
+      "16": "png/16/cad_rib.png",
+      "32": "png/32/cad_rib.png"
+    }
+  },
+  {
+    "source": "cad_save_as.mwsvg",
+    "key": "cad_save_as",
+    "sizes": {
+      "16": "png/16/cad_save_as.png",
+      "32": "png/32/cad_save_as.png"
+    }
+  },
+  {
+    "source": "cad_save_file.mwsvg",
+    "key": "cad_save_file",
+    "sizes": {
+      "16": "png/16/cad_save_file.png",
+      "32": "png/32/cad_save_file.png"
+    }
+  },
+  {
+    "source": "cad_simple_tank.mwsvg",
+    "key": "cad_simple_tank",
+    "sizes": {
+      "16": "png/16/cad_simple_tank.png",
+      "32": "png/32/cad_simple_tank.png"
+    }
+  },
+  {
+    "source": "cad_start.mwsvg",
+    "key": "cad_start",
+    "sizes": {
+      "16": "png/16/cad_start.png",
+      "32": "png/32/cad_start.png"
+    }
+  },
+  {
+    "source": "cad_stop.mwsvg",
+    "key": "cad_stop",
+    "sizes": {
+      "16": "png/16/cad_stop.png",
+      "32": "png/32/cad_stop.png"
+    }
+  },
+  {
+    "source": "cad_surface_thickening.mwsvg",
+    "key": "cad_surface_thickening",
+    "sizes": {
+      "16": "png/16/cad_surface_thickening.png",
+      "32": "png/32/cad_surface_thickening.png"
+    }
+  },
+  {
+    "source": "cad_tank.mwsvg",
+    "key": "cad_tank",
+    "sizes": {
+      "16": "png/16/cad_tank.png",
+      "32": "png/32/cad_tank.png"
+    }
+  },
+  {
+    "source": "cad_ungroup.mwsvg",
+    "key": "cad_ungroup",
+    "sizes": {
+      "16": "png/16/cad_ungroup.png",
+      "32": "png/32/cad_ungroup.png"
+    }
+  },
+  {
+    "source": "cad_update_file.mwsvg",
+    "key": "cad_update_file",
+    "sizes": {
+      "16": "png/16/cad_update_file.png",
+      "32": "png/32/cad_update_file.png"
+    }
+  },
+  {
+    "source": "cad_windows.mwsvg",
+    "key": "cad_windows",
+    "sizes": {
+      "16": "png/16/cad_windows.png",
+      "32": "png/32/cad_windows.png"
+    }
+  },
+  {
+    "source": "check\\cad_check.mwsvg",
+    "key": "check_cad_check",
+    "sizes": {
+      "16": "png/16/check_cad_check.png",
+      "32": "png/32/check_cad_check.png"
+    }
+  },
+  {
+    "source": "check\\error.mwsvg",
+    "key": "check_error",
+    "sizes": {
+      "16": "png/16/check_error.png",
+      "32": "png/32/check_error.png"
+    }
+  },
+  {
+    "source": "check\\info.mwsvg",
+    "key": "check_info",
+    "sizes": {
+      "16": "png/16/check_info.png",
+      "32": "png/32/check_info.png"
+    }
+  },
+  {
+    "source": "check\\warn.mwsvg",
+    "key": "check_warn",
+    "sizes": {
+      "16": "png/16/check_warn.png",
+      "32": "png/32/check_warn.png"
+    }
+  },
+  {
+    "source": "cursor\\cursor_circle.mwsvg",
+    "key": "cursor_cursor_circle",
+    "sizes": {
+      "16": "png/16/cursor_cursor_circle.png",
+      "32": "png/32/cursor_cursor_circle.png"
+    }
+  },
+  {
+    "source": "cursor\\cursor_line.mwsvg",
+    "key": "cursor_cursor_line",
+    "sizes": {
+      "16": "png/16/cursor_cursor_line.png",
+      "32": "png/32/cursor_cursor_line.png"
+    }
+  },
+  {
+    "source": "cursor\\cursor_pnt.mwsvg",
+    "key": "cursor_cursor_pnt",
+    "sizes": {
+      "16": "png/16/cursor_cursor_pnt.png",
+      "32": "png/32/cursor_cursor_pnt.png"
+    }
+  },
+  {
+    "source": "cursor\\cursor_rotation.mwsvg",
+    "key": "cursor_cursor_rotation",
+    "sizes": {
+      "16": "png/16/cursor_cursor_rotation.png",
+      "32": "png/32/cursor_cursor_rotation.png"
+    }
+  },
+  {
+    "source": "double_down.mwsvg",
+    "key": "double_down",
+    "sizes": {
+      "16": "png/16/double_down.png",
+      "32": "png/32/double_down.png"
+    }
+  },
+  {
+    "source": "double_up.mwsvg",
+    "key": "double_up",
+    "sizes": {
+      "16": "png/16/double_up.png",
+      "32": "png/32/double_up.png"
+    }
+  },
+  {
+    "source": "force\\cad_contact_point_point.mwsvg",
+    "key": "force_cad_contact_point_point",
+    "sizes": {
+      "16": "png/16/force_cad_contact_point_point.png",
+      "32": "png/32/force_cad_contact_point_point.png"
+    }
+  },
+  {
+    "source": "force\\cad_contact_point_surface.mwsvg",
+    "key": "force_cad_contact_point_surface",
+    "sizes": {
+      "16": "png/16/force_cad_contact_point_surface.png",
+      "32": "png/32/force_cad_contact_point_surface.png"
+    }
+  },
+  {
+    "source": "force\\cad_contact_sphere_circle.mwsvg",
+    "key": "force_cad_contact_sphere_circle",
+    "sizes": {
+      "16": "png/16/force_cad_contact_sphere_circle.png",
+      "32": "png/32/force_cad_contact_sphere_circle.png"
+    }
+  },
+  {
+    "source": "force\\cad_contact_sphere_cylinder.mwsvg",
+    "key": "force_cad_contact_sphere_cylinder",
+    "sizes": {
+      "16": "png/16/force_cad_contact_sphere_cylinder.png",
+      "32": "png/32/force_cad_contact_sphere_cylinder.png"
+    }
+  },
+  {
+    "source": "force\\cad_contact_sphere_rectangle.mwsvg",
+    "key": "force_cad_contact_sphere_rectangle",
+    "sizes": {
+      "16": "png/16/force_cad_contact_sphere_rectangle.png",
+      "32": "png/32/force_cad_contact_sphere_rectangle.png"
+    }
+  },
+  {
+    "source": "force\\cad_contact_sphere_sphere.mwsvg",
+    "key": "force_cad_contact_sphere_sphere",
+    "sizes": {
+      "16": "png/16/force_cad_contact_sphere_sphere.png",
+      "32": "png/32/force_cad_contact_sphere_sphere.png"
+    }
+  },
+  {
+    "source": "force\\cad_general_force.mwsvg",
+    "key": "force_cad_general_force",
+    "sizes": {
+      "16": "png/16/force_cad_general_force.png",
+      "32": "png/32/force_cad_general_force.png"
+    }
+  },
+  {
+    "source": "force\\cad_gravity.mwsvg",
+    "key": "force_cad_gravity",
+    "sizes": {
+      "16": "png/16/force_cad_gravity.png",
+      "32": "png/32/force_cad_gravity.png"
+    }
+  },
+  {
+    "source": "force\\cad_single_component_force.mwsvg",
+    "key": "force_cad_single_component_force",
+    "sizes": {
+      "16": "png/16/force_cad_single_component_force.png",
+      "32": "png/32/force_cad_single_component_force.png"
+    }
+  },
+  {
+    "source": "force\\cad_single_component_torque.mwsvg",
+    "key": "force_cad_single_component_torque",
+    "sizes": {
+      "16": "png/16/force_cad_single_component_torque.png",
+      "32": "png/32/force_cad_single_component_torque.png"
+    }
+  },
+  {
+    "source": "force\\cad_vector_force.mwsvg",
+    "key": "force_cad_vector_force",
+    "sizes": {
+      "16": "png/16/force_cad_vector_force.png",
+      "32": "png/32/force_cad_vector_force.png"
+    }
+  },
+  {
+    "source": "force\\cad_vector_torque.mwsvg",
+    "key": "force_cad_vector_torque",
+    "sizes": {
+      "16": "png/16/force_cad_vector_torque.png",
+      "32": "png/32/force_cad_vector_torque.png"
+    }
+  },
+  {
+    "source": "highlight_default.mwsvg",
+    "key": "highlight_default",
+    "sizes": {
+      "16": "png/16/highlight_default.png",
+      "32": "png/32/highlight_default.png"
+    }
+  },
+  {
+    "source": "joint\\cad_constant_velocity.mwsvg",
+    "key": "joint_cad_constant_velocity",
+    "sizes": {
+      "16": "png/16/joint_cad_constant_velocity.png",
+      "32": "png/32/joint_cad_constant_velocity.png"
+    }
+  },
+  {
+    "source": "joint\\cad_cylindrical.mwsvg",
+    "key": "joint_cad_cylindrical",
+    "sizes": {
+      "16": "png/16/joint_cad_cylindrical.png",
+      "32": "png/32/joint_cad_cylindrical.png"
+    }
+  },
+  {
+    "source": "joint\\cad_fixed.mwsvg",
+    "key": "joint_cad_fixed",
+    "sizes": {
+      "16": "png/16/joint_cad_fixed.png",
+      "32": "png/32/joint_cad_fixed.png"
+    }
+  },
+  {
+    "source": "joint\\cad_planar.mwsvg",
+    "key": "joint_cad_planar",
+    "sizes": {
+      "16": "png/16/joint_cad_planar.png",
+      "32": "png/32/joint_cad_planar.png"
+    }
+  },
+  {
+    "source": "joint\\cad_prismatic.mwsvg",
+    "key": "joint_cad_prismatic",
+    "sizes": {
+      "16": "png/16/joint_cad_prismatic.png",
+      "32": "png/32/joint_cad_prismatic.png"
+    }
+  },
+  {
+    "source": "joint\\cad_revolute.mwsvg",
+    "key": "joint_cad_revolute",
+    "sizes": {
+      "16": "png/16/joint_cad_revolute.png",
+      "32": "png/32/joint_cad_revolute.png"
+    }
+  },
+  {
+    "source": "joint\\cad_screw.mwsvg",
+    "key": "joint_cad_screw",
+    "sizes": {
+      "16": "png/16/joint_cad_screw.png",
+      "32": "png/32/joint_cad_screw.png"
+    }
+  },
+  {
+    "source": "joint\\cad_spherical.mwsvg",
+    "key": "joint_cad_spherical",
+    "sizes": {
+      "16": "png/16/joint_cad_spherical.png",
+      "32": "png/32/joint_cad_spherical.png"
+    }
+  },
+  {
+    "source": "joint\\cad_universal.mwsvg",
+    "key": "joint_cad_universal",
+    "sizes": {
+      "16": "png/16/joint_cad_universal.png",
+      "32": "png/32/joint_cad_universal.png"
+    }
+  },
+  {
+    "source": "joint_primitive\\cad_in_line.mwsvg",
+    "key": "joint_primitive_cad_in_line",
+    "sizes": {
+      "16": "png/16/joint_primitive_cad_in_line.png",
+      "32": "png/32/joint_primitive_cad_in_line.png"
+    }
+  },
+  {
+    "source": "joint_primitive\\cad_in_plane.mwsvg",
+    "key": "joint_primitive_cad_in_plane",
+    "sizes": {
+      "16": "png/16/joint_primitive_cad_in_plane.png",
+      "32": "png/32/joint_primitive_cad_in_plane.png"
+    }
+  },
+  {
+    "source": "joint_primitive\\cad_orientation.mwsvg",
+    "key": "joint_primitive_cad_orientation",
+    "sizes": {
+      "16": "png/16/joint_primitive_cad_orientation.png",
+      "32": "png/32/joint_primitive_cad_orientation.png"
+    }
+  },
+  {
+    "source": "joint_primitive\\cad_parallel_axes.mwsvg",
+    "key": "joint_primitive_cad_parallel_axes",
+    "sizes": {
+      "16": "png/16/joint_primitive_cad_parallel_axes.png",
+      "32": "png/32/joint_primitive_cad_parallel_axes.png"
+    }
+  },
+  {
+    "source": "joint_primitive\\cad_perpendicular.mwsvg",
+    "key": "joint_primitive_cad_perpendicular",
+    "sizes": {
+      "16": "png/16/joint_primitive_cad_perpendicular.png",
+      "32": "png/32/joint_primitive_cad_perpendicular.png"
+    }
+  },
+  {
+    "source": "measure\\center_to_center.mwsvg",
+    "key": "measure_center_to_center",
+    "sizes": {
+      "16": "png/16/measure_center_to_center.png",
+      "32": "png/32/measure_center_to_center.png"
+    }
+  },
+  {
+    "source": "measure\\maximum_distance.mwsvg",
+    "key": "measure_maximum_distance",
+    "sizes": {
+      "16": "png/16/measure_maximum_distance.png",
+      "32": "png/32/measure_maximum_distance.png"
+    }
+  },
+  {
+    "source": "measure\\minimum_distance.mwsvg",
+    "key": "measure_minimum_distance",
+    "sizes": {
+      "16": "png/16/measure_minimum_distance.png",
+      "32": "png/32/measure_minimum_distance.png"
+    }
+  },
+  {
+    "source": "measure\\point_to_point.mwsvg",
+    "key": "measure_point_to_point",
+    "sizes": {
+      "16": "png/16/measure_point_to_point.png",
+      "32": "png/32/measure_point_to_point.png"
+    }
+  },
+  {
+    "source": "measure\\xyz_distance.mwsvg",
+    "key": "measure_xyz_distance",
+    "sizes": {
+      "16": "png/16/measure_xyz_distance.png",
+      "32": "png/32/measure_xyz_distance.png"
+    }
+  },
+  {
+    "source": "menu\\menu_check.mwsvg",
+    "key": "menu_menu_check",
+    "sizes": {
+      "16": "png/16/menu_menu_check.png",
+      "32": "png/32/menu_menu_check.png"
+    }
+  },
+  {
+    "source": "menu\\menu_delete.mwsvg",
+    "key": "menu_menu_delete",
+    "sizes": {
+      "16": "png/16/menu_menu_delete.png",
+      "32": "png/32/menu_menu_delete.png"
+    }
+  },
+  {
+    "source": "menu\\menu_hide_other.mwsvg",
+    "key": "menu_menu_hide_other",
+    "sizes": {
+      "16": "png/16/menu_menu_hide_other.png",
+      "32": "png/32/menu_menu_hide_other.png"
+    }
+  },
+  {
+    "source": "menu\\menu_hide_selected.mwsvg",
+    "key": "menu_menu_hide_selected",
+    "sizes": {
+      "16": "png/16/menu_menu_hide_selected.png",
+      "32": "png/32/menu_menu_hide_selected.png"
+    }
+  },
+  {
+    "source": "menu\\menu_move_to.mwsvg",
+    "key": "menu_menu_move_to",
+    "sizes": {
+      "16": "png/16/menu_menu_move_to.png",
+      "32": "png/32/menu_menu_move_to.png"
+    }
+  },
+  {
+    "source": "menu\\menu_not_check.mwsvg",
+    "key": "menu_menu_not_check",
+    "sizes": {
+      "16": "png/16/menu_menu_not_check.png",
+      "32": "png/32/menu_menu_not_check.png"
+    }
+  },
+  {
+    "source": "menu\\menu_show_all.mwsvg",
+    "key": "menu_menu_show_all",
+    "sizes": {
+      "16": "png/16/menu_menu_show_all.png",
+      "32": "png/32/menu_menu_show_all.png"
+    }
+  },
+  {
+    "source": "menu\\menu_show_selected.mwsvg",
+    "key": "menu_menu_show_selected",
+    "sizes": {
+      "16": "png/16/menu_menu_show_selected.png",
+      "32": "png/32/menu_menu_show_selected.png"
+    }
+  },
+  {
+    "source": "model_tree\\body_dir.mwsvg",
+    "key": "model_tree_body_dir",
+    "sizes": {
+      "16": "png/16/model_tree_body_dir.png",
+      "32": "png/32/model_tree_body_dir.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_collapse.mwsvg",
+    "key": "model_tree_cad_collapse",
+    "sizes": {
+      "16": "png/16/model_tree_cad_collapse.png",
+      "32": "png/32/model_tree_cad_collapse.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_constant_velocity_gray.mwsvg",
+    "key": "model_tree_cad_constant_velocity_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_constant_velocity_gray.png",
+      "32": "png/32/model_tree_cad_constant_velocity_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_contact_sphere_circle_gray.mwsvg",
+    "key": "model_tree_cad_contact_sphere_circle_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_contact_sphere_circle_gray.png",
+      "32": "png/32/model_tree_cad_contact_sphere_circle_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_contact_sphere_cylinder_gray.mwsvg",
+    "key": "model_tree_cad_contact_sphere_cylinder_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_contact_sphere_cylinder_gray.png",
+      "32": "png/32/model_tree_cad_contact_sphere_cylinder_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_contact_sphere_rectangle_gray.mwsvg",
+    "key": "model_tree_cad_contact_sphere_rectangle_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_contact_sphere_rectangle_gray.png",
+      "32": "png/32/model_tree_cad_contact_sphere_rectangle_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_contact_sphere_sphere_gray.mwsvg",
+    "key": "model_tree_cad_contact_sphere_sphere_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_contact_sphere_sphere_gray.png",
+      "32": "png/32/model_tree_cad_contact_sphere_sphere_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_cylindrical_gray.mwsvg",
+    "key": "model_tree_cad_cylindrical_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_cylindrical_gray.png",
+      "32": "png/32/model_tree_cad_cylindrical_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_expand.mwsvg",
+    "key": "model_tree_cad_expand",
+    "sizes": {
+      "16": "png/16/model_tree_cad_expand.png",
+      "32": "png/32/model_tree_cad_expand.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_fixed_gray.mwsvg",
+    "key": "model_tree_cad_fixed_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_fixed_gray.png",
+      "32": "png/32/model_tree_cad_fixed_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_ground.mwsvg",
+    "key": "model_tree_cad_ground",
+    "sizes": {
+      "16": "png/16/model_tree_cad_ground.png",
+      "32": "png/32/model_tree_cad_ground.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_only_visible.mwsvg",
+    "key": "model_tree_cad_only_visible",
+    "sizes": {
+      "16": "png/16/model_tree_cad_only_visible.png",
+      "32": "png/32/model_tree_cad_only_visible.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_planar_gray.mwsvg",
+    "key": "model_tree_cad_planar_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_planar_gray.png",
+      "32": "png/32/model_tree_cad_planar_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_prismatic_gray.mwsvg",
+    "key": "model_tree_cad_prismatic_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_prismatic_gray.png",
+      "32": "png/32/model_tree_cad_prismatic_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_revolute_gray.mwsvg",
+    "key": "model_tree_cad_revolute_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_revolute_gray.png",
+      "32": "png/32/model_tree_cad_revolute_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_rotational_gray.mwsvg",
+    "key": "model_tree_cad_rotational_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_rotational_gray.png",
+      "32": "png/32/model_tree_cad_rotational_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_screw_gray.mwsvg",
+    "key": "model_tree_cad_screw_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_screw_gray.png",
+      "32": "png/32/model_tree_cad_screw_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_search.mwsvg",
+    "key": "model_tree_cad_search",
+    "sizes": {
+      "16": "png/16/model_tree_cad_search.png",
+      "32": "png/32/model_tree_cad_search.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_spherical_gray.mwsvg",
+    "key": "model_tree_cad_spherical_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_spherical_gray.png",
+      "32": "png/32/model_tree_cad_spherical_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_translational_gray.mwsvg",
+    "key": "model_tree_cad_translational_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_translational_gray.png",
+      "32": "png/32/model_tree_cad_translational_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_universal_gray.mwsvg",
+    "key": "model_tree_cad_universal_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_universal_gray.png",
+      "32": "png/32/model_tree_cad_universal_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_unknown_cnt.mwsvg",
+    "key": "model_tree_cad_unknown_cnt",
+    "sizes": {
+      "16": "png/16/model_tree_cad_unknown_cnt.png",
+      "32": "png/32/model_tree_cad_unknown_cnt.png"
+    }
+  },
+  {
+    "source": "model_tree\\cad_unknown_cnt_gray.mwsvg",
+    "key": "model_tree_cad_unknown_cnt_gray",
+    "sizes": {
+      "16": "png/16/model_tree_cad_unknown_cnt_gray.png",
+      "32": "png/32/model_tree_cad_unknown_cnt_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\clear.mwsvg",
+    "key": "model_tree_clear",
+    "sizes": {
+      "16": "png/16/model_tree_clear.png",
+      "32": "png/32/model_tree_clear.png"
+    }
+  },
+  {
+    "source": "model_tree\\connector_dir.mwsvg",
+    "key": "model_tree_connector_dir",
+    "sizes": {
+      "16": "png/16/model_tree_connector_dir.png",
+      "32": "png/32/model_tree_connector_dir.png"
+    }
+  },
+  {
+    "source": "model_tree\\design_pnt_gray.mwsvg",
+    "key": "model_tree_design_pnt_gray",
+    "sizes": {
+      "16": "png/16/model_tree_design_pnt_gray.png",
+      "32": "png/32/model_tree_design_pnt_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\force_dir.mwsvg",
+    "key": "model_tree_force_dir",
+    "sizes": {
+      "16": "png/16/model_tree_force_dir.png",
+      "32": "png/32/model_tree_force_dir.png"
+    }
+  },
+  {
+    "source": "model_tree\\group.mwsvg",
+    "key": "model_tree_group",
+    "sizes": {
+      "16": "png/16/model_tree_group.png",
+      "32": "png/32/model_tree_group.png"
+    }
+  },
+  {
+    "source": "model_tree\\group_gray.mwsvg",
+    "key": "model_tree_group_gray",
+    "sizes": {
+      "16": "png/16/model_tree_group_gray.png",
+      "32": "png/32/model_tree_group_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\marker.mwsvg",
+    "key": "model_tree_marker",
+    "sizes": {
+      "16": "png/16/model_tree_marker.png",
+      "32": "png/32/model_tree_marker.png"
+    }
+  },
+  {
+    "source": "model_tree\\marker_gray.mwsvg",
+    "key": "model_tree_marker_gray",
+    "sizes": {
+      "16": "png/16/model_tree_marker_gray.png",
+      "32": "png/32/model_tree_marker_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\material.mwsvg",
+    "key": "model_tree_material",
+    "sizes": {
+      "16": "png/16/model_tree_material.png",
+      "32": "png/32/model_tree_material.png"
+    }
+  },
+  {
+    "source": "model_tree\\material_dir.mwsvg",
+    "key": "model_tree_material_dir",
+    "sizes": {
+      "16": "png/16/model_tree_material_dir.png",
+      "32": "png/32/model_tree_material_dir.png"
+    }
+  },
+  {
+    "source": "model_tree\\motion_dir.mwsvg",
+    "key": "model_tree_motion_dir",
+    "sizes": {
+      "16": "png/16/model_tree_motion_dir.png",
+      "32": "png/32/model_tree_motion_dir.png"
+    }
+  },
+  {
+    "source": "model_tree\\part.mwsvg",
+    "key": "model_tree_part",
+    "sizes": {
+      "16": "png/16/model_tree_part.png",
+      "32": "png/32/model_tree_part.png"
+    }
+  },
+  {
+    "source": "model_tree\\part_gray.mwsvg",
+    "key": "model_tree_part_gray",
+    "sizes": {
+      "16": "png/16/model_tree_part_gray.png",
+      "32": "png/32/model_tree_part_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\refmarker.mwsvg",
+    "key": "model_tree_refmarker",
+    "sizes": {
+      "16": "png/16/model_tree_refmarker.png",
+      "32": "png/32/model_tree_refmarker.png"
+    }
+  },
+  {
+    "source": "model_tree\\refmarker_gray.mwsvg",
+    "key": "model_tree_refmarker_gray",
+    "sizes": {
+      "16": "png/16/model_tree_refmarker_gray.png",
+      "32": "png/32/model_tree_refmarker_gray.png"
+    }
+  },
+  {
+    "source": "model_tree\\subbody.mwsvg",
+    "key": "model_tree_subbody",
+    "sizes": {
+      "16": "png/16/model_tree_subbody.png",
+      "32": "png/32/model_tree_subbody.png"
+    }
+  },
+  {
+    "source": "model_tree\\subbody_gray.mwsvg",
+    "key": "model_tree_subbody_gray",
+    "sizes": {
+      "16": "png/16/model_tree_subbody_gray.png",
+      "32": "png/32/model_tree_subbody_gray.png"
+    }
+  },
+  {
+    "source": "motion\\cad_rotational.mwsvg",
+    "key": "motion_cad_rotational",
+    "sizes": {
+      "16": "png/16/motion_cad_rotational.png",
+      "32": "png/32/motion_cad_rotational.png"
+    }
+  },
+  {
+    "source": "motion\\cad_translational.mwsvg",
+    "key": "motion_cad_translational",
+    "sizes": {
+      "16": "png/16/motion_cad_translational.png",
+      "32": "png/32/motion_cad_translational.png"
+    }
+  },
+  {
+    "source": "part_attr\\historical_material.mwsvg",
+    "key": "part_attr_historical_material",
+    "sizes": {
+      "16": "png/16/part_attr_historical_material.png",
+      "32": "png/32/part_attr_historical_material.png"
+    }
+  },
+  {
+    "source": "part_attr\\new_material.mwsvg",
+    "key": "part_attr_new_material",
+    "sizes": {
+      "16": "png/16/part_attr_new_material.png",
+      "32": "png/32/part_attr_new_material.png"
+    }
+  },
+  {
+    "source": "preview\\preview_lock.mwsvg",
+    "key": "preview_preview_lock",
+    "sizes": {
+      "16": "png/16/preview_preview_lock.png",
+      "32": "png/32/preview_preview_lock.png"
+    }
+  },
+  {
+    "source": "preview\\preview_locked.mwsvg",
+    "key": "preview_preview_locked",
+    "sizes": {
+      "16": "png/16/preview_preview_locked.png",
+      "32": "png/32/preview_preview_locked.png"
+    }
+  },
+  {
+    "source": "preview\\preview_update.mwsvg",
+    "key": "preview_preview_update",
+    "sizes": {
+      "16": "png/16/preview_preview_update.png",
+      "32": "png/32/preview_preview_update.png"
+    }
+  },
+  {
+    "source": "question_mark.mwsvg",
+    "key": "question_mark",
+    "sizes": {
+      "16": "png/16/question_mark.png",
+      "32": "png/32/question_mark.png"
+    }
+  },
+  {
+    "source": "quick_preview.mwsvg",
+    "key": "quick_preview",
+    "sizes": {
+      "16": "png/16/quick_preview.png",
+      "32": "png/32/quick_preview.png"
+    }
+  },
+  {
+    "source": "redo.mwsvg",
+    "key": "redo",
+    "sizes": {
+      "16": "png/16/redo.png",
+      "32": "png/32/redo.png"
+    }
+  },
+  {
+    "source": "undo.mwsvg",
+    "key": "undo",
+    "sizes": {
+      "16": "png/16/undo.png",
+      "32": "png/32/undo.png"
+    }
+  },
+  {
+    "source": "view\\dis_shaded.mwsvg",
+    "key": "view_dis_shaded",
+    "sizes": {
+      "16": "png/16/view_dis_shaded.png",
+      "32": "png/32/view_dis_shaded.png"
+    }
+  },
+  {
+    "source": "view\\dis_shaded_line.mwsvg",
+    "key": "view_dis_shaded_line",
+    "sizes": {
+      "16": "png/16/view_dis_shaded_line.png",
+      "32": "png/32/view_dis_shaded_line.png"
+    }
+  },
+  {
+    "source": "view\\dis_wire_frame.mwsvg",
+    "key": "view_dis_wire_frame",
+    "sizes": {
+      "16": "png/16/view_dis_wire_frame.png",
+      "32": "png/32/view_dis_wire_frame.png"
+    }
+  },
+  {
+    "source": "view\\proj_orth.mwsvg",
+    "key": "view_proj_orth",
+    "sizes": {
+      "16": "png/16/view_proj_orth.png",
+      "32": "png/32/view_proj_orth.png"
+    }
+  },
+  {
+    "source": "view\\proj_persp.mwsvg",
+    "key": "view_proj_persp",
+    "sizes": {
+      "16": "png/16/view_proj_persp.png",
+      "32": "png/32/view_proj_persp.png"
+    }
+  },
+  {
+    "source": "view\\set_icon.mwsvg",
+    "key": "view_set_icon",
+    "sizes": {
+      "16": "png/16/view_set_icon.png",
+      "32": "png/32/view_set_icon.png"
+    }
+  },
+  {
+    "source": "view\\view_back.mwsvg",
+    "key": "view_view_back",
+    "sizes": {
+      "16": "png/16/view_view_back.png",
+      "32": "png/32/view_view_back.png"
+    }
+  },
+  {
+    "source": "view\\view_bottom.mwsvg",
+    "key": "view_view_bottom",
+    "sizes": {
+      "16": "png/16/view_view_bottom.png",
+      "32": "png/32/view_view_bottom.png"
+    }
+  },
+  {
+    "source": "view\\view_dis_elemts.mwsvg",
+    "key": "view_view_dis_elemts",
+    "sizes": {
+      "16": "png/16/view_view_dis_elemts.png",
+      "32": "png/32/view_view_dis_elemts.png"
+    }
+  },
+  {
+    "source": "view\\view_front.mwsvg",
+    "key": "view_view_front",
+    "sizes": {
+      "16": "png/16/view_view_front.png",
+      "32": "png/32/view_view_front.png"
+    }
+  },
+  {
+    "source": "view\\view_hide_elemts.mwsvg",
+    "key": "view_view_hide_elemts",
+    "sizes": {
+      "16": "png/16/view_view_hide_elemts.png",
+      "32": "png/32/view_view_hide_elemts.png"
+    }
+  },
+  {
+    "source": "view\\view_iso_zxy.mwsvg",
+    "key": "view_view_iso_zxy",
+    "sizes": {
+      "16": "png/16/view_view_iso_zxy.png",
+      "32": "png/32/view_view_iso_zxy.png"
+    }
+  },
+  {
+    "source": "view\\view_left.mwsvg",
+    "key": "view_view_left",
+    "sizes": {
+      "16": "png/16/view_view_left.png",
+      "32": "png/32/view_view_left.png"
+    }
+  },
+  {
+    "source": "view\\view_right.mwsvg",
+    "key": "view_view_right",
+    "sizes": {
+      "16": "png/16/view_view_right.png",
+      "32": "png/32/view_view_right.png"
+    }
+  },
+  {
+    "source": "view\\view_top.mwsvg",
+    "key": "view_view_top",
+    "sizes": {
+      "16": "png/16/view_view_top.png",
+      "32": "png/32/view_view_top.png"
+    }
+  },
+  {
+    "source": "view\\view_zoom_all.mwsvg",
+    "key": "view_view_zoom_all",
+    "sizes": {
+      "16": "png/16/view_view_zoom_all.png",
+      "32": "png/32/view_view_zoom_all.png"
+    }
+  },
+  {
+    "source": "view\\view_zoom_select.mwsvg",
+    "key": "view_view_zoom_select",
+    "sizes": {
+      "16": "png/16/view_view_zoom_select.png",
+      "32": "png/32/view_view_zoom_select.png"
+    }
+  }
+]

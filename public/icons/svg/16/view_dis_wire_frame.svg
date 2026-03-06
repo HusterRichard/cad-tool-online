@@ -1,0 +1,30 @@
+<svg data-name="图层 1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" id="图层_1">
+      <defs>
+        <linearGradient y1="10.06" gradientUnits="userSpaceOnUse" x1="1.14" y2="10.06" x2="19.05" id="未命名的渐变_22">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.9" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient y1="2.02" x1="8.07" y2="2.02" x2="9.07" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-2"/>
+        <linearGradient y1="7.34" x1="8.07" y2="7.34" x2="9.07" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-3"/>
+        <linearGradient y1="12.13" x1="8.07" y2="12.13" x2="9.07" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-4"/>
+        <radialGradient gradientUnits="userSpaceOnUse" cy="5.09" r="3.32" id="未命名的渐变_188" cx="15.07">
+          <stop offset="0.06" stop-color="#fff"/>
+          <stop offset="0.95" stop-color="#b3b3b3"/>
+        </radialGradient>
+        <linearGradient y1="5.09" x1="11.4" y2="5.09" x2="18.74" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-5"/>
+        <linearGradient y1="12.05" x1="1.85" y2="12.05" x2="17.72" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-6"/>
+        <linearGradient y1="14.63" x1="1.85" y2="14.63" x2="17.72" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-7"/>
+        <linearGradient y1="17.84" x1="1.85" y2="17.84" x2="17.72" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-8"/>
+        <linearGradient y1="13.38" x1="1.14" y2="13.38" x2="12.41" xlink:href="#未命名的渐变_22" id="未命名的渐变_22-9"/>
+      </defs>
+      <polygon points="1.14 8 8.03 1.11 19.05 1.11 19.05 12.13 12.16 19.01 1.14 19.01 1.14 8" style="fill:#fff"/>
+      <path d="M18.05,2.11v9.6L11.75,18H2.14V8.41l6.3-6.3h9.61m1-1H8L1.14,8V19h11l6.89-6.88v-11Z" style="fill:url(#未命名的渐变_22)"/>
+      <line y1="1.77" x1="8.57" y2="2.27" x2="8.57" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-2)"/>
+      <line y1="3.34" x1="8.57" y2="11.35" x2="8.57" style="fill:none;stroke-miterlimit:10;stroke-dasharray:1.0678426027297974,1.0678426027297974;stroke:url(#未命名的渐变_22-3)"/>
+      <line y1="11.88" x1="8.57" y2="12.38" x2="8.57" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-4)"/>
+      <line y1="1.77" x1="18.38" y2="8.4" x2="11.75" style="stroke-miterlimit:10;fill:url(#未命名的渐变_188);stroke:url(#未命名的渐变_22-5)"/>
+      <line y1="12.05" x1="17.72" y2="12.05" x2="17.22" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-6)"/>
+      <polyline points="16.23 12.05 8.81 12.05 2.92 17.34" style="fill:none;stroke-miterlimit:10;stroke-dasharray:0.9893650412559509,0.9893650412559509;stroke:url(#未命名的渐变_22-7)"/>
+      <line y1="17.67" x1="2.55" y2="18" x2="2.18" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-8)"/>
+      <path d="M11.41,8.74V18H2.14V8.74h9.27m1-1H1.14V19H12.41V7.74Z" style="fill:url(#未命名的渐变_22-9)"/>
+    </svg>

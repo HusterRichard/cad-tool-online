@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <radialGradient r="9.01" cx="19.27" gradientUnits="userSpaceOnUse" cy="26.47" id="未命名的渐变_15">
+          <stop offset="0" stop-color="#e6faff"/>
+          <stop offset="0.95" stop-color="#83beec"/>
+        </radialGradient>
+        <linearGradient x1="7.77" y2="26.47" y1="26.47" gradientUnits="userSpaceOnUse" x2="30.77" id="未命名的渐变_126">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x1="18.27" y2="18.16" y1="18.16" x2="19.27" id="未命名的渐变_126-2" xlink:href="#未命名的渐变_126"/>
+        <radialGradient r="4.95" cx="24.77" gradientUnits="userSpaceOnUse" cy="53.15" id="未命名的渐变_45" gradientTransform="translate(1.01 -30.79) scale(0.97 1.07)">
+          <stop offset="0.01" stop-color="#ffbfdd"/>
+          <stop offset="0.96" stop-color="#ff6a7a"/>
+        </radialGradient>
+        <linearGradient x1="18.22" y2="25.97" y1="25.97" gradientUnits="userSpaceOnUse" x2="31.77" id="未命名的渐变_162">
+          <stop offset="0.01" stop-color="#ff3f65"/>
+          <stop offset="1" stop-color="#aa001c"/>
+        </linearGradient>
+        <linearGradient x1="16.43" y2="9.05" y1="9.05" x2="21.43" id="未命名的渐变_126-3" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x1="30.77" y2="25.77" y1="25.77" x2="33.45" id="未命名的渐变_162-2" xlink:href="#未命名的渐变_162"/>
+      </defs>
+      <ellipse cx="19.27" cy="26.47" style="fill:url(#未命名的渐变_15)" ry="5.5" rx="11.5"/>
+      <path style="fill:url(#未命名的渐变_126)" d="M19.27,22c6.19,0,10.5,2.38,10.5,4.5S25.46,31,19.27,31s-10.5-2.37-10.5-4.5S13.08,22,19.27,22m0-1c-6.35,0-11.5,2.47-11.5,5.5S12.92,32,19.27,32s11.5-2.46,11.5-5.5S25.62,21,19.27,21Z"/>
+      <line x1="18.77" y2="9.97" y1="26.35" x2="18.77" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_126-2)"/>
+      <line x1="31.77" y2="25.97" y1="25.97" x2="18.22" style="stroke-miterlimit:10;fill:url(#未命名的渐变_45);stroke:url(#未命名的渐变_162)"/>
+      <polygon points="18.93 7.12 16.43 10.97 21.43 10.97 18.93 7.12" style="fill:url(#未命名的渐变_126-3)"/>
+      <polygon points="33.45 25.77 30.77 23.79 30.77 27.75 33.45 25.77" style="fill:url(#未命名的渐变_162-2)"/>
+    </svg>

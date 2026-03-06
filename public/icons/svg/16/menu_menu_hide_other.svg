@@ -1,0 +1,34 @@
+<svg id="图层_1" viewBox="0 0 20 20" data-name="图层 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="7.06" id="未命名的渐变_63" y2="9.47" y1="9.47" x2="12.91" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#d49a00" offset="0.12"/>
+          <stop stop-color="#916306" offset="0.81"/>
+        </linearGradient>
+        <linearGradient x1="12.91" id="未命名的渐变_63-2" y2="9.47" y1="9.47" x2="18.76" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x1="7.06" id="未命名的渐变_63-3" y2="5.65" y1="5.65" x2="18.76" xlink:href="#未命名的渐变_63"/>
+      </defs>
+      <polygon points="1.47 13.82 1.47 9.02 6.82 11.13 6.82 15.93 1.47 13.82" style="fill:#ededed"/>
+      <path d="M1.72,9.39,6.56,11.3v4.26L1.72,13.65V9.39m-.5-.73V14L7.06,16.3V11L1.22,8.66Z" style="fill:#bababa"/>
+      <polygon points="7.32 11.13 12.66 9.02 12.66 13.82 7.32 15.93 7.32 11.13" style="fill:#ededed"/>
+      <path d="M12.41,9.39v4.26L7.56,15.56V11.3l4.85-1.91m.5-.73L7.06,11V16.3L12.91,14V8.66Z" style="fill:#bababa"/>
+      <polygon points="1.9 8.66 7.07 6.62 12.23 8.66 7.07 10.7 1.9 8.66" style="fill:#ededed"/>
+      <path d="M7.06,6.89l4.49,1.77L7.06,10.43,2.58,8.66,7.06,6.89m0-.54L1.22,8.66,7.06,11l5.85-2.3L7.06,6.35Z" style="fill:#bababa"/>
+      <polygon points="7.32 16.16 7.32 11.36 12.66 13.47 12.66 18.27 7.32 16.16" style="fill:#ededed"/>
+      <path d="M7.56,11.73l4.85,1.91V17.9L7.56,16V11.73M7.06,11v5.33l5.85,2.31V13.3L7.06,11Z" style="fill:#bababa"/>
+      <polygon points="13.16 13.47 18.51 11.36 18.51 16.16 13.16 18.27 13.16 13.47" style="fill:#ededed"/>
+      <path d="M18.26,11.73V16L13.41,17.9V13.64l4.85-1.91m.5-.74L12.91,13.3v5.33l5.85-2.31V11Z" style="fill:#bababa"/>
+      <polygon points="7.75 10.99 12.91 8.95 18.08 10.99 12.91 13.03 7.75 10.99" style="fill:#ededed"/>
+      <path d="M12.91,9.22,17.4,11l-4.49,1.77L8.43,11l4.48-1.77m0-.53L7.06,11l5.85,2.31L18.76,11l-5.85-2.3Z" style="fill:#bababa"/>
+      <polygon points="1.47 8.48 1.47 3.68 6.82 5.79 6.82 10.59 1.47 8.48" style="fill:#ededed"/>
+      <path d="M1.72,4.05,6.56,6v4.26L1.72,8.31V4.05m-.5-.73V8.65L7.06,11V5.62L1.22,3.32Z" style="fill:#bababa"/>
+      <polygon points="7.32 5.79 12.66 3.68 12.66 8.48 7.32 10.59 7.32 5.79" style="fill:#ededed"/>
+      <path d="M12.41,4.05V8.31L7.56,10.22V6l4.85-1.91m.5-.73L7.06,5.62V11l5.85-2.3V3.32Z" style="fill:#bababa"/>
+      <polygon points="1.9 3.31 7.07 1.27 12.23 3.31 7.07 5.36 1.9 3.31" style="fill:#ededed"/>
+      <path d="M7.06,1.54l4.49,1.78L7.06,5.09,2.58,3.32,7.06,1.54m0-.53L1.22,3.32l5.84,2.3,5.85-2.3L7.06,1Z" style="fill:#bababa"/>
+      <polygon points="7.07 5.65 12.91 7.96 12.91 13.29 7.07 10.98 7.07 5.65" style="fill:#ffd96e"/>
+      <path d="M8.06,7.12l3.85,1.52v3.18L8.06,10.3V7.12m-1-1.47V11l5.85,2.31V8L7.06,5.65Z" style="fill:url(#未命名的渐变_63)"/>
+      <polygon points="18.76 5.65 12.91 7.96 12.91 13.29 18.76 10.98 18.76 5.65" style="fill:#ffd96e"/>
+      <path d="M17.76,7.12V10.3l-3.85,1.52V8.64l3.85-1.52m1-1.47L12.91,8v5.33L18.76,11V5.65Z" style="fill:url(#未命名的渐变_63-2)"/>
+      <polygon points="12.91 3.35 7.07 5.65 12.91 7.96 18.76 5.65 12.91 3.35" style="fill:#ffd96e"/>
+      <path d="M12.91,4.42,16,5.65,12.91,6.89,9.79,5.65l3.12-1.23m0-1.08L7.06,5.65,12.91,8l5.85-2.31L12.91,3.34Z" style="fill:url(#未命名的渐变_63-3)"/>
+    </svg>

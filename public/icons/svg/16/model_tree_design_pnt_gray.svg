@@ -1,0 +1,22 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" viewBox="0 0 20 20" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient x1="1.67" x2="8.09" gradientUnits="userSpaceOnUse" id="未命名的渐变_72" y2="4.11" y1="4.11">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="4.31" x2="17.02" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-2" y2="4.17" y1="16.88"/>
+        <linearGradient x1="3.77" x2="5.87" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-3" y2="13.68" y1="13.68"/>
+        <linearGradient x1="6.56" x2="8.66" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-4" y2="10.9" y1="10.9"/>
+        <linearGradient x1="9.35" x2="11.45" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-5" y2="8.11" y1="8.11"/>
+        <linearGradient x1="12.01" x2="14.11" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-6" y2="5.45" y1="5.45"/>
+      </defs>
+      <circle style="fill:#fff" r="3.21" cx="4.88" cy="4.11"/>
+      <path d="M4.88,1.9A2.21,2.21,0,1,1,2.67,4.11,2.21,2.21,0,0,1,4.88,1.9m0-1A3.21,3.21,0,1,0,8.09,4.11,3.21,3.21,0,0,0,4.88.9Z" style="fill:url(#未命名的渐变_72)"/>
+      <rect style="fill:#fff" height="6.42" width="17.97" x="1.67" rx="0.62" transform="translate(-4.32 10.62) rotate(-45)" y="7.32"/>
+      <path d="M14.75,3.32l3.12,3.12L6.58,17.74,3.45,14.61,14.75,3.32m0-1.16a.59.59,0,0,0-.44.19L2.48,14.17a.62.62,0,0,0,0,.89l3.66,3.65a.63.63,0,0,0,.44.19A.65.65,0,0,0,7,18.71L18.84,6.89a.62.62,0,0,0,0-.89L15.19,2.35a.59.59,0,0,0-.44-.19Z" style="fill:url(#未命名的渐变_72-2)"/>
+      <line x1="4.13" x2="5.52" style="fill:#fff;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-3)" y2="14.38" y1="12.99"/>
+      <line x1="6.91" x2="8.31" style="fill:#fff;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-4)" y2="11.59" y1="10.2"/>
+      <line x1="9.7" x2="11.09" style="fill:#fff;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-5)" y2="8.81" y1="7.42"/>
+      <line x1="12.36" x2="13.76" style="fill:#fff;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-6)" y2="6.15" y1="4.75"/>
+      <path d="M14.75,3.32l3.12,3.12L6.58,17.74,3.45,14.61,14.75,3.32m0-1.16a.59.59,0,0,0-.44.19L2.48,14.17a.62.62,0,0,0,0,.89l3.66,3.65a.63.63,0,0,0,.44.19A.65.65,0,0,0,7,18.71L18.84,6.89a.62.62,0,0,0,0-.89L15.19,2.35a.59.59,0,0,0-.44-.19Z" style="fill:url(#未命名的渐变_72-2)"/>
+    </svg>

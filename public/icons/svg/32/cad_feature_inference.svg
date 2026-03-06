@@ -1,0 +1,22 @@
+<svg id="图层_1" data-name="图层 1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="未命名的渐变_3" cy="13.19" gradientUnits="userSpaceOnUse" r="13.22" cx="20.36">
+          <stop offset="0" stop-color="#fbebca"/>
+          <stop offset="0.97" stop-color="#ffd555"/>
+        </radialGradient>
+        <linearGradient id="未命名的渐变_63" x1="11.35" gradientUnits="userSpaceOnUse" x2="30" y1="17.49" y2="17.49">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+        <radialGradient id="未命名的渐变_3-2" cy="1086.79" xlink:href="#未命名的渐变_3" r="3.56" gradientTransform="translate(1.5 28.91) scale(0.92 0)" cx="20.9"/>
+        <linearGradient id="未命名的渐变_63-2" x1="15.56" xlink:href="#未命名的渐变_63" x2="25.79" y1="29.16" y2="29.16"/>
+        <radialGradient id="未命名的渐变_3-3" cy="31.44" xlink:href="#未命名的渐变_3" r="2.27" gradientTransform="translate(4.31) scale(0.76 1)" cx="21.44"/>
+        <linearGradient id="未命名的渐变_63-3" x1="17.73" xlink:href="#未命名的渐变_63" x2="23.62" y1="31.44" y2="31.44"/>
+        <linearGradient id="未命名的渐变_63-4" x1="20.66" xlink:href="#未命名的渐变_63" x2="26.21" y1="12.53" y2="12.53"/>
+      </defs>
+      <path style="fill:url(#未命名的渐变_3)" d="M30,16.39a9.33,9.33,0,1,0-14.43,7.79V27a.87.87,0,0,0,.87.87h8.48a.87.87,0,0,0,.87-.87V24.18A9.32,9.32,0,0,0,30,16.39Z"/>
+      <path style="fill:url(#未命名的渐变_63)" d="M20.68,8.06a8.32,8.32,0,0,1,4.56,15.28l-.45.3v3.27H16.57V23.64l-.45-.3A8.32,8.32,0,0,1,20.68,8.06m0-1a9.32,9.32,0,0,0-5.11,17.12V27a.87.87,0,0,0,.87.87h8.48a.87.87,0,0,0,.87-.87V24.18A9.32,9.32,0,0,0,20.68,7.06Z"/>
+      <line style="stroke-linecap:round;stroke-miterlimit:10;fill:url(#未命名的渐变_3-2);stroke:url(#未命名的渐变_63-2)" x1="16.06" x2="25.29" y1="29.16" y2="29.16"/>
+      <line style="stroke-linecap:round;stroke-miterlimit:10;fill:url(#未命名的渐变_3-3);stroke:url(#未命名的渐变_63-3)" x1="18.23" x2="23.12" y1="31.44" y2="31.44"/>
+      <path style="fill:none;stroke-linecap:round;stroke-miterlimit:10;stroke:url(#未命名的渐变_63-4)" d="M21.16,10.25a5.21,5.21,0,0,1,4.55,4.56"/>
+    </svg>

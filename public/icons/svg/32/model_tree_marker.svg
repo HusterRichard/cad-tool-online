@@ -1,0 +1,12 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" viewBox="0 0 40 40" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient r="9.19" gradientUnits="userSpaceOnUse" cx="20.62" id="未命名的渐变_25" cy="19.96">
+          <stop offset="0" stop-color="#fff"/>
+          <stop offset="0.95" stop-color="#d1b7ea"/>
+        </radialGradient>
+      </defs>
+      <circle style="fill:#e9d9fc;stroke:#9461c0;stroke-miterlimit:10" r="10.5" cx="20.62" cy="19.96"/>
+      <circle style="fill:none;stroke:#9461c0;stroke-miterlimit:10" r="4.5" cx="20.62" cy="19.96"/>
+      <line x1="7.62" x2="33.62" style="stroke:#9461c0;stroke-miterlimit:10;fill:url(#未命名的渐变_25)" y2="19.96" y1="19.96"/>
+      <line x1="20.62" x2="20.62" style="stroke:#9461c0;stroke-miterlimit:10;fill:url(#未命名的渐变_25)" y2="32.96" y1="6.96"/>
+    </svg>

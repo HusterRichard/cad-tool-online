@@ -1,0 +1,38 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" data-name="图层 1" id="图层_1">
+      <defs>
+        <linearGradient x2="19.54" x1="14.71" y1="16.69" y2="16.69" id="未命名的渐变_63" gradientUnits="userSpaceOnUse">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+        <linearGradient x2="12.87" x1="8.37" y1="10.1" y2="10.1" id="未命名的渐变_126" gradientUnits="userSpaceOnUse">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x2="26.52" x1="21.7" y1="16.69" y2="16.69" id="未命名的渐变_63-2" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x2="19.54" x1="14.71" y1="23.44" y2="23.44" id="未命名的渐变_63-3" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x2="26.52" x1="21.7" y1="23.44" y2="23.44" id="未命名的渐变_63-4" xlink:href="#未命名的渐变_63"/>
+        <linearGradient x2="14.01" x1="8.56" y1="10.76" y2="10.76" id="未命名的渐变_126-2" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="32.73" x1="28.24" y1="29.9" y2="29.9" id="未命名的渐变_126-3" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="32.54" x1="27.1" y1="29.23" y2="29.23" id="未命名的渐变_126-4" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="32.7" x1="28.21" y1="10.06" y2="10.06" id="未命名的渐变_126-5" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="32.51" x1="27.07" y1="10.73" y2="10.73" id="未命名的渐变_126-6" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="12.9" x1="8.4" y1="29.93" y2="29.93" id="未命名的渐变_126-7" xlink:href="#未命名的渐变_126"/>
+        <linearGradient x2="14.04" x1="8.59" y1="29.27" y2="29.27" id="未命名的渐变_126-8" xlink:href="#未命名的渐变_126"/>
+      </defs>
+      <rect height="4.83" x="14.71" y="14.27" width="4.83" style="fill:#fcdb88"/>
+      <path d="M18.54,15.27V18.1H15.71V15.27h2.83m1-1H14.71V19.1h4.83V14.27Z" style="fill:url(#未命名的渐变_63)"/>
+      <polyline points="8.87 11.84 8.87 8.35 12.37 8.35" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126)"/>
+      <rect height="4.83" x="21.7" y="14.27" width="4.83" style="fill:#fcdb88"/>
+      <path d="M25.52,15.27V18.1H22.7V15.27h2.82m1-1H21.7V19.1h4.82V14.27Z" style="fill:url(#未命名的渐变_63-2)"/>
+      <rect height="4.83" x="14.71" y="21.03" width="4.83" style="fill:#fcdb88"/>
+      <path d="M18.54,22v2.83H15.71V22h2.83m1-1H14.71v4.83h4.83V21Z" style="fill:url(#未命名的渐变_63-3)"/>
+      <rect height="4.83" x="21.7" y="21.03" width="4.83" style="fill:#fcdb88"/>
+      <path d="M25.52,22v2.83H22.7V22h2.82m1-1H21.7v4.83h4.82V21Z" style="fill:url(#未命名的渐变_63-4)"/>
+      <line x2="9.06" x1="13.51" y1="12.99" y2="8.54" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-2)"/>
+      <polyline points="32.23 28.15 32.23 31.65 28.74 31.65" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-3)"/>
+      <line x2="32.04" x1="27.6" y1="27.01" y2="31.46" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-4)"/>
+      <polyline points="28.71 8.32 32.2 8.32 32.2 11.81" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-5)"/>
+      <line x2="32.01" x1="27.57" y1="12.95" y2="8.51" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-6)"/>
+      <polyline points="12.4 31.68 8.9 31.68 8.9 28.19" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-7)"/>
+      <line x2="9.09" x1="13.54" y1="27.04" y2="31.49" style="fill:none;stroke-linecap:round;stroke-linejoin:round;stroke:url(#未命名的渐变_126-8)"/>
+    </svg>

@@ -1,0 +1,14 @@
+<svg id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient cy="12.68" id="未命名的渐变_154" gradientUnits="userSpaceOnUse" cx="15.8" r="50.26">
+          <stop offset="0" stop-color="#fbebca"/>
+          <stop offset="0.57" stop-color="#ffd555"/>
+        </radialGradient>
+        <linearGradient x2="33" id="未命名的渐变_63" gradientUnits="userSpaceOnUse" x1="7" y2="19.78" y1="19.78">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+      </defs>
+      <path style="fill:url(#未命名的渐变_154)" d="M32.27,15.88H23.9V7.51a.73.73,0,0,0-.73-.73H16.83a.72.72,0,0,0-.73.73v8.37H7.73a.73.73,0,0,0-.73.73V23a.73.73,0,0,0,.73.73H16.1v8.37a.72.72,0,0,0,.73.73h6.34a.73.73,0,0,0,.73-.73V23.68h8.37A.73.73,0,0,0,33,23V16.61A.73.73,0,0,0,32.27,15.88Z"/>
+      <path style="fill:url(#未命名的渐变_63)" d="M22.9,7.78v9.1H32v5.8H22.9v9.1H17.1v-9.1H8v-5.8h9.1V7.78h5.8m.27-1H16.83a.72.72,0,0,0-.73.73v8.37H7.73a.73.73,0,0,0-.73.73V23a.73.73,0,0,0,.73.73H16.1v8.37a.72.72,0,0,0,.73.73h6.34a.73.73,0,0,0,.73-.73V23.68h8.37A.73.73,0,0,0,33,23V16.61a.73.73,0,0,0-.73-.73H23.9V7.51a.73.73,0,0,0-.73-.73Z"/>
+    </svg>

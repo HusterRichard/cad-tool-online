@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <linearGradient x1="2.68" y2="9.75" y1="9.75" gradientUnits="userSpaceOnUse" x2="16.75" id="未命名的渐变_89">
+          <stop offset="0.01" stop-color="#d4ffec"/>
+          <stop offset="1" stop-color="#a1ddaa"/>
+        </linearGradient>
+        <linearGradient x1="1.26" y2="9.75" y1="9.75" gradientUnits="userSpaceOnUse" x2="18.17" id="未命名的渐变_102">
+          <stop offset="0.01" stop-color="#379e4e"/>
+          <stop offset="1" stop-color="#006837"/>
+        </linearGradient>
+      </defs>
+      <polygon points="7.39 15.1 2.68 10.38 4.01 9.05 7.39 12.43 15.42 4.41 16.75 5.74 7.39 15.1" style="fill:url(#未命名的渐变_89)"/>
+      <path style="fill:url(#未命名的渐变_102)" d="M15.42,4.41l1.33,1.33L7.39,15.1,2.68,10.38,4,9.05l3.38,3.38,8-8m0-1.42-.71.71L7.39,11,4.72,8.34,4,7.63l-.7.71L2,9.68l-.71.7.71.71,4.72,4.72.7.71.71-.71,9.36-9.36.71-.71L17.46,5,16.12,3.7,15.42,3Z"/>
+    </svg>

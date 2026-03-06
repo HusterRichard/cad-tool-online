@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink" id="图层_1" data-name="图层 1">
+      <defs>
+        <linearGradient y1="17.2" x2="18.76" id="未命名的渐变_126" x1="0.77" gradientUnits="userSpaceOnUse" y2="17.2">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient y1="15.26" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-2" x1="0.77" y2="15.26"/>
+        <linearGradient y1="13.14" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-3" x1="0.77" y2="13.14"/>
+        <linearGradient y1="10.61" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-4" x1="0.77" y2="10.61"/>
+        <linearGradient y1="7.84" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-5" x1="0.77" y2="7.84"/>
+        <linearGradient y1="10.16" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-6" x1="0.77" y2="10.16"/>
+        <linearGradient y1="12.71" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-7" x1="0.77" y2="12.71"/>
+        <linearGradient y1="15.48" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-8" x1="0.77" y2="15.48"/>
+        <linearGradient y1="17.56" x2="18.76" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-9" x1="0.77" y2="17.56"/>
+        <linearGradient y1="10.03" x2="18.64" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-10" x1="0.97" y2="10.03"/>
+        <linearGradient y1="12.45" x2="18.64" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-11" x1="0.97" y2="12.45"/>
+        <linearGradient y1="10.51" x2="18.64" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-12" x1="0.97" y2="10.51"/>
+        <linearGradient y1="11.05" x2="18.59" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-13" x1="0.79" y2="11.05"/>
+        <linearGradient y1="15.34" x2="18.64" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-14" x1="0.97" y2="15.34"/>
+        <linearGradient y1="6.02" x2="18.56" id="未命名的渐变_63" x1="10.03" gradientUnits="userSpaceOnUse" y2="6.02">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+        <linearGradient y1="14.94" x2="12.17" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-15" x1="11.67" y2="14.94"/>
+        <linearGradient y1="16.9" x2="12.17" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-16" x1="11.67" y2="16.9"/>
+        <linearGradient y1="6.23" x2="8.15" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-17" x1="7.65" y2="6.23"/>
+        <linearGradient y1="8.2" x2="8.15" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-18" x1="7.65" y2="8.2"/>
+      </defs>
+      <path d="M11.92,17.46l6.59-4.19v-3a6.72,6.72,0,0,1-5.58-2.39A5.76,5.76,0,0,0,7.76,5.63L2,9.42H2L1,10v3s2.41-.45,5.39,2.5,5.51,1.9,5.51,1.9" style="fill:#d4edff"/>
+      <line y1="17.46" x2="12.76" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126)" x1="11.92" y2="16.93"/>
+      <line y1="16.48" x2="17.31" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke-dasharray:1.659786343574524,0.829893171787262;stroke:url(#未命名的渐变_126-2)" x1="13.46" y2="14.03"/>
+      <polyline points="17.66 13.81 18.51 13.27 18.51 12.27" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-3)"/>
+      <path d="M18.51,11.24v-1a5.55,5.55,0,0,1-1,0" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-4)"/>
+      <path d="M16.57,10.08a6,6,0,0,1-3.64-2.23A5.76,5.76,0,0,0,7.76,5.63L2.26,9.22" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke-dasharray:1.919539213180542,0.959769606590271;stroke:url(#未命名的渐变_126-5)"/>
+      <polyline points="1.85 9.49 1.02 10.04 1.02 11.04" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-6)"/>
+      <path d="M1,12.06v1a3.31,3.31,0,0,1,1,0" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-7)"/>
+      <path d="M3,13.33a8.91,8.91,0,0,1,3.41,2.23,6.46,6.46,0,0,0,4,2.07" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke-dasharray:2.048686981201172,1.024343490600586;stroke:url(#未命名的渐变_126-8)"/>
+      <path d="M10.94,17.64a3.18,3.18,0,0,0,1-.18" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-9)"/>
+      <path d="M.94,13.1s2.43-.46,5.44,2.51,5.56,1.93,5.56,1.93l6.65-4.23A6.84,6.84,0,0,1,13,10.89,5.78,5.78,0,0,0,7.74,8.65Z" style="fill:#9ccfe8"/>
+      <path d="M1,10a3.31,3.31,0,0,1,1,0" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-10)"/>
+      <path d="M2.93,10.28a8.89,8.89,0,0,1,3.48,2.25c3,3,5.51,1.91,5.51,1.91L17.26,11" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke-dasharray:1.9002867937088013,0.9501433968544006;stroke:url(#未命名的渐变_126-11)"/>
+      <line y1="10.78" x2="18.51" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-12)" x1="17.66" y2="10.24"/>
+      <path d="M18.57,13.39A6.82,6.82,0,0,1,12.94,11,5.81,5.81,0,0,0,7.72,8.74L.92,13.18" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke-dasharray:2,1;stroke:url(#未命名的渐变_126-13)"/>
+      <path d="M1,13.06s2.41-.45,5.39,2.5,5.51,1.9,5.51,1.9l6.59-4.19" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-14)"/>
+      <path d="M18.51,2.28a.21.21,0,0,0-.3-.18L14.15,4.05a.2.2,0,0,0,0,.36l1,.6C13,9.43,10.1,9.75,10,9.72s4.26,1.55,7.44-3.23l.77.48a.21.21,0,0,0,.32-.18Z" style="fill:#ffd96e"/>
+      <path d="M18,2.75l0,3.51-.31-.2-.41-.25-.27.4a6.5,6.5,0,0,1-5,3.24,9.51,9.51,0,0,0,3.47-4.23l.19-.4-.38-.23-.51-.32L18,2.75m.29-.67a.15.15,0,0,0-.09,0L14.15,4.05a.2.2,0,0,0,0,.36l1,.6c-2,4.29-4.82,4.71-5.06,4.71h0a5.2,5.2,0,0,0,1.65.24c1.53,0,3.86-.57,5.79-3.47l.77.48.11,0a.21.21,0,0,0,.21-.21l0-4.51a.2.2,0,0,0-.21-.2ZM10,9.72Z" style="fill:url(#未命名的渐变_63)"/>
+      <line y1="14.44" x2="11.92" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-15)" x1="11.92" y2="15.44"/>
+      <line y1="16.4" x2="11.92" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-16)" x1="11.92" y2="17.4"/>
+      <line y1="5.73" x2="7.9" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-17)" x1="7.9" y2="6.73"/>
+      <line y1="7.7" x2="7.9" style="fill:none;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_126-18)" x1="7.9" y2="8.7"/>
+    </svg>

@@ -1,0 +1,28 @@
+<svg data-name="图层 1" viewBox="0 0 20 20" xmlns:xlink="http://www.w3.org/1999/xlink" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient gradientUnits="userSpaceOnUse" y1="8.82" x1="10.07" x2="10.07" y2="18.36" id="未命名的渐变_42">
+          <stop stop-color="#92e8bf" offset="0"/>
+          <stop stop-color="#e9fff4" offset="0.49"/>
+          <stop stop-color="#92e8bf" offset="1"/>
+        </linearGradient>
+        <linearGradient gradientUnits="userSpaceOnUse" y1="13.68" x1="3.32" x2="16.81" y2="13.68" id="未命名的渐变_102">
+          <stop stop-color="#379e4e" offset="0.01"/>
+          <stop stop-color="#006837" offset="1"/>
+        </linearGradient>
+        <radialGradient cx="10.07" gradientUnits="userSpaceOnUse" cy="5.04" r="3.7" id="未命名的渐变_37">
+          <stop stop-color="#e9fff4" offset="0.01"/>
+          <stop stop-color="#92e8bf" offset="1"/>
+        </radialGradient>
+        <linearGradient xlink:href="#未命名的渐变_102" y1="5.04" x1="6.37" x2="13.77" y2="5.04" id="未命名的渐变_102-2"/>
+        <linearGradient xlink:href="#未命名的渐变_102" y1="13.68" x1="15.05" x2="18.57" y2="13.68" id="未命名的渐变_102-3"/>
+        <linearGradient xlink:href="#未命名的渐变_102" y1="13.68" x1="1.56" x2="5.08" y2="13.68" id="未命名的渐变_102-4"/>
+      </defs>
+      <rect width="13.49" style="fill:url(#未命名的渐变_42)" x="3.32" height="9.88" y="8.74"/>
+      <path style="fill:url(#未命名的渐变_102)" d="M15.81,9.74v7.88H4.32V9.74H15.81m1-1H3.32v9.88H16.81V8.74Z"/>
+      <circle style="fill:url(#未命名的渐变_37)" cx="10.07" cy="5.04" r="3.7"/>
+      <path style="fill:url(#未命名的渐变_102-2)" d="M10.07,2.34A2.7,2.7,0,1,1,7.37,5a2.7,2.7,0,0,1,2.7-2.7m0-1A3.7,3.7,0,1,0,13.77,5a3.7,3.7,0,0,0-3.7-3.7Z"/>
+      <ellipse ry="4.94" style="fill:#fff" cx="16.81" cy="13.68" rx="1.76"/>
+      <path style="fill:url(#未命名的渐变_102-3)" d="M16.81,9.87a7.61,7.61,0,0,1,.76,3.81,7.61,7.61,0,0,1-.76,3.81,7.61,7.61,0,0,1-.76-3.81,7.61,7.61,0,0,1,.76-3.81m0-1.13c-1,0-1.76,2.21-1.76,4.94s.79,4.94,1.76,4.94,1.76-2.21,1.76-4.94-.78-4.94-1.76-4.94Z"/>
+      <ellipse ry="4.94" style="fill:#fff" cx="3.32" cy="13.68" rx="1.76"/>
+      <path style="fill:url(#未命名的渐变_102-4)" d="M3.32,9.87a7.64,7.64,0,0,1,.76,3.81,7.61,7.61,0,0,1-.76,3.81,7.61,7.61,0,0,1-.76-3.81,7.61,7.61,0,0,1,.76-3.81m0-1.13c-1,0-1.76,2.21-1.76,4.94s.79,4.94,1.76,4.94,1.76-2.21,1.76-4.94S4.29,8.74,3.32,8.74Z"/>
+    </svg>

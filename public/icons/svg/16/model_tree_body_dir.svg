@@ -1,0 +1,38 @@
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" data-name="图层 1" viewBox="0 0 20 20" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient x1="4.71" x2="10.97" gradientUnits="userSpaceOnUse" id="未命名的渐变_72" y2="4.15" y1="4.15">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="4.71" x2="12.32" xlink:href="#未命名的渐变_72" id="未命名的渐变_72-2" y2="10.58" y1="10.58"/>
+        <linearGradient x1="8.78" x2="0.94" gradientUnits="userSpaceOnUse" id="未命名的渐变_178" y2="3.4" y1="3.4">
+          <stop offset="0.01" stop-color="#ff5559"/>
+          <stop offset="1" stop-color="#aa001c"/>
+        </linearGradient>
+        <linearGradient x1="6.91" x2="10.97" gradientUnits="userSpaceOnUse" id="未命名的渐变_63" y2="15.23" y1="15.23">
+          <stop offset="0.12" stop-color="#d49a00"/>
+          <stop offset="0.81" stop-color="#916306"/>
+        </linearGradient>
+        <linearGradient x1="10.97" x2="15.03" xlink:href="#未命名的渐变_63" id="未命名的渐变_63-2" y2="15.23" y1="15.23"/>
+        <linearGradient x1="7.23" x2="15.07" xlink:href="#未命名的渐变_63" id="未命名的渐变_63-3" y2="11.83" y1="11.83"/>
+        <linearGradient x1="10.97" x2="19.09" gradientUnits="userSpaceOnUse" id="未命名的渐变_126" y2="7" y1="7">
+          <stop offset="0.12" stop-color="#0384c5"/>
+          <stop offset="0.9" stop-color="#0063b1"/>
+        </linearGradient>
+        <linearGradient x1="10.97" x2="19.09" xlink:href="#未命名的渐变_126" id="未命名的渐变_126-2" y2="3.73" y1="3.73"/>
+      </defs>
+      <polyline style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72)" points="5.21 1.03 5.21 6.78 10.97 6.78"/>
+      <polyline style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_72-2)" points="12.32 14.9 5.21 14.9 5.21 5.76"/>
+      <polygon style="fill:#fcc5cd" points="4.86 5.78 8.78 1.03 0.94 1.03 4.86 5.78"/>
+      <path d="M6.66,2,4.86,4.21,3.06,2h3.6M8.78,1Zm0,0H.94L4.86,5.78,8.78,1Z" style="fill:url(#未命名的渐变_178)"/>
+      <polygon style="fill:#fcdb88" points="6.91 11.71 10.97 14.05 10.97 18.74 6.91 16.4 6.91 11.71"/>
+      <path d="M7.41,12.58l3.06,1.76v3.54L7.41,16.11V12.58m-.5-.87V16.4L11,18.74V14.05L6.91,11.71Z" style="fill:url(#未命名的渐变_63)"/>
+      <polygon style="fill:#fcdb88" points="15.03 11.71 10.97 14.05 10.97 18.74 15.03 16.4 15.03 11.71"/>
+      <path d="M14.53,12.58v3.53l-3.06,1.77V14.34l3.06-1.76m.5-.87L11,14.05v4.69L15,16.4V11.71Z" style="fill:url(#未命名的渐变_63-2)"/>
+      <polygon style="fill:#fcdb88" points="11.15 9.57 7.23 11.83 11.15 14.09 15.07 11.83 11.15 9.57"/>
+      <path d="M11.15,10.15l2.92,1.68-2.92,1.69L8.23,11.83l2.92-1.68m0-.58L7.23,11.83l3.92,2.26,3.92-2.26L11.15,9.57Z" style="fill:url(#未命名的渐变_63-3)"/>
+      <path d="M11,3.73V9c0,.72,1.81,1.31,4.06,1.31S19.09,9.68,19.09,9V3.73Z" style="fill:#d4edff"/>
+      <path d="M18.59,4.23V8.94c-.09.24-1.28.83-3.56.83S11.55,9.18,11.47,9V4.23h7.12m.5-.5H11V9c0,.72,1.81,1.31,4.06,1.31S19.09,9.68,19.09,9V3.73Z" style="fill:url(#未命名的渐变_126)"/>
+      <ellipse style="fill:#d4edff" cx="15.03" rx="4.06" ry="1.35" cy="3.73"/>
+      <path d="M15,2.88c2.3,0,3.49.63,3.56.85s-1.26.86-3.56.86-3.5-.63-3.56-.85,1.26-.86,3.56-.86m0-.5C12.78,2.38,11,3,11,3.73S12.78,5.09,15,5.09s4.06-.61,4.06-1.36S17.27,2.38,15,2.38Z" style="fill:url(#未命名的渐变_126-2)"/>
+    </svg>

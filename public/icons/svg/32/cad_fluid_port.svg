@@ -1,0 +1,21 @@
+<svg id="图层_1" data-name="图层 1" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <radialGradient cy="24.89" id="未命名的渐变_11" r="8.12" cx="21.51" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#fbebca"/>
+          <stop offset="1" stop-color="#ffd555"/>
+        </radialGradient>
+        <linearGradient id="未命名的渐变_178" y2="11.46" x1="9" x2="18.38" gradientUnits="userSpaceOnUse" y1="11.46">
+          <stop offset="0.01" stop-color="#ff5559"/>
+          <stop offset="1" stop-color="#aa001c"/>
+        </linearGradient>
+        <linearGradient id="未命名的渐变_178-2" y2="26.35" x1="24.14" xlink:href="#未命名的渐变_178" x2="29.35" y1="26.35"/>
+        <linearGradient id="未命名的渐变_178-3" y2="11.46" x1="8.93" xlink:href="#未命名的渐变_178" x2="16.04" y1="11.46"/>
+      </defs>
+      <rect x="11.41" style="opacity:0.63;fill:url(#未命名的渐变_11)" width="20.21" height="10.94" y="19.42"/>
+      <path d="M31.12,9V29.86H11.91V9H31.12m.5-.5H11.41V30.36H31.62V8.48Z" style="fill:#0063b1"/>
+      <rect x="9" style="fill:#fcc5cd" width="9.39" height="2.91" y="10.01"/>
+      <path d="M17.88,10.51v1.91H9.5V10.51h8.38m.5-.5H9v2.91h9.38V10Z" style="fill:url(#未命名的渐变_178)"/>
+      <circle cy="26.35" r="2.61" style="fill:#fcc5cd" cx="26.74"/>
+      <path d="M26.74,24.24a2.11,2.11,0,1,1-2.1,2.11,2.12,2.12,0,0,1,2.1-2.11m0-.5a2.61,2.61,0,1,0,2.61,2.61,2.6,2.6,0,0,0-2.61-2.61Z" style="fill:url(#未命名的渐变_178-2)"/>
+      <line y2="11.46" x1="9.18" style="fill:#fcc5cd;stroke-linecap:round;stroke-miterlimit:10;stroke-width:0.5px;stroke:url(#未命名的渐变_178-3)" x2="15.79" y1="11.46"/>
+    </svg>

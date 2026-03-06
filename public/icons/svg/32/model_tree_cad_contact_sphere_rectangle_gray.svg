@@ -1,0 +1,17 @@
+<svg data-name="图层 1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink" id="图层_1" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient gradientUnits="userSpaceOnUse" y1="25.08" x1="7.26" x2="32.72" y2="25.08" id="未命名的渐变_72">
+          <stop stop-color="#666" offset="0.12"/>
+          <stop stop-color="#333" offset="0.56"/>
+        </linearGradient>
+        <radialGradient cx="19.99" gradientUnits="userSpaceOnUse" cy="12.15" r="4.94" id="未命名的渐变_47">
+          <stop stop-color="#f2f2f2" offset="0"/>
+          <stop stop-color="#b3b3b3" offset="0.92"/>
+        </radialGradient>
+        <linearGradient xlink:href="#未命名的渐变_72" y1="12.15" x1="15.04" x2="24.93" y2="12.15" id="未命名的渐变_72-2"/>
+      </defs>
+      <polygon style="fill:#ededed" points="28.72 33.06 7.26 33.06 11.26 17.1 32.72 17.1 28.72 33.06"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M31.43,18.1l-3.49,14H8.54l3.5-14H31.43m1.29-1H11.26l-4,16H28.72l4-16Z"/>
+      <circle style="fill:url(#未命名的渐变_47)" cx="19.99" cy="12.15" r="4.94"/>
+      <path style="fill:url(#未命名的渐变_72-2)" d="M20,8.21A3.95,3.95,0,1,1,16,12.15,3.95,3.95,0,0,1,20,8.21m0-1a4.95,4.95,0,1,0,4.94,4.94A4.95,4.95,0,0,0,20,7.21Z"/>
+    </svg>

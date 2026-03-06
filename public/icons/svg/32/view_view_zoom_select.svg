@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" data-name="图层 1" id="图层_1" viewBox="0 0 40 40" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <defs>
+        <radialGradient r="3.56" cx="645.4" gradientUnits="userSpaceOnUse" cy="1048.91" id="未命名的渐变_188" gradientTransform="translate(-1167.83 -255.72) rotate(-45)">
+          <stop offset="0.06" stop-color="#fff"/>
+          <stop offset="0.95" stop-color="#b3b3b3"/>
+        </radialGradient>
+        <linearGradient x1="642.53" y2="1051.78" y1="1046.04" gradientUnits="userSpaceOnUse" x2="648.27" id="未命名的渐变_22" gradientTransform="translate(-1167.83 -255.72) rotate(-45)">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.9" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="11.37" y2="28.61" y1="10.84" gradientUnits="userSpaceOnUse" x2="29.14" id="未命名的渐变_72">
+          <stop offset="0.12" stop-color="#666"/>
+          <stop offset="0.56" stop-color="#333"/>
+        </linearGradient>
+        <linearGradient x1="22.67" y2="17.31" y1="12.47" x2="27.51" id="未命名的渐变_22-2" xlink:href="#未命名的渐变_22" gradientTransform="matrix(1, 0, 0, 1, 0, 0)"/>
+        <linearGradient x1="13.96" y2="16.35" y1="13.43" x2="16.88" id="未命名的渐变_22-3" xlink:href="#未命名的渐变_22" gradientTransform="matrix(1, 0, 0, 1, 0, 0)"/>
+        <linearGradient x1="23.63" y2="26.02" y1="23.1" x2="26.55" id="未命名的渐变_22-4" xlink:href="#未命名的渐变_22" gradientTransform="matrix(1, 0, 0, 1, 0, 0)"/>
+        <linearGradient x1="13" y2="26.98" y1="22.14" x2="17.84" id="未命名的渐变_22-5" xlink:href="#未命名的渐变_22" gradientTransform="matrix(1, 0, 0, 1, 0, 0)"/>
+        <linearGradient x1="17.48" y2="19.73" y1="19.73" x2="23.03" id="未命名的渐变_22-6" xlink:href="#未命名的渐变_22" gradientTransform="matrix(1, 0, 0, 1, 0, 0)"/>
+      </defs>
+      <line x1="26.67" y2="33.17" y1="26.05" x2="33.78" style="stroke-linecap:round;stroke-miterlimit:10;fill:url(#未命名的渐变_188);stroke:url(#未命名的渐变_22)"/>
+      <circle r="12.56" cx="20.25" cy="19.73" style="fill:#fff"/>
+      <path style="fill:url(#未命名的渐变_72)" d="M20.25,8.17A11.56,11.56,0,1,1,8.69,19.73,11.57,11.57,0,0,1,20.25,8.17m0-1A12.56,12.56,0,1,0,32.82,19.73,12.56,12.56,0,0,0,20.25,7.17Z"/>
+      <polyline points="26.05 18.28 26.05 13.93 21.7 13.93" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-2)"/>
+      <polyline points="18.81 13.93 14.46 13.93 14.46 18.28" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-3)"/>
+      <polyline points="21.7 25.52 26.05 25.52 26.05 21.18" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-4)"/>
+      <polyline points="14.46 21.18 14.46 25.52 18.81 25.52" style="fill:none;stroke-miterlimit:10;stroke:url(#未命名的渐变_22-5)"/>
+      <path style="fill:url(#未命名的渐变_22-6)" d="M22,18V21.5H18.48V18H22m1-1H17.48V22.5H23V17Z"/>
+    </svg>
