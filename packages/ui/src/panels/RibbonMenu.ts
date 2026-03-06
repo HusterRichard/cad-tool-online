@@ -212,8 +212,8 @@ export class RibbonMenu {
                 display: flex;
                 gap: 2px;
                 padding: 4px 8px;
-                background-color: #2d2d2d;
-                border-bottom: 1px solid #3c3c3c;
+                background-color: var(--color-bg-elevated, #2d2d2d);
+                border-bottom: 1px solid var(--color-border, #3c3c3c);
             }
 
             .ribbon-group {
@@ -227,25 +227,25 @@ export class RibbonMenu {
                 padding: 6px 12px;
                 background-color: transparent;
                 border: 1px solid transparent;
-                border-radius: 3px;
-                color: #cccccc;
+                border-radius: var(--radius-sm, 3px);
+                color: var(--color-text-primary, #cccccc);
                 cursor: pointer;
-                font-size: 13px;
+                font-size: var(--font-size-lg, 13px);
                 font-family: inherit;
             }
 
             .ribbon-group-btn:hover {
-                background-color: #3e3e3e;
-                border-color: #4e4e4e;
+                background-color: var(--color-bg-hover, #3e3e3e);
+                border-color: var(--color-border-hover, #4e4e4e);
             }
 
             .ribbon-group-btn.active {
-                background-color: #094771;
-                border-color: #007acc;
+                background-color: var(--color-bg-active, #094771);
+                border-color: var(--color-accent, #007acc);
             }
 
             .ribbon-icon {
-                font-size: 14px;
+                font-size: var(--font-size-xl, 14px);
             }
 
             .ribbon-label {
@@ -263,10 +263,10 @@ export class RibbonMenu {
                 top: 100%;
                 left: 0;
                 min-width: 180px;
-                background-color: #252526;
-                border: 1px solid #3c3c3c;
-                border-radius: 4px;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                background-color: var(--color-bg-surface, #252526);
+                border: 1px solid var(--color-border, #3c3c3c);
+                border-radius: var(--radius-md, 4px);
+                box-shadow: var(--shadow-dropdown, 0 4px 12px rgba(0, 0, 0, 0.3));
                 z-index: 1000;
                 padding: 4px 0;
             }
@@ -277,12 +277,12 @@ export class RibbonMenu {
                 gap: 8px;
                 padding: 8px 12px;
                 cursor: pointer;
-                font-size: 13px;
-                color: #cccccc;
+                font-size: var(--font-size-lg, 13px);
+                color: var(--color-text-primary, #cccccc);
             }
 
             .ribbon-menu-item:hover {
-                background-color: #094771;
+                background-color: var(--color-bg-active, #094771);
             }
 
             .ribbon-menu-item.disabled {
@@ -297,7 +297,7 @@ export class RibbonMenu {
             .ribbon-menu-item-icon {
                 width: 20px;
                 text-align: center;
-                font-size: 14px;
+                font-size: var(--font-size-xl, 14px);
             }
 
             .ribbon-menu-item-label {
@@ -306,7 +306,7 @@ export class RibbonMenu {
 
             .ribbon-separator {
                 height: 1px;
-                background-color: #3c3c3c;
+                background-color: var(--color-border, #3c3c3c);
                 margin: 4px 8px;
             }
         `;
@@ -392,8 +392,8 @@ export function generateRibbonCss(): string {
             display: flex;
             gap: 2px;
             padding: 4px 8px;
-            background-color: #2d2d2d;
-            border-bottom: 1px solid #3c3c3c;
+            background-color: var(--color-bg-elevated, #2d2d2d);
+            border-bottom: 1px solid var(--color-border, #3c3c3c);
         }
 
         .ribbon-group {
@@ -407,25 +407,25 @@ export function generateRibbonCss(): string {
             padding: 6px 12px;
             background-color: transparent;
             border: 1px solid transparent;
-            border-radius: 3px;
-            color: #cccccc;
+            border-radius: var(--radius-sm, 3px);
+            color: var(--color-text-primary, #cccccc);
             cursor: pointer;
-            font-size: 13px;
+            font-size: var(--font-size-lg, 13px);
             font-family: inherit;
         }
 
         .ribbon-group-btn:hover {
-            background-color: #3e3e3e;
-            border-color: #4e4e4e;
+            background-color: var(--color-bg-hover, #3e3e3e);
+            border-color: var(--color-border-hover, #4e4e4e);
         }
 
         .ribbon-group-btn.active {
-            background-color: #094771;
-            border-color: #007acc;
+            background-color: var(--color-bg-active, #094771);
+            border-color: var(--color-accent, #007acc);
         }
 
         .ribbon-icon {
-            font-size: 14px;
+            font-size: var(--font-size-xl, 14px);
         }
 
         .ribbon-label {
@@ -443,10 +443,10 @@ export function generateRibbonCss(): string {
             top: 100%;
             left: 0;
             min-width: 180px;
-            background-color: #252526;
-            border: 1px solid #3c3c3c;
-            border-radius: 4px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            background-color: var(--color-bg-surface, #252526);
+            border: 1px solid var(--color-border, #3c3c3c);
+            border-radius: var(--radius-md, 4px);
+            box-shadow: var(--shadow-dropdown, 0 4px 12px rgba(0, 0, 0, 0.3));
             z-index: 1000;
             padding: 4px 0;
         }
@@ -457,12 +457,12 @@ export function generateRibbonCss(): string {
             gap: 8px;
             padding: 8px 12px;
             cursor: pointer;
-            font-size: 13px;
-            color: #cccccc;
+            font-size: var(--font-size-lg, 13px);
+            color: var(--color-text-primary, #cccccc);
         }
 
         .ribbon-menu-item:hover {
-            background-color: #094771;
+            background-color: var(--color-bg-active, #094771);
         }
 
         .ribbon-menu-item.disabled {
@@ -477,7 +477,7 @@ export function generateRibbonCss(): string {
         .ribbon-menu-item-icon {
             width: 20px;
             text-align: center;
-            font-size: 14px;
+            font-size: var(--font-size-xl, 14px);
         }
 
         .ribbon-menu-item-label {

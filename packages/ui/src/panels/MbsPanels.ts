@@ -73,14 +73,14 @@ export class MbsModelTreePanel extends Panel {
         const style = document.createElement('style');
         style.textContent = `
             .mbs-tree-container {
-                font-family: monospace;
-                font-size: 12px;
-                padding: 8px;
+                font-family: var(--font-family-mono, monospace);
+                font-size: var(--font-size-md, 12px);
+                padding: var(--spacing-md, 8px);
             }
             .mbs-tree-node {
                 padding: 4px 8px;
                 cursor: pointer;
-                border-radius: 3px;
+                border-radius: var(--radius-sm, 3px);
                 margin: 2px 0;
                 display: flex;
                 align-items: center;
@@ -100,14 +100,14 @@ export class MbsModelTreePanel extends Panel {
                 justify-content: center;
             }
             .mbs-tree-children {
-                margin-left: 16px;
+                margin-left: var(--spacing-xl, 16px);
                 border-left: 1px solid rgba(255, 255, 255, 0.2);
             }
-            .mbs-tree-node-group .mbs-tree-node-icon { color: #4CAF50; }
-            .mbs-tree-node-parts .mbs-tree-node-icon { color: #2196F3; }
-            .mbs-tree-node-joint .mbs-tree-node-icon { color: #FF9800; }
-            .mbs-tree-node-motion .mbs-tree-node-icon { color: #9C27B0; }
-            .mbs-tree-node-frame .mbs-tree-node-icon { color: #00BCD4; }
+            .mbs-tree-node-group .mbs-tree-node-icon { color: var(--color-node-group, #4CAF50); }
+            .mbs-tree-node-parts .mbs-tree-node-icon { color: var(--color-node-parts, #2196F3); }
+            .mbs-tree-node-joint .mbs-tree-node-icon { color: var(--color-node-joint, #FF9800); }
+            .mbs-tree-node-motion .mbs-tree-node-icon { color: var(--color-node-motion, #9C27B0); }
+            .mbs-tree-node-frame .mbs-tree-node-icon { color: var(--color-node-frame, #00BCD4); }
         `;
         document.head.appendChild(style);
     }
@@ -324,8 +324,8 @@ export class JointPropertyPanel extends Panel {
         const style = document.createElement('style');
         style.textContent = `
             .joint-property-container {
-                padding: 8px;
-                font-size: 12px;
+                padding: var(--spacing-md, 8px);
+                font-size: var(--font-size-md, 12px);
             }
             .joint-property-row {
                 display: flex;
@@ -335,19 +335,19 @@ export class JointPropertyPanel extends Panel {
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             }
             .joint-property-label {
-                color: #aaa;
+                color: var(--color-text-secondary, #aaa);
             }
             .joint-property-value {
-                color: #fff;
-                font-family: monospace;
+                color: var(--color-text-on-accent, #fff);
+                font-family: var(--font-family-mono, monospace);
             }
             .joint-property-input {
                 width: 80px;
                 padding: 2px 4px;
-                background: #333;
-                border: 1px solid #555;
-                color: #fff;
-                font-family: monospace;
+                background: var(--color-bg-input, #333);
+                border: 1px solid var(--color-border-hover, #555);
+                color: var(--color-text-on-accent, #fff);
+                font-family: var(--font-family-mono, monospace);
             }
             .joint-property-section {
                 margin-top: 12px;
@@ -356,13 +356,13 @@ export class JointPropertyPanel extends Panel {
             }
             .joint-property-section-title {
                 font-weight: bold;
-                color: #4CAF50;
+                color: var(--color-node-group, #4CAF50);
                 margin-bottom: 8px;
             }
             .joint-property-empty {
-                color: #666;
+                color: var(--color-text-disabled, #666);
                 text-align: center;
-                padding: 20px;
+                padding: var(--spacing-xxl, 20px);
             }
         `;
         document.head.appendChild(style);
@@ -542,34 +542,34 @@ export class MotionControlPanel extends Panel {
         const style = document.createElement('style');
         style.textContent = `
             .motion-control-container {
-                padding: 8px;
+                padding: var(--spacing-md, 8px);
             }
             .motion-global-controls {
                 display: flex;
-                gap: 8px;
+                gap: var(--spacing-md, 8px);
                 margin-bottom: 12px;
             }
             .motion-control-btn {
                 padding: 6px 12px;
-                background: #444;
-                border: 1px solid #666;
-                color: #fff;
+                background: var(--color-bg-hover, #444);
+                border: 1px solid var(--color-border-hover, #666);
+                color: var(--color-text-on-accent, #fff);
                 cursor: pointer;
-                border-radius: 3px;
-                font-size: 14px;
+                border-radius: var(--radius-sm, 3px);
+                font-size: var(--font-size-xl, 14px);
             }
             .motion-control-btn:hover {
-                background: #555;
+                background: var(--color-border-hover, #555);
             }
             .motion-control-btn.active {
-                background: #4CAF50;
+                background: var(--color-success, #4CAF50);
             }
             .motion-time-display {
-                font-family: monospace;
-                font-size: 14px;
-                padding: 8px;
-                background: #222;
-                border-radius: 3px;
+                font-family: var(--font-family-mono, monospace);
+                font-size: var(--font-size-xl, 14px);
+                padding: var(--spacing-md, 8px);
+                background: var(--color-bg-base, #222);
+                border-radius: var(--radius-sm, 3px);
                 margin-bottom: 12px;
                 text-align: center;
             }
@@ -578,16 +578,16 @@ export class MotionControlPanel extends Panel {
                 overflow-y: auto;
             }
             .motion-item {
-                padding: 8px;
-                margin-bottom: 8px;
-                background: #333;
-                border-radius: 3px;
+                padding: var(--spacing-md, 8px);
+                margin-bottom: var(--spacing-md, 8px);
+                background: var(--color-bg-input, #333);
+                border-radius: var(--radius-sm, 3px);
             }
             .motion-item-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 8px;
+                margin-bottom: var(--spacing-md, 8px);
             }
             .motion-item-name {
                 font-weight: bold;
@@ -596,8 +596,8 @@ export class MotionControlPanel extends Panel {
                 cursor: pointer;
             }
             .motion-item-params {
-                font-size: 11px;
-                color: #aaa;
+                font-size: var(--font-size-sm, 11px);
+                color: var(--color-text-secondary, #aaa);
             }
         `;
         document.head.appendChild(style);

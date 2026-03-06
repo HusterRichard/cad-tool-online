@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { generateCssVariables } from '@cadtool-online/ui';
 
 export class CadEditorPanel {
     public static currentPanel: CadEditorPanel | undefined;
@@ -403,6 +404,11 @@ export class CadEditorPanel {
             vscode.Uri.joinPath(extensionUri, 'dist', 'wasm')
         );
 
+        // Get URI for icon resources
+        const icons32 = webview.asWebviewUri(
+            vscode.Uri.joinPath(extensionUri, 'public', 'icons', 'png', '32')
+        );
+
         const nonce = this._getNonce();
 
         return `<!DOCTYPE html>
@@ -413,6 +419,7 @@ export class CadEditorPanel {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src ${webview.cspSource} data:; connect-src ${webview.cspSource};">
     <title>CAD Editor</title>
     <style>
+        ${generateCssVariables('light')}
         * {
             margin: 0;
             padding: 0;
@@ -422,30 +429,46 @@ export class CadEditorPanel {
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            background-color: #1e1e1e;
-            color: #cccccc;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--color-bg-base);
+            color: var(--color-text-primary);
+            font-family: var(--font-family);
         }
         .container {
             display: flex;
+            flex-direction: column;
             width: 100%;
             height: 100%;
         }
+        .main-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
         .sidebar {
-            width: 250px;
-            background-color: #252526;
-            border-right: 1px solid #3c3c3c;
+            width: 265px;
+            background-color: var(--color-bg-surface);
+            border-right: 1px solid var(--color-border);
             display: flex;
             flex-direction: column;
             overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .sidebar-right {
+            width: 280px;
+            background-color: var(--color-bg-surface);
+            border-left: 1px solid var(--color-border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
         }
         .panel {
-            border-bottom: 1px solid #3c3c3c;
+            border-bottom: 1px solid var(--color-border);
         }
         .panel-header {
-            padding: 8px 12px;
-            background-color: #2d2d2d;
-            font-size: 11px;
+            padding: var(--spacing-md) var(--spacing-lg);
+            background-color: var(--color-bg-elevated);
+            font-size: var(--font-size-sm);
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -453,41 +476,40 @@ export class CadEditorPanel {
             user-select: none;
         }
         .panel-header:hover {
-            background-color: #383838;
+            background-color: var(--color-bg-hover);
         }
         .panel-content {
-            padding: 8px;
-            font-size: 13px;
+            padding: var(--spacing-md);
+            font-size: var(--font-size-lg);
         }
         .viewport {
             flex: 1;
             position: relative;
-            display: flex;
-            flex-direction: column;
+            overflow: hidden;
         }
         #canvas-container {
-            flex: 1;
             width: 100%;
+            height: 100%;
             position: relative;
-            background: linear-gradient(to bottom, #96a0aa 0%, #dce1e6 100%);
+            background: linear-gradient(to bottom, #c8cfd6 0%, #e8ecf0 100%);
         }
         /* Ribbon Bar Styles */
         .ribbon-bar {
             display: flex;
-            background: linear-gradient(to bottom, #3c3c3c 0%, #2d2d2d 100%);
-            border-bottom: 1px solid #1e1e1e;
-            padding: 0;
-            min-height: 70px;
+            background: var(--color-bg-elevated);
+            border-bottom: 1px solid var(--color-border-hover);
+            padding: 4px 8px;
+            height: 100px;
+            flex-shrink: 0;
+            gap: 6px;
+            overflow-x: auto;
         }
         .ribbon-tab-group {
             display: flex;
             flex-direction: column;
-            border-right: 1px solid #4a4a4a;
-            padding: 4px 8px;
-            min-width: 80px;
-        }
-        .ribbon-tab-group:last-child {
-            border-right: none;
+            padding: 4px 6px;
+            min-width: 50px;
+            gap: 2px;
         }
         .ribbon-tab-content {
             display: flex;
@@ -497,13 +519,11 @@ export class CadEditorPanel {
             padding-top: 4px;
         }
         .ribbon-tab-label {
-            font-size: 10px;
-            color: #888;
+            font-size: 11px;
+            color: var(--color-text-muted);
             text-align: center;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             padding: 2px 0;
-            border-top: 1px solid #4a4a4a;
+            border-top: 1px solid var(--color-border-subtle);
             margin-top: auto;
         }
         .ribbon-btn {
@@ -511,33 +531,43 @@ export class CadEditorPanel {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 6px 10px;
+            padding: 2px 4px;
             background: transparent;
             border: 1px solid transparent;
             border-radius: 3px;
-            color: #cccccc;
+            color: var(--color-text-secondary);
             cursor: pointer;
             font-family: inherit;
-            min-width: 50px;
+            min-width: 46px;
             gap: 2px;
         }
         .ribbon-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
+            background: var(--color-bg-hover);
+            border-color: var(--color-border);
         }
         .ribbon-btn:active {
-            background: rgba(0, 122, 204, 0.3);
+            background: var(--color-bg-active);
         }
         .ribbon-btn.has-dropdown {
             position: relative;
         }
         .ribbon-btn-icon {
-            font-size: 20px;
-            line-height: 1;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+        .ribbon-btn-icon img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
         }
         .ribbon-btn-text {
             font-size: 11px;
             white-space: nowrap;
+            color: var(--color-text-secondary);
         }
         .ribbon-btn-arrow {
             font-size: 8px;
@@ -548,10 +578,10 @@ export class CadEditorPanel {
             top: 100%;
             left: 0;
             min-width: 200px;
-            background-color: #252526;
-            border: 1px solid #3c3c3c;
-            border-radius: 4px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            background-color: var(--color-bg-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-dropdown);
             z-index: 1000;
             padding: 4px 0;
             display: none;
@@ -565,11 +595,11 @@ export class CadEditorPanel {
             gap: 10px;
             padding: 8px 14px;
             cursor: pointer;
-            font-size: 13px;
-            color: #cccccc;
+            font-size: var(--font-size-lg);
+            color: var(--color-text-primary);
         }
         .ribbon-dropdown-item:hover {
-            background-color: #094771;
+            background-color: var(--color-bg-active);
         }
         .ribbon-dropdown-item-icon {
             width: 20px;
@@ -581,14 +611,14 @@ export class CadEditorPanel {
         }
         .ribbon-separator {
             width: 1px;
-            background: #4a4a4a;
-            margin: 4px 6px;
+            background: var(--color-border-hover);
+            margin: 4px 0;
             align-self: stretch;
         }
         .status-bar {
-            height: 22px;
-            background-color: #007acc;
-            color: white;
+            height: 24px;
+            background-color: var(--color-accent-bg);
+            color: var(--color-text-on-accent);
             display: flex;
             align-items: center;
             padding: 0 10px;
@@ -614,10 +644,10 @@ export class CadEditorPanel {
             gap: 6px;
         }
         .tree-node:hover {
-            background-color: #2a2d2e;
+            background-color: var(--color-bg-hover);
         }
         .tree-node.selected {
-            background-color: #094771;
+            background-color: var(--color-bg-active);
         }
         .tree-node .expand-btn {
             width: 16px;
@@ -628,10 +658,10 @@ export class CadEditorPanel {
             font-size: 10px;
             cursor: pointer;
             user-select: none;
-            color: #888;
+            color: var(--color-text-muted);
         }
         .tree-node .expand-btn:hover {
-            color: #ccc;
+            color: var(--color-text-primary);
         }
         .tree-node .visibility-btn {
             width: 18px;
@@ -671,16 +701,16 @@ export class CadEditorPanel {
         .property-row {
             display: flex;
             padding: 4px 0;
-            border-bottom: 1px solid #3c3c3c;
+            border-bottom: 1px solid var(--color-border);
         }
         .property-label {
             width: 100px;
-            color: #9cdcfe;
-            font-size: 12px;
+            color: var(--color-text-muted);
+            font-size: var(--font-size-md);
         }
         .property-value {
             flex: 1;
-            font-size: 12px;
+            font-size: var(--font-size-md);
         }
         /* Loading overlay */
         .loading-overlay {
@@ -689,7 +719,7 @@ export class CadEditorPanel {
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgba(0, 0, 0, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -701,8 +731,8 @@ export class CadEditorPanel {
         .loading-spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid #3c3c3c;
-            border-top-color: #007acc;
+            border: 3px solid var(--color-border);
+            border-top-color: var(--color-accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -711,7 +741,7 @@ export class CadEditorPanel {
         }
         .loading-text {
             margin-top: 12px;
-            color: #cccccc;
+            color: var(--color-text-primary);
         }
         .progress-container {
             width: 200px;
@@ -720,13 +750,13 @@ export class CadEditorPanel {
         .progress-bar {
             width: 100%;
             height: 6px;
-            background-color: #3c3c3c;
+            background-color: var(--color-border);
             border-radius: 3px;
             overflow: hidden;
         }
         .progress-fill {
             height: 100%;
-            background-color: #007acc;
+            background-color: var(--color-accent);
             border-radius: 3px;
             transition: width 0.2s ease;
             width: 0%;
@@ -734,18 +764,18 @@ export class CadEditorPanel {
         .progress-text {
             margin-top: 6px;
             font-size: 12px;
-            color: #808080;
+            color: var(--color-text-disabled);
         }
         /* Explode slider */
         .explode-slider-container {
             position: absolute;
             top: 90px;
             right: 20px;
-            background-color: rgba(37, 37, 38, 0.95);
-            border: 1px solid #3c3c3c;
+            background-color: var(--color-bg-surface);
+            border: 1px solid var(--color-border);
             border-radius: 6px;
             padding: 15px 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            box-shadow: var(--shadow-dropdown);
             z-index: 100;
             display: none;
             min-width: 280px;
@@ -757,7 +787,7 @@ export class CadEditorPanel {
             font-size: 13px;
             font-weight: 600;
             margin-bottom: 12px;
-            color: #cccccc;
+            color: var(--color-text-primary);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -765,12 +795,12 @@ export class CadEditorPanel {
         .explode-slider-close {
             cursor: pointer;
             font-size: 18px;
-            color: #888;
+            color: var(--color-text-muted);
             line-height: 1;
             padding: 0 4px;
         }
         .explode-slider-close:hover {
-            color: #ccc;
+            color: var(--color-text-primary);
         }
         .explode-slider-wrapper {
             display: flex;
@@ -782,7 +812,7 @@ export class CadEditorPanel {
             height: 6px;
             -webkit-appearance: none;
             appearance: none;
-            background: #3c3c3c;
+            background: var(--color-border);
             outline: none;
             border-radius: 3px;
         }
@@ -791,14 +821,14 @@ export class CadEditorPanel {
             appearance: none;
             width: 16px;
             height: 16px;
-            background: #007acc;
+            background: var(--color-accent);
             cursor: pointer;
             border-radius: 50%;
         }
         .explode-slider::-moz-range-thumb {
             width: 16px;
             height: 16px;
-            background: #007acc;
+            background: var(--color-accent);
             cursor: pointer;
             border-radius: 50%;
             border: none;
@@ -807,12 +837,12 @@ export class CadEditorPanel {
             display: flex;
             justify-content: space-between;
             font-size: 11px;
-            color: #888;
+            color: var(--color-text-muted);
         }
         .explode-slider-value {
             text-align: center;
             font-size: 13px;
-            color: #cccccc;
+            color: var(--color-text-primary);
             font-weight: 600;
         }
         /* Render config panel */
@@ -820,10 +850,10 @@ export class CadEditorPanel {
             position: absolute;
             top: 90px;
             right: 320px;
-            background-color: rgba(37, 37, 38, 0.96);
-            border: 1px solid #3c3c3c;
+            background-color: var(--color-bg-surface);
+            border: 1px solid var(--color-border);
             border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            box-shadow: var(--shadow-dropdown);
             z-index: 101;
             display: none;
             min-width: 290px;
@@ -839,17 +869,17 @@ export class CadEditorPanel {
             font-size: 13px;
             font-weight: 600;
             margin-bottom: 10px;
-            color: #cccccc;
+            color: var(--color-text-primary);
         }
         .render-config-close {
             cursor: pointer;
             font-size: 18px;
-            color: #888;
+            color: var(--color-text-muted);
             line-height: 1;
             padding: 0 4px;
         }
         .render-config-close:hover {
-            color: #ccc;
+            color: var(--color-text-primary);
         }
         .render-config-row {
             display: flex;
@@ -860,14 +890,14 @@ export class CadEditorPanel {
             font-size: 12px;
         }
         .render-config-row label {
-            color: #b8b8b8;
+            color: var(--color-text-secondary);
             flex: 1;
         }
         .render-config-row select {
             min-width: 140px;
-            background: #2d2d2d;
-            color: #cccccc;
-            border: 1px solid #4a4a4a;
+            background: var(--color-bg-elevated);
+            color: var(--color-text-primary);
+            border: 1px solid var(--color-border-subtle);
             border-radius: 4px;
             padding: 4px 6px;
             font-size: 12px;
@@ -880,189 +910,190 @@ export class CadEditorPanel {
 </head>
 <body>
     <div class="container">
-        <div class="sidebar">
-            <div class="panel">
-                <div class="panel-header">Model Tree</div>
-                <div class="panel-content" id="model-tree">
-                    <div style="color: #808080; font-style: italic;">No model loaded</div>
-                </div>
-            </div>
-            <div class="panel">
-                <div class="panel-header">Properties</div>
-                <div class="panel-content" id="properties-panel">
-                    <div style="color: #808080; font-style: italic;">Select an object to view properties</div>
-                </div>
-            </div>
-        </div>
-        <div class="viewport">
-            <!-- Ribbon Bar -->
-            <div class="ribbon-bar">
-                <!-- 閺傚洣娆?-->
+        <!-- Ribbon Bar (full width top) -->
+        <div class="ribbon-bar">
+            <!-- 文件 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" id="btn-import">
-                            <span class="ribbon-btn-icon">IMP</span>
-                            <span class="ribbon-btn-text">鐎电厧鍙?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_import.png" alt="导入"></span>
+                            <span class="ribbon-btn-text">导入</span>
                         </button>
                         <button class="ribbon-btn" id="btn-export">
-                            <span class="ribbon-btn-icon">EXP</span>
-                            <span class="ribbon-btn-text">鐎电厧鍤?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_file.png" alt="导出"></span>
+                            <span class="ribbon-btn-text">导出</span>
                         </button>
                         <button class="ribbon-btn" id="btn-fit">
-                            <span class="ribbon-btn-icon">FIT</span>
-                            <span class="ribbon-btn-text">闁倸绨?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/view_view_zoom_all.png" alt="适配"></span>
+                            <span class="ribbon-btn-text">适配</span>
                         </button>
                         <button class="ribbon-btn" id="btn-clear">
-                            <span class="ribbon-btn-icon">CLR</span>
-                            <span class="ribbon-btn-text">濞撳懐鈹?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_clear.png" alt="清除"></span>
+                            <span class="ribbon-btn-text">清除</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">閺傚洣娆?/div>
+                    <div class="ribbon-tab-label">文件</div>
                 </div>
                 <div class="ribbon-separator"></div>
 
-                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙艾鍨庣紒鍕啎鐠?-->
+                <!-- 分组 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createGroup">
-                            <span class="ribbon-btn-icon">+</span>
-                            <span class="ribbon-btn-text">閺傛澘缂?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_group.png" alt="组合"></span>
+                            <span class="ribbon-btn-text">组合</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createChildGroup">
-                            <span class="ribbon-btn-icon">+</span>
-                            <span class="ribbon-btn-text">鐎涙劕鍨庣紒?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_ungroup.png" alt="分解"></span>
+                            <span class="ribbon-btn-text">分解</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="groupProperties">
-                            <span class="ribbon-btn-icon">i</span>
-                            <span class="ribbon-btn-text">鐏炵偞鈧?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_default_group.png" alt="属性"></span>
+                            <span class="ribbon-btn-text">属性</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">閸掑棛绮嶇拋鎹愵吀</div>
+                    <div class="ribbon-tab-label">分组</div>
                 </div>
+                <div class="ribbon-separator"></div>
 
-                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙碍鐖ｉ弸鎯邦啎鐠?-->
+                <!-- 基本形状 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createFrame">
-                            <span class="ribbon-btn-icon">+</span>
-                            <span class="ribbon-btn-text">閺傛澘缂?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_marker.png" alt="标架"></span>
+                            <span class="ribbon-btn-text">标架</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="editFrame">
-                            <span class="ribbon-btn-icon">E</span>
-                            <span class="ribbon-btn-text">缂傛牞绶?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="编辑"></span>
+                            <span class="ribbon-btn-text">编辑</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="deleteFrame">
-                            <span class="ribbon-btn-icon">-</span>
-                            <span class="ribbon-btn-text">閸掔娀娅?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_delete.png" alt="删除"></span>
+                            <span class="ribbon-btn-text">删除</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">閺嶅洦鐏︾拋鎹愵吀</div>
+                    <div class="ribbon-tab-label">基本形状</div>
                 </div>
+                <div class="ribbon-separator"></div>
 
-                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙俺绻涢幒銉啎鐠?-->
+                <!-- 连接 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
+                        <button class="ribbon-btn" data-action-id="createJoint_fixed">
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_fixed.png" alt="固定副"></span>
+                            <span class="ribbon-btn-text">固定副</span>
+                        </button>
                         <button class="ribbon-btn" data-action-id="createJoint_revolute">
-                            <span class="ribbon-btn-icon">R</span>
-                            <span class="ribbon-btn-text">鏉烆剙濮?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_revolute.png" alt="转动副"></span>
+                            <span class="ribbon-btn-text">转动副</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_prismatic">
-                            <span class="ribbon-btn-icon">P</span>
-                            <span class="ribbon-btn-text">缁夎濮?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_prismatic.png" alt="平移副"></span>
+                            <span class="ribbon-btn-text">平移副</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
-                            <span class="ribbon-btn-icon">C</span>
-                            <span class="ribbon-btn-text">閸﹀棙鐓?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_cylindrical.png" alt="圆柱副"></span>
+                            <span class="ribbon-btn-text">圆柱副</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_spherical">
-                            <span class="ribbon-btn-icon">S</span>
-                            <span class="ribbon-btn-text">閻炲啫鑸?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_spherical.png" alt="球副"></span>
+                            <span class="ribbon-btn-text">球副</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_universal">
-                            <span class="ribbon-btn-icon">U</span>
-                            <span class="ribbon-btn-text">娑撳洤鎮?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_universal.png" alt="万向节"></span>
+                            <span class="ribbon-btn-text">万向节</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createJoint_planar">
-                            <span class="ribbon-btn-icon">L</span>
-                            <span class="ribbon-btn-text">楠炴娊娼?/span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_fixed">
-                            <span class="ribbon-btn-icon">F</span>
-                            <span class="ribbon-btn-text">閸ュ搫鐣?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_planar.png" alt="平面副"></span>
+                            <span class="ribbon-btn-text">平面副</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">鏉╃偞甯寸拋鎹愵吀</div>
+                    <div class="ribbon-tab-label">连接</div>
                 </div>
+                <div class="ribbon-separator"></div>
 
-                <!-- 婢舵矮缍嬬拋鎹愵吀閿涙岸鈹嶉崝銊啎鐠?-->
+                <!-- 驱动 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="createMotion_rotational">
-                            <span class="ribbon-btn-icon">R</span>
-                            <span class="ribbon-btn-text">閺冨娴?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_rotational.png" alt="转动驱动"></span>
+                            <span class="ribbon-btn-text">转动驱动</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="createMotion_translational">
-                            <span class="ribbon-btn-icon">T</span>
-                            <span class="ribbon-btn-text">楠炲磭些</span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_translational.png" alt="平移驱动"></span>
+                            <span class="ribbon-btn-text">平移驱动</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="motionProperties">
-                            <span class="ribbon-btn-icon">i</span>
-                            <span class="ribbon-btn-text">鐏炵偞鈧?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.png" alt="属性"></span>
+                            <span class="ribbon-btn-text">属性</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">妞瑰崬濮╃拋鎹愵吀</div>
+                    <div class="ribbon-tab-label">驱动</div>
                 </div>
                 <div class="ribbon-separator"></div>
 
-                <!-- 濞翠椒缍嬬拋鎹愵吀 -->
+                <!-- 力 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="fluidTankSlice">
-                            <span class="ribbon-btn-icon">F1</span>
-                            <span class="ribbon-btn-text">濞屽湱顔堥崚鍥╁</span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_point.png" alt="点点接触"></span>
+                            <span class="ribbon-btn-text">点点接触</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="fluidPort">
-                            <span class="ribbon-btn-icon">F2</span>
-                            <span class="ribbon-btn-text">濞翠椒缍嬬粩顖氬經</span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_surface.png" alt="点面接触"></span>
+                            <span class="ribbon-btn-text">点面接触</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">濞翠椒缍嬬拋鎹愵吀</div>
+                    <div class="ribbon-tab-label">力</div>
                 </div>
                 <div class="ribbon-separator"></div>
 
-                <!-- 鐠佹崘顓稿銉ュ徔 -->
+                <!-- 工具 -->
                 <div class="ribbon-tab-group">
                     <div class="ribbon-tab-content">
                         <button class="ribbon-btn" data-action-id="measureTool">
-                            <span class="ribbon-btn-icon">M</span>
-                            <span class="ribbon-btn-text">濞村鍣?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_measure.png" alt="测量"></span>
+                            <span class="ribbon-btn-text">测量</span>
                         </button>
                         <button class="ribbon-btn" id="btn-explode">
-                            <span class="ribbon-btn-icon">X</span>
-                            <span class="ribbon-btn-text">閻栧棛鍋㈢憴鍡楁禈</span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_exploded_view.png" alt="爆炸视图"></span>
+                            <span class="ribbon-btn-text">爆炸视图</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="surfaceThicken">
-                            <span class="ribbon-btn-icon">S+</span>
-                            <span class="ribbon-btn-text">閺囨煡娼伴崝鐘插袱</span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_surface_thickening.png" alt="曲面加厚"></span>
+                            <span class="ribbon-btn-text">曲面加厚</span>
                         </button>
                         <button class="ribbon-btn" data-action-id="planarRingProcess">
-                            <span class="ribbon-btn-icon">P</span>
-                            <span class="ribbon-btn-text">楠炴娊娼伴悳顖氼槱閻?/span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_planar_loop_constraint.png" alt="平面环"></span>
+                            <span class="ribbon-btn-text">平面环</span>
                         </button>
                         <button class="ribbon-btn" id="btn-render-config">
-                            <span class="ribbon-btn-icon">CFG</span>
-                            <span class="ribbon-btn-text">濞撳弶鐓嬮柊宥囩枂</span>
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.png" alt="渲染配置"></span>
+                            <span class="ribbon-btn-text">渲染配置</span>
                         </button>
                     </div>
-                    <div class="ribbon-tab-label">鐠佹崘顓稿銉ュ徔</div>
+                    <div class="ribbon-tab-label">工具</div>
                 </div>
             </div>
-            <div id="canvas-container">
+        <!-- Main Body -->
+        <div class="main-body">
+            <!-- Left Sidebar: Model Tree -->
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-header">模型浏览器</div>
+                    <div class="panel-content" id="model-tree">
+                        <div style="color: var(--color-text-disabled); font-style: italic;">未加载模型</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Viewport -->
+            <div class="viewport">
+                <div id="canvas-container">
                 <!-- Explode slider control -->
                 <div class="explode-slider-container" id="explode-slider-container">
                     <div class="explode-slider-header">
-                        <span>閻栧棛鍋㈢憴鍡楁禈鐠烘繄顬?/span>
-                        <span class="explode-slider-close" id="explode-slider-close">鑴?/span>
+                        <span>爆炸视图控制</span>
+                        <span class="explode-slider-close" id="explode-slider-close">&times;</span>
                     </div>
                     <div class="explode-slider-wrapper">
                         <input type="range" class="explode-slider" id="explode-slider" min="0" max="100" value="0" step="1">
@@ -1075,18 +1106,18 @@ export class CadEditorPanel {
                 </div>
                 <div class="render-config-panel" id="render-config-panel">
                     <div class="render-config-header">
-                        <span>濞撳弶鐓嬮柊宥囩枂</span>
-                        <span class="render-config-close" id="render-config-close">鑴?/span>
+                        <span>渲染配置</span>
+                        <span class="render-config-close" id="render-config-close">&times;</span>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-visual-preset">鐟欏棜顫庢０鍕啎</label>
+                        <label for="render-visual-preset">可视化预设</label>
                         <select id="render-visual-preset">
                             <option value="cad" selected>CAD</option>
-                            <option value="cinematic">閻㈤潧濂栭幇?/option>
+                            <option value="cinematic">影院级</option>
                         </select>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-material-mode">閺夋劘宸濆Ο鈥崇础</label>
+                        <label for="render-material-mode">材质模式</label>
                         <select id="render-material-mode">
                             <option value="matcap">Matcap</option>
                             <option value="pbr">PBR</option>
@@ -1095,19 +1126,19 @@ export class CadEditorPanel {
                         </select>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-postprocessing">閸氬骸顦╅悶?/label>
+                        <label for="render-postprocessing">后处理</label>
                         <input id="render-postprocessing" type="checkbox" checked>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-edge-layer">鏉堝湱鍤庣仦?/label>
+                        <label for="render-edge-layer">边缘层</label>
                         <input id="render-edge-layer" type="checkbox" checked>
                     </div>
                     <div class="render-config-row">
-                        <label for="render-precision">缂冩垶鐗哥划鎯у</label>
+                        <label for="render-precision">网格精度</label>
                         <select id="render-precision">
-                            <option value="coarse">缁鏆?/option>
-                            <option value="balanced" selected>楠炲疇銆€</option>
-                            <option value="fine">缁墽绮?/option>
+                            <option value="coarse">粗糙</option>
+                            <option value="balanced" selected>平衡</option>
+                            <option value="fine">精细</option>
                         </select>
                     </div>
                 </div>
@@ -1115,7 +1146,7 @@ export class CadEditorPanel {
             <div class="loading-overlay hidden" id="loading-overlay">
                 <div style="text-align: center;">
                     <div class="loading-spinner"></div>
-                    <div class="loading-text" id="loading-text">Loading...</div>
+                    <div class="loading-text" id="loading-text">加载中...</div>
                     <div class="progress-container" id="progress-container" style="display: none;">
                         <div class="progress-bar">
                             <div class="progress-fill" id="progress-fill"></div>
@@ -1124,10 +1155,21 @@ export class CadEditorPanel {
                     </div>
                 </div>
             </div>
-            <div class="status-bar">
-                <span class="status-text" id="status-text">Initializing...</span>
-                <span class="status-info" id="status-info"></span>
             </div>
+            <!-- Right Sidebar: Properties -->
+            <div class="sidebar-right">
+                <div class="panel">
+                    <div class="panel-header">属性</div>
+                    <div class="panel-content" id="properties-panel">
+                        <div style="color: var(--color-text-disabled); font-style: italic;">选择对象以查看属性</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span class="status-text" id="status-text">初始化中...</span>
+            <span class="status-info" id="status-info"></span>
         </div>
     </div>
     <script nonce="${nonce}">
@@ -1170,6 +1212,7 @@ export class CadEditorPanel {
     <script nonce="${nonce}" type="module" src="${webviewUri}"></script>
 </body>
 </html>`;
+
     }
 
     private _getNonce(): string {

@@ -82,3 +82,6 @@ export * from './MbsPanels';
 
 // Ribbon Menu
 export * from './RibbonMenu';
+
+// Part Property Panel
+export * from './PartPropertyPanel';
