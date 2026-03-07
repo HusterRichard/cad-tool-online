@@ -61,6 +61,9 @@ export class CadEditorPanel {
                     case 'exportCadtoolConfig':
                         await this._handleExportCadtoolConfig(message.data);
                         return;
+                    case 'requestCadtoolConfigImport':
+                        await this._handleImportCadtoolConfig();
+                        return;
                     case 'fitView':
                         // Handled in webview
                         return;
@@ -303,6 +306,7 @@ export class CadEditorPanel {
             case 'createJoint_spherical':
             case 'createJoint_universal':
             case 'createJoint_planar':
+            case 'createJoint_screw':
             case 'createJoint_fixed': {
                 const jointType = (params?.jointType as string | undefined) ?? action.replace('createJoint_', '');
                 vscode.window.showInformationMessage(`Create ${jointType} joint`);
@@ -342,13 +346,17 @@ export class CadEditorPanel {
             case 'fluidPort':
             case 'measureTool':
             case 'surfaceThicken':
-            case 'planarRingProcess': {
+            case 'planarRingProcess':
+            case 'cleanGroup':
+            case 'createDefaultGroup': {
                 const actionMessages: Record<string, string> = {
                     fluidTankSlice: 'Creating fluid tank slice',
                     fluidPort: 'Creating fluid port',
                     measureTool: 'Running measurement tool',
                     surfaceThicken: 'Running surface thicken',
-                    planarRingProcess: 'Running planar ring process'
+                    planarRingProcess: 'Running planar ring process',
+                    cleanGroup: 'Cleaning groups',
+                    createDefaultGroup: 'Creating default group'
                 };
 
                 vscode.window.showInformationMessage(actionMessages[action] ?? `Executing action: ${action}`);
@@ -1218,177 +1226,199 @@ export class CadEditorPanel {
     <div class="container">
         <!-- Ribbon Bar (full width top) -->
         <div class="ribbon-bar">
-            <!-- 文件 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" id="btn-import">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_import.png" alt="导入"></span>
-                            <span class="ribbon-btn-text">导入</span>
-                        </button>
-                        <button class="ribbon-btn" id="btn-export">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_file.png" alt="导出"></span>
-                            <span class="ribbon-btn-text">导出</span>
-                        </button>
-                        <button class="ribbon-btn" id="btn-fit">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/view_view_zoom_all.png" alt="适配"></span>
-                            <span class="ribbon-btn-text">适配</span>
-                        </button>
-                        <button class="ribbon-btn" id="btn-clear">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_clear.png" alt="清除"></span>
-                            <span class="ribbon-btn-text">清除</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">文件</div>
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" id="btn-import">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_import.png" alt="导入"></span>
+                        <span class="ribbon-btn-text">导入</span>
+                    </button>
+                    <button class="ribbon-btn" id="btn-open">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_open_file.png" alt="打开"></span>
+                        <span class="ribbon-btn-text">打开</span>
+                    </button>
+                    <button class="ribbon-btn" id="btn-save">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_file.png" alt="保存"></span>
+                        <span class="ribbon-btn-text">保存</span>
+                    </button>
+                    <button class="ribbon-btn" id="btn-saveas">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_as.png" alt="另存"></span>
+                        <span class="ribbon-btn-text">另存</span>
+                    </button>
                 </div>
-                <div class="ribbon-separator"></div>
-
-                <!-- 分组 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" data-action-id="createGroup">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_group.png" alt="组合"></span>
-                            <span class="ribbon-btn-text">组合</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createChildGroup">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_ungroup.png" alt="分解"></span>
-                            <span class="ribbon-btn-text">分解</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="groupProperties">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_default_group.png" alt="属性"></span>
-                            <span class="ribbon-btn-text">属性</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">分组</div>
-                </div>
-                <div class="ribbon-separator"></div>
-
-                <!-- 基本形状 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" data-action-id="createFrame">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_marker.png" alt="标架"></span>
-                            <span class="ribbon-btn-text">标架</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createRefFrame">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_refmarker.png" alt="参考标架"></span>
-                            <span class="ribbon-btn-text">参考标架</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createDesignPoint">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="设计点"></span>
-                            <span class="ribbon-btn-text">设计点</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="editFrame">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="编辑"></span>
-                            <span class="ribbon-btn-text">编辑</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="deleteFrame">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_delete.png" alt="删除"></span>
-                            <span class="ribbon-btn-text">删除</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">基本形状</div>
-                </div>
-                <div class="ribbon-separator"></div>
-
-                <!-- 连接 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" data-action-id="createJoint_fixed">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_fixed.png" alt="固定副"></span>
-                            <span class="ribbon-btn-text">固定副</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_revolute">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_revolute.png" alt="转动副"></span>
-                            <span class="ribbon-btn-text">转动副</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_prismatic">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_prismatic.png" alt="平移副"></span>
-                            <span class="ribbon-btn-text">平移副</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_cylindrical.png" alt="圆柱副"></span>
-                            <span class="ribbon-btn-text">圆柱副</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_spherical">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_spherical.png" alt="球副"></span>
-                            <span class="ribbon-btn-text">球副</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_universal">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_universal.png" alt="万向节"></span>
-                            <span class="ribbon-btn-text">万向节</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createJoint_planar">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_planar.png" alt="平面副"></span>
-                            <span class="ribbon-btn-text">平面副</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">连接</div>
-                </div>
-                <div class="ribbon-separator"></div>
-
-                <!-- 驱动 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" data-action-id="createMotion_rotational">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_rotational.png" alt="转动驱动"></span>
-                            <span class="ribbon-btn-text">转动驱动</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="createMotion_translational">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_translational.png" alt="平移驱动"></span>
-                            <span class="ribbon-btn-text">平移驱动</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="motionProperties">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.png" alt="属性"></span>
-                            <span class="ribbon-btn-text">属性</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">驱动</div>
-                </div>
-                <div class="ribbon-separator"></div>
-
-                <!-- 力 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" data-action-id="fluidTankSlice">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_point.png" alt="点点接触"></span>
-                            <span class="ribbon-btn-text">点点接触</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="fluidPort">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_surface.png" alt="点面接触"></span>
-                            <span class="ribbon-btn-text">点面接触</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">力</div>
-                </div>
-                <div class="ribbon-separator"></div>
-
-                <!-- 工具 -->
-                <div class="ribbon-tab-group">
-                    <div class="ribbon-tab-content">
-                        <button class="ribbon-btn" data-action-id="measureTool">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_measure.png" alt="测量"></span>
-                            <span class="ribbon-btn-text">测量</span>
-                        </button>
-                        <button class="ribbon-btn" id="btn-explode">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_exploded_view.png" alt="爆炸视图"></span>
-                            <span class="ribbon-btn-text">爆炸视图</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="surfaceThicken">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_surface_thickening.png" alt="曲面加厚"></span>
-                            <span class="ribbon-btn-text">曲面加厚</span>
-                        </button>
-                        <button class="ribbon-btn" data-action-id="planarRingProcess">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_planar_loop_constraint.png" alt="平面环"></span>
-                            <span class="ribbon-btn-text">平面环</span>
-                        </button>
-                        <button class="ribbon-btn" id="btn-render-config">
-                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.png" alt="渲染配置"></span>
-                            <span class="ribbon-btn-text">渲染配置</span>
-                        </button>
-                    </div>
-                    <div class="ribbon-tab-label">工具</div>
-                </div>
+                <div class="ribbon-tab-label">文件</div>
             </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" data-action-id="createGroup">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_group.png" alt="组合"></span>
+                        <span class="ribbon-btn-text">组合</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createChildGroup">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_ungroup.png" alt="分解"></span>
+                        <span class="ribbon-btn-text">分解</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="cleanGroup">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_clear.png" alt="清理"></span>
+                        <span class="ribbon-btn-text">清理</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createDefaultGroup">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_default_group.png" alt="默认分组"></span>
+                        <span class="ribbon-btn-text">默认分组</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">分组</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" data-action-id="createFrame">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_marker.png" alt="标架"></span>
+                        <span class="ribbon-btn-text">标架</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createRefFrame">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_refmarker.png" alt="参考标架"></span>
+                        <span class="ribbon-btn-text">参考标架</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createDesignPoint">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="设计点"></span>
+                        <span class="ribbon-btn-text">设计点</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">基本形状</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" data-action-id="createJoint_fixed">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_fixed.png" alt="固定副"></span>
+                        <span class="ribbon-btn-text">固定副</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_revolute">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_revolute.png" alt="转动副"></span>
+                        <span class="ribbon-btn-text">转动副</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_prismatic">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_prismatic.png" alt="平移副"></span>
+                        <span class="ribbon-btn-text">平移副</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_cylindrical.png" alt="圆柱副"></span>
+                        <span class="ribbon-btn-text">圆柱副</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_spherical">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_spherical.png" alt="球副"></span>
+                        <span class="ribbon-btn-text">球副</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_universal">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_universal.png" alt="万向节"></span>
+                        <span class="ribbon-btn-text">万向节</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_screw">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_screw.png" alt="螺旋副"></span>
+                        <span class="ribbon-btn-text">螺旋副</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createJoint_planar">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_planar.png" alt="平面副"></span>
+                        <span class="ribbon-btn-text">平面副</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">连接</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" data-action-id="createMotion_rotational">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_rotational.png" alt="转动驱动"></span>
+                        <span class="ribbon-btn-text">转动驱动</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="createMotion_translational">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_translational.png" alt="平移驱动"></span>
+                        <span class="ribbon-btn-text">平移驱动</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">驱动</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" data-action-id="fluidTankSlice">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_point.png" alt="点点接触"></span>
+                        <span class="ribbon-btn-text">点点接触</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="fluidPort">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_surface.png" alt="点面接触"></span>
+                        <span class="ribbon-btn-text">点面接触</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">力</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" data-action-id="measureTool">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_measure.png" alt="测量"></span>
+                        <span class="ribbon-btn-text">测量</span>
+                    </button>
+                    <button class="ribbon-btn" id="btn-explode">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_exploded_view.png" alt="爆炸视图"></span>
+                        <span class="ribbon-btn-text">爆炸视图</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="surfaceThicken">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_surface_thickening.png" alt="曲面加厚"></span>
+                        <span class="ribbon-btn-text">曲面加厚</span>
+                    </button>
+                    <button class="ribbon-btn" data-action-id="planarRingProcess">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_planar_loop_constraint.png" alt="平面环"></span>
+                        <span class="ribbon-btn-text">平面环</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">工具</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" id="btn-export-check">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/check_cad_check.png" alt="检查"></span>
+                        <span class="ribbon-btn-text">检查</span>
+                    </button>
+                    <button class="ribbon-btn" id="btn-accept-exit">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_cancel.png" alt="接受并退出"></span>
+                        <span class="ribbon-btn-text">接受并退出</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">导出</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" id="btn-render-config">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.png" alt="设置"></span>
+                        <span class="ribbon-btn-text">设置</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">设置</div>
+            </div>
+            <div class="ribbon-separator"></div>
+
+            <div class="ribbon-tab-group">
+                <div class="ribbon-tab-content">
+                    <button class="ribbon-btn" id="btn-about">
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_about.png" alt="关于"></span>
+                        <span class="ribbon-btn-text">关于</span>
+                    </button>
+                </div>
+                <div class="ribbon-tab-label">关于</div>
+            </div>
+        </div>
         <!-- Main Body -->
         <div class="main-body">
             <!-- Left Sidebar: Model Tree -->

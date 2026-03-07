@@ -1,4 +1,4 @@
-// WebView entry point
+﻿// WebView entry point
 // This file will be bundled by Vite for the WebView
 
 import { ThreeViewer } from '@cadtool-online/three';
@@ -2756,7 +2756,7 @@ function setPanelMode(mode: 'properties' | 'options', title: string): void {
 
 function buildNameInput(id: string, value: string): string {
     return `<div class="opt-name-row">
-        <label for="${id}">闂備礁鎲￠懝鍓х矓閹壋鍙?/label>
+        <label for="${id}">名称</label>
         <input id="${id}" class="opt-input" type="text" value="${escapeAttr(value)}" />
     </div>`;
 }
@@ -2796,21 +2796,21 @@ function buildDropdown(id: string, label: string, value: string, options: Array<
 function buildPartSelector(id: string, label: string, hint: string): string {
     return `<div class="opt-label">${label}</div>
     <div id="${id}" class="opt-part-selector">
-        <span>婵☆偓绲介崯顖炴偂?${hint}</span>
+        <span>🖱 ${hint}</span>
     </div>`;
 }
 
 function buildActionButtons(confirmId: string, confirmText: string, cancelId: string): string {
     return `<div class="opt-btn-row">
-        <button id="${cancelId}" class="opt-btn-secondary">闂備礁鎲￠悷锕傛偋濡ゅ啰鐭?/button>
+        <button id="${cancelId}" class="opt-btn-secondary">取消</button>
         <button id="${confirmId}" class="opt-btn-primary">${confirmText}</button>
     </div>`;
 }
 
 function buildModeSwitch(): string {
     return `<div class="opt-mode-row">
-        <button class="opt-mode-btn-active" data-mode="fast">闂?闂傚倸鍊搁崑鍡樼閻愬搫鏋佺紒瀣嚦閻旂厧鐏崇€规洖娲ㄩ、?/button>
-        <button class="opt-mode-btn" data-mode="standard">婵☆偓绲介崯顖炲箚?闂備礁鎼粔鏉懨洪妶澶婇棷妞ゆ牗顕遍悢鐓庣伋鐎规洖娲ㄩ、?/button>
+        <button class="opt-mode-btn-active" data-mode="fast">⚡ 闪电模式</button>
+        <button class="opt-mode-btn" data-mode="standard">📐 标准模式</button>
     </div>`;
 }
 
@@ -2827,22 +2827,22 @@ function buildTabBar(tabs: Array<{ id: string; text: string; active: boolean }>)
 
 function buildSelectedList(items: Array<{ name: string }>): string {
     if (items.length === 0) {
-        return '<div class="opt-selected-list"><div class="opt-hint">闂備礁鎼Λ妤呭磹閻熸嫈娑㈠Χ閸滀礁鏅犻梺鍝勮閸庮噣宕戦幘鏉戠窞闁归偊鍘鹃妶鈺呮⒑?/div></div>';
+        return '<div class="opt-selected-list"><div class="opt-hint">暂无已选零件</div></div>';
     }
     const itemsHtml = items.map(item =>
-        `<div class="opt-selected-item"><span class="checkmark">闂?/span>${item.name}</div>`
+        `<div class="opt-selected-item"><span class="checkmark">✓</span>${item.name}</div>`
     ).join('');
     return `<div class="opt-selected-list">${itemsHtml}</div>`;
 }
 
 function closeOptionsPanel(): void {
-    setPanelMode('properties', 'Properties');
+    setPanelMode('properties', '属性');
     if (selectedShapeId) {
         updatePropertiesPanel(selectedShapeId);
     } else {
         const propsEl = document.getElementById('properties-panel');
         if (propsEl) {
-            propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">闂傚倷绶￠崑鍕囬幍顔瑰亾濮樸儱濡块柍褜鍓涢弫鎼併€佹繝鍥ㄥ瘶闁告洦鍓涢々鐑芥煏婢舵稑顩柛娆屽亾闂備焦妞挎禍婊堫敄閸涘瓨鍎撴慨妞诲亾闁?/div>';
+            propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
         }
     }
 }
@@ -2863,7 +2863,7 @@ function readVec3FromInputs(prefix: string): Vec3 {
 // ============================================================================
 
 function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
-    setPanelMode('options', 'Options - Group');
+    setPanelMode('options', '选项-组合');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
@@ -2873,10 +2873,10 @@ function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-group-name', defaultName)}
         ${buildSeparator()}
-        <div class="opt-label">闁诲海鎳撻幉锟犳偂閿熺姴鐒垫い鎺嗗亾妞わ富鍣ｉ幊娆撳箣閿旇В鎸呴梺鍝勭墕閻忔岸顢曟禒瀣叆?{selectedParts.length}</div>
+        <div class="opt-label">已选中零件：${selectedParts.length}</div>
         ${buildSelectedList(partItems)}
         ${buildSeparator()}
-        ${buildActionButtons('opt-group-confirm', 'Confirm', 'opt-group-cancel')}
+        ${buildActionButtons('opt-group-confirm', '确认组合', 'opt-group-cancel')}
     </div>`;
 
     document.getElementById('opt-group-confirm')?.addEventListener('click', () => {
@@ -2915,11 +2915,11 @@ function renderFrameOptionsPanel(title: string, name: string, position: Vec3, di
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-frame-name', name)}
         ${buildSeparator()}
-        ${buildVec3Input('opt-pos', 'Position', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-pos', '位置（全局坐标）', position.x, position.y, position.z)}
         ${buildSeparator()}
-        ${buildVec3Input('opt-dir', 'Direction (Rx/Ry/Rz)', direction.x, direction.y, direction.z)}
+        ${buildVec3Input('opt-dir', '方向（Rx/Ry/Rz °）', direction.x, direction.y, direction.z)}
         ${buildSeparator()}
-        <div class="opt-hint">婵☆偓绲介崯顖溾偓?闂備礁鎼幊妯肩磽濮樿泛绀傛慨妞诲亾妤犵偞甯℃俊鎼佹晜閻ｅ苯濮洪柣搴ｆ嚀閹猜ゃ亹閸愵亝顫曢柟杈鹃檮閺?/div>
+        <div class="opt-hint">💡 智能推断已开启</div>
         ${buildSeparator()}
         ${buildModeSwitch()}
     </div>`;
@@ -2928,7 +2928,7 @@ function renderFrameOptionsPanel(title: string, name: string, position: Vec3, di
 }
 
 function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
-    setPanelMode('options', 'Options - Frame');
+    setPanelMode('options', '选项-设计点');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
@@ -2936,11 +2936,11 @@ function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
         ${buildNameInput('opt-dp-name', name)}
         ${buildSeparator()}
         ${buildTabBar([
-            { id: 'pick', text: 'Pick', active: true },
-            { id: 'calc', text: 'Calc', active: false }
+            { id: 'pick', text: '拾取', active: true },
+            { id: 'calc', text: '计算', active: false }
         ])}
         ${buildSeparator()}
-        ${buildVec3Input('opt-dp-pos', 'Position', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-dp-pos', '位置', position.x, position.y, position.z)}
         ${buildSeparator()}
         ${buildModeSwitch()}
     </div>`;
@@ -2950,35 +2950,36 @@ function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
 }
 
 const JOINT_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
-    { value: 'Revolute', text: 'Revolute' },
-    { value: 'Prismatic', text: 'Prismatic' },
-    { value: 'Cylindrical', text: 'Cylindrical' },
-    { value: 'Spherical', text: 'Spherical' },
-    { value: 'Universal', text: 'Universal' },
-    { value: 'Planar', text: 'Planar' },
-    { value: 'Fixed', text: 'Fixed' }
+    { value: 'Revolute', text: 'Revolute（旋转）' },
+    { value: 'Prismatic', text: 'Prismatic（平移）' },
+    { value: 'Cylindrical', text: 'Cylindrical（圆柱）' },
+    { value: 'Spherical', text: 'Spherical（球）' },
+    { value: 'Universal', text: 'Universal（万向）' },
+    { value: 'Screw', text: 'Screw（螺旋）' },
+    { value: 'Planar', text: 'Planar（平面）' },
+    { value: 'Fixed', text: 'Fixed（固定）' }
 ];
 
 function renderJointOptionsPanel(name: string, jointType: string, part1Name: string, part2Name: string, position: Vec3, direction: Vec3): void {
-    setPanelMode('options', 'Options - Joint');
+    setPanelMode('options', '选项-连接');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-joint-name', name)}
-        ${buildDropdown('opt-joint-type', 'Type', jointType, JOINT_TYPE_OPTIONS)}
+        ${buildDropdown('opt-joint-type', '类型', jointType, JOINT_TYPE_OPTIONS)}
         ${buildSeparator()}
-        <div class="opt-label" style="color: #DC2626; font-weight: 500;">闂傚倸鍊稿Λ娆忥耿閻熸壋鏋?1</div>
+        <div class="opt-label" style="color: #DC2626; font-weight: 500;">零件 1</div>
         <div id="opt-joint-part1" class="opt-part-selector${part1Name ? ' has-value' : ''}">
-            <span>${part1Name || '婵☆偓绲介崯顖炴偂?闂備胶绮崝妤呭箠閹捐鍚规い鏇楀亾闁哄苯鎳忓鍕偓锝庝憾娴犳挳姊婚崒姘棡婵犫偓閻熸壋鏋?1'}</span>
+            <span>${part1Name || '🖱 点击选择零件 1'}</span>
         </div>
-        <div class="opt-label" style="color: #2563EB; font-weight: 500;">闂傚倸鍊稿Λ娆忥耿閻熸壋鏋?2</div>
+        <div class="opt-label" style="color: #2563EB; font-weight: 500;">零件 2</div>
         <div id="opt-joint-part2" class="opt-part-selector${part2Name ? ' has-value' : ''}">
-            <span>${part2Name || '婵☆偓绲介崯顖炴偂?闂備胶绮崝妤呭箠閹捐鍚规い鏇楀亾闁哄苯鎳忓鍕偓锝庝憾娴犳挳姊婚崒姘棡婵犫偓閻熸壋鏋?2'}</span>
+            <span>${part2Name || '🖱 点击选择零件 2'}</span>
         </div>
         ${buildSeparator()}
-        ${buildVec3Input('opt-joint-pos', 'Position', position.x, position.y, position.z)}
-        ${buildVec3Input('opt-joint-dir', 'Direction', direction.x, direction.y, direction.z)}
+        ${buildVec3Input('opt-joint-pos', '位置', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-joint-dir', '方向', direction.x, direction.y, direction.z)}
         ${buildSeparator()}
         ${buildModeSwitch()}
     </div>`;
@@ -2987,27 +2988,27 @@ function renderJointOptionsPanel(name: string, jointType: string, part1Name: str
 }
 
 const MOTION_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
-    { value: 'constant', text: 'Constant' },
-    { value: 'sinusoidal', text: 'Sinusoidal' },
-    { value: 'ramp', text: 'Ramp' },
-    { value: 'custom', text: 'Custom' }
+    { value: 'constant', text: '匀速运动' },
+    { value: 'sinusoidal', text: '正弦运动' },
+    { value: 'ramp', text: '斜坡运动' },
+    { value: 'custom', text: '自定义' }
 ];
 
 function renderMotionOptionsPanel(name: string, motionType: string, connectorRef: string): void {
-    setPanelMode('options', 'Options - Motion');
+    setPanelMode('options', '选项-驱动');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-motion-name', name)}
-        ${buildDropdown('opt-motion-type', 'Type', motionType, MOTION_TYPE_OPTIONS)}
+        ${buildDropdown('opt-motion-type', '类型', motionType, MOTION_TYPE_OPTIONS)}
         ${buildSeparator()}
-        <div class="opt-label">闂佸搫顦弲婵嬪磻閻愬灚鏆滈柟缁㈠枟閺?/div>
+        <div class="opt-label">连接器</div>
         <div id="opt-motion-connector" class="opt-part-selector${connectorRef ? ' has-value' : ''}">
-            <span>${connectorRef || 'Select connector'}</span>
+            <span>${connectorRef || '🖱 选择连接器'}</span>
         </div>
         ${buildSeparator()}
-        ${buildSectionHeader('Motion Parameters')}
+        ${buildSectionHeader('驱动参数')}
         <div class="opt-row">
             <label for="opt-motion-phi">phi.start</label>
             <input id="opt-motion-phi" class="opt-input" type="number" step="0.01" value="0" />
@@ -3023,38 +3024,46 @@ function renderMotionOptionsPanel(name: string, motionType: string, connectorRef
     bindModeSwitchEvents(propsEl);
 }
 
-function bindModeSwitchEvents(container: HTMLElement): void {
-    container.querySelectorAll('[data-mode]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            container.querySelectorAll('[data-mode]').forEach(b => {
-                b.className = (b as HTMLElement).dataset.mode === (btn as HTMLElement).dataset.mode
-                    ? 'opt-mode-btn-active'
-                    : 'opt-mode-btn';
-            });
-        });
-    });
+function collectLeafShapeIds(shapes: LoadedShape[]): string[] {
+    const result: string[] = [];
+    const visit = (shape: LoadedShape): void => {
+        if (shape.children && shape.children.length > 0) {
+            shape.children.forEach(visit);
+            return;
+        }
+        result.push(shape.id);
+    };
+    shapes.forEach(visit);
+    return result;
 }
 
-function bindTabBarEvents(container: HTMLElement): void {
-    container.querySelectorAll('[data-tab]').forEach(tab => {
-        tab.addEventListener('click', () => {
-            container.querySelectorAll('[data-tab]').forEach(t => {
-                t.className = (t as HTMLElement).dataset.tab === (tab as HTMLElement).dataset.tab
-                    ? 'opt-tab-active'
-                    : 'opt-tab';
-            });
+function handleCreateDefaultGroup(): void {
+    const memberShapeIds = collectLeafShapeIds(rootShapes);
+    if (memberShapeIds.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No model parts available for default grouping.'
         });
-    });
-}
-
-function handleCreateGroup(parentGroupId?: string): void {
-    const selectedParts: LoadedShape[] = [];
-    if (selectedShapeId) {
-        const shape = loadedShapes.get(selectedShapeId);
-        if (shape) selectedParts.push(shape);
+        return;
     }
 
-    renderGroupOptionsPanel(selectedParts);
+    const id = nextEntityId('group_default', mbsGroups.size);
+    const group: MbsGroupEntity = {
+        id,
+        name: `DefaultGroup${mbsGroups.size + 1}`,
+        memberShapeIds: Array.from(new Set(memberShapeIds)),
+        createdAt: new Date().toISOString()
+    };
+    mbsGroups.set(id, group);
+    updateModelTree();
+    setStatusInfo(`Default group created: ${group.memberShapeIds.length} parts`);
+}
+
+function handleCleanGroup(): void {
+    const count = mbsGroups.size;
+    mbsGroups.clear();
+    updateModelTree();
+    setStatusInfo(`Groups cleared: ${count}`);
 }
 
 function handleGroupProperties(): void {
@@ -3112,6 +3121,30 @@ function handleMotionProperties(): void {
         { label: 'Connector Ref', value: target.connectorRef },
         { label: 'Created', value: target.createdAt }
     ]);
+}
+
+function runExportCheck(): void {
+    const issues: string[] = [];
+    if (rootShapes.length === 0 && externalModelTreeShapes.length === 0) {
+        issues.push('No model loaded');
+    }
+    if (mbsJoints.size === 0) {
+        issues.push('No connections configured');
+    }
+    if (mbsMotions.size === 0) {
+        issues.push('No motions configured');
+    }
+
+    if (issues.length === 0) {
+        const okText = 'Export check passed.';
+        setStatusInfo(okText);
+        vscode.postMessage({ command: 'alert', text: okText });
+        return;
+    }
+
+    const issueText = `Export check found ${issues.length} issue(s): ${issues.join('; ')}`;
+    setStatusInfo(issueText);
+    vscode.postMessage({ command: 'alert', text: issueText });
 }
 
 function handleCreateFluidTankSlice(): void {
@@ -3612,6 +3645,14 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             handleCreateGroup(parentGroupId);
             break;
         }
+        case 'createDefaultGroup': {
+            handleCreateDefaultGroup();
+            break;
+        }
+        case 'cleanGroup': {
+            handleCleanGroup();
+            break;
+        }
         case 'groupProperties': {
             handleGroupProperties();
             break;
@@ -3885,11 +3926,19 @@ document.addEventListener('DOMContentLoaded', () => {
         vscode.postMessage({ command: 'importStep' });
     });
 
-    document.getElementById('btn-export')?.addEventListener('click', () => {
+    document.getElementById('btn-open')?.addEventListener('click', () => {
+        vscode.postMessage({ command: 'requestCadtoolConfigImport' });
+    });
+
+    document.getElementById('btn-save')?.addEventListener('click', () => {
+        exportCadtoolConfig();
+    });
+
+    document.getElementById('btn-saveas')?.addEventListener('click', () => {
         exportModel();
     });
 
-    // Ribbon button handlers 闂?direct dispatch to handleMbsAction
+    // Ribbon button handlers: direct dispatch to handleMbsAction
     document.querySelectorAll('.ribbon-btn[data-action-id]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -3909,16 +3958,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('btn-fit')?.addEventListener('click', () => {
-        viewer?.fitToView();
-    });
-
-    document.getElementById('btn-clear')?.addEventListener('click', () => {
-        clearScene();
-    });
-
     document.getElementById('btn-explode')?.addEventListener('click', () => {
         toggleExplode();
+    });
+
+    document.getElementById('btn-export-check')?.addEventListener('click', () => {
+        runExportCheck();
+    });
+
+    document.getElementById('btn-accept-exit')?.addEventListener('click', () => {
+        exportCadtoolConfig();
+        setStatusInfo('Accepted. You can close the editor.');
+    });
+
+    document.getElementById('btn-about')?.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'CAD Tool Online'
+        });
     });
 
     // Explode slider listeners
@@ -3940,4 +3997,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
 
