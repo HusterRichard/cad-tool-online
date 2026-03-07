@@ -1012,19 +1012,136 @@ export class CadEditorPanel {
             display: block;
         }
         /* Properties styles */
+        .property-section-header {
+            height: 24px;
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            background: #F3F4F6;
+            color: #1F2937;
+            font-size: 13px;
+            font-weight: 600;
+        }
         .property-row {
             display: flex;
-            padding: 4px 0;
-            border-bottom: 1px solid var(--color-border);
+            align-items: center;
+            min-height: 26px;
+            gap: 4px;
+            padding: 2px 8px;
         }
         .property-label {
-            width: 100px;
-            color: var(--color-text-muted);
-            font-size: var(--font-size-md);
+            width: 64px;
+            flex: 0 0 64px;
+            color: #6B7280;
+            font-size: 12px;
         }
         .property-value {
             flex: 1;
-            font-size: var(--font-size-md);
+            color: #111827;
+            font-size: 12px;
+            min-width: 0;
+        }
+        .property-value.boxed {
+            height: 22px;
+            display: flex;
+            align-items: center;
+            padding: 2px 6px;
+            background: #FFFFFF;
+            border-radius: 3px;
+            border: 1px solid #E5E7EB;
+        }
+        .property-separator {
+            height: 1px;
+            background: #E5E7EB;
+            margin: 2px 0;
+        }
+        .property-color-value {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .property-swatch-btn {
+            width: 50px;
+            height: 18px;
+            border-radius: 3px;
+            border: 1px solid #D1D5DB;
+            flex: 0 0 50px;
+            cursor: pointer;
+        }
+        .property-swatch-btn:hover {
+            border-color: #9CA3AF;
+        }
+        .property-value-select {
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 2px 6px;
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 3px;
+        }
+        .property-select-arrow {
+            color: #9CA3AF;
+            font-size: 9px;
+            flex: 0 0 auto;
+        }
+        .property-check {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            border: 1px solid #D1D5DB;
+            background: #FFFFFF;
+            color: #FFFFFF;
+            font-size: 11px;
+            line-height: 1;
+        }
+        .property-check.checked {
+            background: #2563EB;
+            border-color: #2563EB;
+        }
+        .property-sub-header {
+            padding: 2px 8px;
+            color: #6B7280;
+            font-size: 12px;
+            font-weight: 600;
+            min-height: 22px;
+            display: flex;
+            align-items: center;
+        }
+        .property-vector-row .property-label {
+            color: transparent;
+        }
+        .property-com-values {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .property-com-box {
+            flex: 1;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-start;
+            border-radius: 2px;
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            color: #111827;
+            font-size: 10px;
+            padding: 1px 3px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .property-com-unit {
+            color: #9CA3AF;
+            font-size: 10px;
+            margin-left: 4px;
+            flex: 0 0 auto;
         }
         /* Loading overlay */
         .loading-overlay {

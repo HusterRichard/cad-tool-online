@@ -914,52 +914,151 @@ function bindColorChangeButtons(propsEl: HTMLElement): void {
     });
 }
 
+function toDisplayShapeType(type: LoadedShape['type']): string {
+    switch (type) {
+        case 'assembly':
+            return '装配体';
+        case 'solid':
+            return '实体';
+        case 'part':
+        default:
+            return '零件';
+    }
+}
+
+function countLeafShapeParts(shape: LoadedShape): number {
+    if (!shape.children || shape.children.length === 0) {
+        return 1;
+    }
+    return shape.children.reduce((sum, child) => sum + countLeafShapeParts(child), 0);
+}
+
+function formatPhysicsNumber(value: number, fractionDigits: number = 5): string {
+    if (!Number.isFinite(value)) {
+        return '--';
+    }
+    const abs = Math.abs(value);
+    if (abs > 0 && (abs < 1e-3 || abs >= 1e5)) {
+        return value.toExponential(4).replace('e+', 'e');
+    }
+    return value.toFixed(fractionDigits);
+}
+
+function formatInteger(value: number): string {
+    if (!Number.isFinite(value)) {
+        return '--';
+    }
+    return Math.round(value).toString();
+}
+
+function inferMaterialName(density: number): string {
+    if (!Number.isFinite(density)) {
+        return '自定义';
+    }
+    if (density >= 7600 && density <= 8000) {
+        return '钢';
+    }
+    if (density >= 2600 && density <= 2800) {
+        return '铝';
+    }
+    return '自定义';
+}
+
+function getInertiaRows(mass: MassProperties): [number, number, number][] {
+    const matrix = mass.inertiaMatrix?.m;
+    if (Array.isArray(matrix) && matrix.length === 9 && matrix.every(v => Number.isFinite(v))) {
+        return [
+            [matrix[0], matrix[1], matrix[2]],
+            [matrix[3], matrix[4], matrix[5]],
+            [matrix[6], matrix[7], matrix[8]]
+        ];
+    }
+
+    return [
+        [mass.inertia.ixx, mass.inertia.ixy, mass.inertia.ixz],
+        [mass.inertia.ixy, mass.inertia.iyy, mass.inertia.iyz],
+        [mass.inertia.ixz, mass.inertia.iyz, mass.inertia.izz]
+    ];
+}
+
+function createVectorRow(values: [number, number, number], unit?: string): string {
+    const [x, y, z] = values;
+    return `<div class="property-row property-vector-row">
+        <span class="property-label"></span>
+        <span class="property-value property-com-values">
+            <span class="property-com-box">${formatPhysicsNumber(x, 5)}</span>
+            <span class="property-com-box">${formatPhysicsNumber(y, 5)}</span>
+            <span class="property-com-box">${formatPhysicsNumber(z, 5)}</span>
+            ${unit ? `<span class="property-com-unit">${unit}</span>` : ''}
+        </span>
+    </div>`;
+}
+
 function renderPropertiesPanel(shape: LoadedShape, massState: MassPropertiesViewState): void {
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     let html = '';
+    const displayColor = shape.color || '#808080';
+    const isVisible = shape.visible;
+    const partCount = countLeafShapeParts(shape);
 
-    // Basic info
-    html += createPropertyRow('ID', shape.id);
-    html += createPropertyRow('Name', shape.name);
-    html += createPropertyRow('Type', shape.type);
+    html += '<div class="property-section-header">基本属性</div>';
+    html += createPropertyRow('名称', shape.name, { boxed: true });
+    html += createPropertyRow('类型', toDisplayShapeType(shape.type));
+    html += `<div class="property-row">
+        <span class="property-label">可见性</span>
+        <span class="property-value">
+            <span class="property-check${isVisible ? ' checked' : ''}">${isVisible ? '✓' : ''}</span>
+        </span>
+    </div>`;
+    html += `<div class="property-row">
+        <span class="property-label">颜色</span>
+        <span class="property-value property-color-value">
+            <button class="color-change-btn property-swatch-btn" data-shape-id="${shape.id}" style="background: ${displayColor};" title="更改颜色"></button>
+        </span>
+    </div>`;
+    html += `<div class="property-row">
+        <span class="property-label">半透明</span>
+        <span class="property-value">
+            <span class="property-check"></span>
+        </span>
+    </div>`;
 
-    // Color info with preview
-    if (shape.color) {
-        html += `<div class="property-row">
-            <span class="property-label">Color</span>
-            <span class="property-value" style="display: flex; align-items: center; gap: 8px;">
-                <span style="display: inline-block; width: 20px; height: 20px; background: ${shape.color}; border: 1px solid #666; border-radius: 3px;"></span>
-                <span>${shape.color}</span>
-                <button class="color-change-btn" data-shape-id="${shape.id}" style="margin-left: auto; padding: 2px 8px; background: #007acc; border: none; color: white; border-radius: 3px; cursor: pointer; font-size: 11px;">Change</button>
-            </span>
-        </div>`;
-    }
-
-    // Mesh info
-    if (shape.meshData) {
-        const vertexCount = shape.meshData.vertices.length / 3;
-        const triangleCount = shape.meshData.indices.length / 3;
-        html += createPropertyRow('Vertices', vertexCount.toLocaleString());
-        html += createPropertyRow('Triangles', triangleCount.toLocaleString());
-    }
-
-    if (massState.kind !== 'hidden') {
-        html += '<div style="margin-top: 8px; font-weight: bold; color: #9cdcfe;">Mass Properties</div>';
-    }
+    html += '<div class="property-separator"></div>';
+    html += '<div class="property-section-header">物理属性</div>';
+    html += createPropertyRow('零件个数', partCount.toString(), { boxed: true });
 
     if (massState.kind === 'loading') {
-        html += createPropertyRow('Status', 'Computing...');
-    } else if (massState.kind === 'unavailable') {
-        html += createPropertyRow('Status', 'Unavailable');
+        html += createPropertyRow('状态', '计算中...');
+    } else if (massState.kind === 'unavailable' || massState.kind === 'hidden') {
+        html += createPropertyRow('状态', '不可用');
     } else if (massState.kind === 'ready') {
-        html += createPropertyRow('Volume', `${massState.value.volume.toFixed(6)} mm^3`);
-        html += createPropertyRow('Surface', `${massState.value.surfaceArea.toFixed(6)} mm^2`);
-        html += createPropertyRow('Mass', `${massState.value.mass.toFixed(6)} kg`);
-        html += createPropertyRow('CoM X', `${massState.value.centerOfMass.x.toFixed(4)} mm`);
-        html += createPropertyRow('CoM Y', `${massState.value.centerOfMass.y.toFixed(4)} mm`);
-        html += createPropertyRow('CoM Z', `${massState.value.centerOfMass.z.toFixed(4)} mm`);
+        const densityValue = formatInteger(massState.value.density);
+        const materialText = `${inferMaterialName(massState.value.density)} ${densityValue}kg/m³`;
+        html += `<div class="property-row">
+            <span class="property-label">材料</span>
+            <span class="property-value property-value-select">
+                <span>${materialText}</span>
+                <span class="property-select-arrow">▼</span>
+            </span>
+        </div>`;
+        html += createPropertyRow('密度', `${densityValue} kg/m³`);
+        html += createPropertyRow('总质量', `${formatPhysicsNumber(massState.value.mass, 5)} kg`);
+        html += createPropertyRow('体积', `${formatPhysicsNumber(massState.value.volume, 5)} m³`);
+
+        html += '<div class="property-sub-header">  质心</div>';
+        html += createVectorRow([
+            massState.value.centerOfMass.x,
+            massState.value.centerOfMass.y,
+            massState.value.centerOfMass.z
+        ], 'm');
+
+        html += '<div class="property-sub-header">  惯性张量</div>';
+        const inertiaRows = getInertiaRows(massState.value);
+        html += createVectorRow(inertiaRows[0]);
+        html += createVectorRow(inertiaRows[1]);
+        html += createVectorRow(inertiaRows[2], 'kg·m²');
     }
 
     propsEl.innerHTML = html;
@@ -972,20 +1071,20 @@ function updatePropertiesPanel(shapeId: string | null): void {
 
     if (!shapeId) {
         massPropertiesCoordinator.cancelPending();
-        setPanelMode('properties', 'Properties');
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Select an object to view properties</div>';
+        setPanelMode('properties', '属性');
+        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
         return;
     }
 
     const shape = loadedShapes.get(shapeId);
     if (!shape) {
         massPropertiesCoordinator.cancelPending();
-        setPanelMode('properties', 'Properties');
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Shape not found</div>';
+        setPanelMode('properties', '属性');
+        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">对象不存在</div>';
         return;
     }
 
-    setPanelMode('properties', 'Properties - Part');
+    setPanelMode('properties', '属性-零件');
 
     const occtForRequest = occt;
     const requestResult = massPropertiesCoordinator.request(
@@ -1034,10 +1133,10 @@ function updatePropertiesPanel(shapeId: string | null): void {
     renderPropertiesPanel(shape, massState);
 }
 
-function createPropertyRow(label: string, value: string): string {
+function createPropertyRow(label: string, value: string, options?: { boxed?: boolean }): string {
     return `<div class="property-row">
         <span class="property-label">${label}</span>
-        <span class="property-value">${value}</span>
+        <span class="property-value${options?.boxed ? ' boxed' : ''}">${value}</span>
     </div>`;
 }
 
