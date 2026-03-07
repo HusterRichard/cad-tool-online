@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+
+import { buildModelBrowserTree } from '../src/modelBrowser';
+
+describe('buildModelBrowserTree', () => {
+    it('builds fixed categories and puts Ground + shape hierarchy under objects', () => {
+        const tree = buildModelBrowserTree({
+            shapes: [
+                {
+                    id: 's-root',
+                    name: 'as1',
+                    type: 'assembly',
+                    children: [
+                        { id: 's-1', name: 'rod-assembly_1', type: 'part' },
+                        { id: 's-2', name: 'l-bracket-assembly_1', type: 'part' },
+                        { id: 's-3', name: 'plate_1', type: 'part' }
+                    ]
+                }
+            ]
+        });
+
+        expect(tree.map((node) => node.label)).toEqual([
+            '\u7269\u4f53',
+            '\u8fde\u63a5',
+            '\u9a71\u52a8',
+            '\u529b',
+            '\u6750\u6599'
+        ]);
+
+        const objects = tree[0];
+        expect(objects.children?.[0]).toMatchObject({
+            kind: 'ground',
+            label: 'Ground'
+        });
+
+        const rootAssembly = objects.children?.[1];
+        expect(rootAssembly).toMatchObject({
+            kind: 'assembly',
+            shapeId: 's-root',
+            label: 'as1'
+        });
+        expect(rootAssembly?.children?.map((node) => node.label)).toEqual([
+            'rod assembly 1',
+            'l bracket assembly 1',
+            'plate 1'
+        ]);
+    });
+
+    it('maps non-shape entities into dedicated categories', () => {
+        const tree = buildModelBrowserTree({
+            shapes: [],
+            includeGround: false,
+            connections: [{ id: 'j1', name: 'rev_1' }],
+            motions: [{ id: 'm1', name: 'rot_drive_1' }],
+            forces: [{ id: 'f1', name: 'contact_force_1' }],
+            materials: [{ id: 'mat1', name: 'steel_q235' }]
+        });
+
+        expect(tree[1].children).toEqual([
+            expect.objectContaining({ kind: 'connection', label: 'rev 1' })
+        ]);
+        expect(tree[2].children).toEqual([
+            expect.objectContaining({ kind: 'motion', label: 'rot drive 1' })
+        ]);
+        expect(tree[3].children).toEqual([
+            expect.objectContaining({ kind: 'force', label: 'contact force 1' })
+        ]);
+        expect(tree[4].children).toEqual([
+            expect.objectContaining({ kind: 'material', label: 'steel q235' })
+        ]);
+    });
+
+});

@@ -426,7 +426,7 @@ export class CadEditorPanel {
         const nonce = this._getNonce();
 
         return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-icons32-base="${icons32}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -913,7 +913,7 @@ export class CadEditorPanel {
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 2px;
         }
         .tree-node:hover {
             background-color: var(--color-bg-hover);
@@ -922,32 +922,60 @@ export class CadEditorPanel {
             background-color: var(--color-bg-active);
         }
         .tree-node .expand-btn {
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
             cursor: pointer;
             user-select: none;
-            color: var(--color-text-muted);
+            border-radius: 2px;
+        }
+        .tree-node .expand-btn img {
+            width: 10px;
+            height: 10px;
+            object-fit: contain;
+            opacity: 0.78;
         }
         .tree-node .expand-btn:hover {
-            color: var(--color-text-primary);
+            background-color: var(--color-bg-hover);
+        }
+        .tree-node .expand-btn:hover img {
+            opacity: 1;
+        }
+        .tree-node .expand-spacer {
+            width: 12px;
+            height: 12px;
+            display: inline-block;
+            flex: 0 0 12px;
         }
         .tree-node .visibility-btn {
-            width: 18px;
-            height: 18px;
+            width: 14px;
+            height: 14px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
             cursor: pointer;
             user-select: none;
-            opacity: 0.7;
+            border-radius: 2px;
+        }
+        .tree-node .visibility-btn img {
+            width: 12px;
+            height: 12px;
+            object-fit: contain;
+            opacity: 0.74;
         }
         .tree-node .visibility-btn:hover {
+            background-color: var(--color-bg-hover);
+        }
+        .tree-node .visibility-btn:hover img {
             opacity: 1;
+        }
+        .tree-node .visibility-spacer {
+            width: 14px;
+            height: 14px;
+            display: inline-block;
+            flex: 0 0 14px;
         }
         .tree-node .icon {
             width: 16px;
@@ -956,6 +984,12 @@ export class CadEditorPanel {
             align-items: center;
             justify-content: center;
             font-size: 12px;
+            margin-right: 1px;
+        }
+        .tree-node .icon img {
+            width: 14px;
+            height: 14px;
+            object-fit: contain;
         }
         .tree-node .name {
             flex: 1;
@@ -1457,6 +1491,7 @@ export class CadEditorPanel {
     </div>
     <script nonce="${nonce}">
         window.WASM_BASE_URL = "${wasmUri}";
+        window.ICONS_32_BASE = "${icons32}";
     </script>
     <script nonce="${nonce}" type="module" src="${webviewUri}"></script>
 </body>

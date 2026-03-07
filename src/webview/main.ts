@@ -4,7 +4,14 @@
 import { ThreeViewer } from '@cadtool-online/three';
 import { OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
 import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
-import { markerCreator, type MbsMarker } from '@cadtool-online/core';
+import {
+    buildModelBrowserTree,
+    markerCreator,
+    type BrowserNamedEntityInput,
+    type BrowserShapeInput,
+    type MbsMarker,
+    type ModelBrowserNode
+} from '@cadtool-online/core';
 import {
     DEFAULT_RENDER_CONFIG,
     isMaterialMode,
@@ -29,6 +36,7 @@ declare function acquireVsCodeApi(): {
 declare global {
     interface Window {
         WASM_BASE_URL?: string;
+        ICONS_32_BASE?: string;
     }
 }
 
@@ -141,6 +149,7 @@ const mbsMotions = new Map<string, MbsMotionEntity>();
 const fluidSlices = new Map<string, FluidSliceEntity>();
 const fluidPorts = new Map<string, FluidPortEntity>();
 const shapeSelectionHistory: string[] = [];
+let externalModelTreeShapes: Array<{ id: string; name: string }> = [];
 
 // Explode view state
 let isExploded = false;
@@ -459,35 +468,274 @@ function updateModelTree(): void {
     const treeEl = document.getElementById('model-tree');
     if (!treeEl) return;
 
-    if (rootShapes.length === 0) {
+    const nodes = buildModelTreeNodes();
+    if (nodes.length === 0) {
         treeEl.innerHTML = '<div style="color: #808080; font-style: italic;">No model loaded</div>';
         return;
     }
 
     treeEl.innerHTML = '';
-    rootShapes.forEach(shape => {
-        const nodeEl = createTreeNode(shape, 0);
+    nodes.forEach((node) => {
+        const nodeEl = createTreeNode(node, 0);
         treeEl.appendChild(nodeEl);
     });
 }
 
-function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
+function toBrowserShape(shape: LoadedShape): BrowserShapeInput {
+    return {
+        id: shape.id,
+        name: shape.name,
+        type: shape.type,
+        children: shape.children?.map(toBrowserShape)
+    };
+}
+
+function toNamedEntityList<T extends { id: string; name: string }>(items: Iterable<T>): BrowserNamedEntityInput[] {
+    return Array.from(items, (item) => ({
+        id: item.id,
+        name: item.name
+    }));
+}
+
+function flattenTopLevelAssemblies(shapeNodes: BrowserShapeInput[]): BrowserShapeInput[] {
+    if (shapeNodes.length === 0) {
+        return shapeNodes;
+    }
+
+    const flattened: BrowserShapeInput[] = [];
+    shapeNodes.forEach((node) => {
+        const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+        if (node.type === 'assembly' && hasChildren) {
+            flattened.push(...(node.children as BrowserShapeInput[]));
+        } else {
+            flattened.push(node);
+        }
+    });
+    return flattened;
+}
+
+let resolvedIcons32Base: string | null | undefined;
+
+function resolveIcons32Base(): string | null {
+    if (typeof resolvedIcons32Base === 'string' && resolvedIcons32Base.length > 0) {
+        return resolvedIcons32Base;
+    }
+
+    const fromWindow = typeof window.ICONS_32_BASE === 'string' ? window.ICONS_32_BASE.trim() : '';
+    if (fromWindow.length > 0) {
+        resolvedIcons32Base = fromWindow;
+        return resolvedIcons32Base;
+    }
+
+    const fromDataAttr = document.documentElement.getAttribute('data-icons32-base')?.trim() ?? '';
+    if (fromDataAttr.length > 0) {
+        resolvedIcons32Base = fromDataAttr;
+        return resolvedIcons32Base;
+    }
+
+    const probeImg = document.querySelector<HTMLImageElement>(
+        '.ribbon-btn-icon img, img[src*="icons/png/32/"], img[src*="public/icons/png/32/"]'
+    );
+    if (probeImg?.src) {
+        const idx = probeImg.src.lastIndexOf('/');
+        if (idx > 0) {
+            resolvedIcons32Base = probeImg.src.slice(0, idx);
+            return resolvedIcons32Base;
+        }
+    }
+
+    return null;
+}
+
+function treeIconPath(fileName: string): string | null {
+    const base = resolveIcons32Base();
+    if (!base) {
+        return null;
+    }
+    return `${base}/${fileName}`;
+}
+
+function buildModelTreeNodes(): ModelBrowserNode[] {
+    const forceEntities: BrowserNamedEntityInput[] = [
+        ...Array.from(fluidSlices.values(), (slice) => ({ id: `slice_${slice.id}`, name: slice.name })),
+        ...Array.from(fluidPorts.values(), (port) => ({ id: `port_${port.id}`, name: port.name }))
+    ];
+
+    const rootShapeNodes: BrowserShapeInput[] = rootShapes.length > 0
+        ? rootShapes.map(toBrowserShape)
+        : externalModelTreeShapes.map((shape) => ({
+            id: shape.id,
+            name: shape.name,
+            type: 'part' as const
+        }));
+
+    const visibleShapeNodes = flattenTopLevelAssemblies(rootShapeNodes);
+
+    const hasEntities = visibleShapeNodes.length > 0
+        || mbsJoints.size > 0
+        || mbsMotions.size > 0
+        || forceEntities.length > 0;
+    if (!hasEntities) {
+        return [];
+    }
+
+    return buildModelBrowserTree({
+        shapes: visibleShapeNodes,
+        includeGround: true,
+        connections: toNamedEntityList(mbsJoints.values()),
+        motions: toNamedEntityList(mbsMotions.values()),
+        forces: forceEntities,
+        materials: []
+    });
+}
+
+function iconForNode(node: ModelBrowserNode): string {
+    switch (node.kind) {
+        case 'category':
+            switch (node.id) {
+                case 'category_objects':
+                    return 'Objects';
+                case 'category_connections':
+                    return 'Joints';
+                case 'category_motions':
+                    return 'Motions';
+                case 'category_forces':
+                    return 'Forces';
+                case 'category_materials':
+                    return 'Materials';
+                default:
+                    return 'Category';
+            }
+        case 'assembly':
+            return 'A';
+        case 'part':
+            return 'P';
+        case 'solid':
+            return 'S';
+        case 'ground':
+            return 'G';
+        case 'connection':
+            return 'J';
+        case 'motion':
+            return 'M';
+        case 'force':
+            return 'F';
+        case 'material':
+            return 'T';
+        default:
+            return '?';
+    }
+}
+
+function iconAssetForNode(node: ModelBrowserNode): string | null {
+    switch (node.kind) {
+        case 'category':
+            switch (node.id) {
+                case 'category_objects':
+                    return treeIconPath('model_tree_body_dir.png');
+                case 'category_connections':
+                    return treeIconPath('model_tree_connector_dir.png');
+                case 'category_motions':
+                    return treeIconPath('model_tree_motion_dir.png');
+                case 'category_forces':
+                    return treeIconPath('model_tree_force_dir.png');
+                case 'category_materials':
+                    return treeIconPath('model_tree_material_dir.png');
+                default:
+                    return treeIconPath('cad_browser.png');
+            }
+        case 'ground':
+            return treeIconPath('model_tree_cad_ground.png');
+        case 'assembly':
+            return treeIconPath('model_tree_group.png');
+        case 'part':
+            return treeIconPath('model_tree_part.png');
+        case 'solid':
+            return treeIconPath('model_tree_subbody.png');
+        case 'connection':
+            return treeIconPath('model_tree_cad_unknown_cnt.png');
+        case 'motion':
+            return treeIconPath('model_tree_cad_rotational_gray.png');
+        case 'force':
+            return treeIconPath('force_cad_general_force.png');
+        case 'material':
+            return treeIconPath('model_tree_material.png');
+        default:
+            return null;
+    }
+}
+
+function expandIconPath(expanded: boolean): string | null {
+    return treeIconPath(expanded ? 'model_tree_cad_collapse.png' : 'model_tree_cad_expand.png');
+}
+
+function setExpandButtonState(expandBtn: HTMLElement, expanded: boolean): void {
+    const icon = expandBtn.querySelector('img');
+    const iconPath = expandIconPath(expanded);
+    if (icon && iconPath) {
+        const img = icon as HTMLImageElement;
+        img.src = iconPath;
+        img.alt = expanded ? 'collapse' : 'expand';
+        return;
+    }
+    expandBtn.textContent = expanded ? 'v' : '>';
+}
+
+function visibilityIconPath(visible: boolean): string | null {
+    return treeIconPath(visible ? 'menu_menu_show_selected.png' : 'menu_menu_hide_selected.png');
+}
+
+function setVisibilityButtonState(visibilityBtn: HTMLElement, visible: boolean): void {
+    const icon = visibilityBtn.querySelector('img');
+    const iconPath = visibilityIconPath(visible);
+    if (icon && iconPath) {
+        const img = icon as HTMLImageElement;
+        img.src = iconPath;
+        img.alt = visible ? 'visible' : 'hidden';
+        return;
+    }
+
+    if (iconPath) {
+        const img = document.createElement('img');
+        img.src = iconPath;
+        img.alt = visible ? 'visible' : 'hidden';
+        img.draggable = false;
+        visibilityBtn.textContent = '';
+        visibilityBtn.appendChild(img);
+        return;
+    }
+
+    visibilityBtn.textContent = visible ? 'ON' : 'OFF';
+}
+
+function createTreeNode(nodeData: ModelBrowserNode, level: number): HTMLElement {
     const container = document.createElement('div');
     container.className = 'tree-node-container';
     container.style.marginLeft = `${level * 16}px`;
 
     const node = document.createElement('div');
     node.className = 'tree-node';
-    if (shape.id === selectedShapeId) {
+    if (nodeData.shapeId === selectedShapeId) {
         node.classList.add('selected');
     }
-    node.dataset.shapeId = shape.id;
+    if (nodeData.shapeId) {
+        node.dataset.shapeId = nodeData.shapeId;
+    }
 
-    // Expand/collapse button for assemblies
-    if (shape.children && shape.children.length > 0) {
+    if (nodeData.children && nodeData.children.length > 0) {
+        const expandedByDefault = nodeData.kind === 'category';
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
-        expandBtn.textContent = '>';
+        const expandIcon = expandIconPath(expandedByDefault);
+        if (expandIcon) {
+            const iconImg = document.createElement('img');
+            iconImg.src = expandIcon;
+            iconImg.alt = expandedByDefault ? 'collapse' : 'expand';
+            iconImg.draggable = false;
+            expandBtn.appendChild(iconImg);
+        } else {
+            expandBtn.textContent = expandedByDefault ? 'v' : '>';
+        }
         expandBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleNodeExpand(container);
@@ -495,45 +743,60 @@ function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
         node.appendChild(expandBtn);
     } else {
         const spacer = document.createElement('span');
-        spacer.style.width = '16px';
-        spacer.style.display = 'inline-block';
+        spacer.className = 'expand-spacer';
         node.appendChild(spacer);
     }
 
-    // Visibility toggle
-    const visibilityBtn = document.createElement('span');
-    visibilityBtn.className = 'visibility-btn';
-    visibilityBtn.textContent = shape.visible ? 'ON' : 'OFF';
-    visibilityBtn.title = shape.visible ? 'Hide' : 'Show';
-    visibilityBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleVisibility(shape.id);
-    });
-    node.appendChild(visibilityBtn);
+    const mappedShape = nodeData.shapeId ? loadedShapes.get(nodeData.shapeId) : undefined;
+    const supportsVisibility = Boolean(mappedShape && (nodeData.kind === 'assembly' || nodeData.kind === 'part' || nodeData.kind === 'solid'));
+    if (supportsVisibility && mappedShape) {
+        const visibilityBtn = document.createElement('span');
+        visibilityBtn.className = 'visibility-btn';
+        setVisibilityButtonState(visibilityBtn, mappedShape.visible);
+        visibilityBtn.title = mappedShape.visible ? 'Hide' : 'Show';
+        visibilityBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleVisibility(mappedShape.id);
+        });
+        node.appendChild(visibilityBtn);
+    } else if (nodeData.shapeId) {
+        const spacer = document.createElement('span');
+        spacer.className = 'visibility-spacer';
+        node.appendChild(spacer);
+    }
 
-    // Icon based on type
     const icon = document.createElement('span');
     icon.className = 'icon';
-    icon.textContent = shape.type === 'assembly' ? '[A]' : (shape.type === 'part' ? '[P]' : '[S]');
+    const iconAsset = iconAssetForNode(nodeData);
+    if (iconAsset) {
+        const iconImg = document.createElement('img');
+        iconImg.src = iconAsset;
+        iconImg.alt = nodeData.kind;
+        iconImg.draggable = false;
+        icon.appendChild(iconImg);
+    } else {
+        icon.textContent = iconForNode(nodeData);
+    }
     node.appendChild(icon);
 
-    // Name
     const name = document.createElement('span');
     name.className = 'name';
-    name.textContent = shape.name;
+    name.textContent = nodeData.label;
     node.appendChild(name);
 
-    node.addEventListener('click', () => selectShape(shape.id));
+    if (nodeData.shapeId) {
+        const targetShapeId = nodeData.shapeId;
+        node.addEventListener('click', () => selectShape(targetShapeId));
+    }
 
     container.appendChild(node);
 
-    // Children
-    if (shape.children && shape.children.length > 0) {
+    if (nodeData.children && nodeData.children.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'tree-children';
-        childrenContainer.style.display = 'none'; // Initially collapsed
+        childrenContainer.style.display = nodeData.kind === 'category' ? 'block' : 'none';
 
-        shape.children.forEach(child => {
+        nodeData.children.forEach((child) => {
             const childNode = createTreeNode(child, level + 1);
             childrenContainer.appendChild(childNode);
         });
@@ -545,13 +808,13 @@ function createTreeNode(shape: LoadedShape, level: number): HTMLElement {
 }
 
 function toggleNodeExpand(container: HTMLElement): void {
-    const expandBtn = container.querySelector('.expand-btn');
+    const expandBtn = container.querySelector('.expand-btn') as HTMLElement | null;
     const childrenContainer = container.querySelector('.tree-children') as HTMLElement;
 
     if (expandBtn && childrenContainer) {
         const isExpanded = childrenContainer.style.display !== 'none';
         childrenContainer.style.display = isExpanded ? 'none' : 'block';
-        expandBtn.textContent = isExpanded ? '>' : 'v';
+        setExpandButtonState(expandBtn, !isExpanded);
     }
 }
 
@@ -709,20 +972,20 @@ function updatePropertiesPanel(shapeId: string | null): void {
 
     if (!shapeId) {
         massPropertiesCoordinator.cancelPending();
-        setPanelMode('properties', '属性');
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
+        setPanelMode('properties', 'Properties');
+        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Select an object to view properties</div>';
         return;
     }
 
     const shape = loadedShapes.get(shapeId);
     if (!shape) {
         massPropertiesCoordinator.cancelPending();
-        setPanelMode('properties', '属性');
+        setPanelMode('properties', 'Properties');
         propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Shape not found</div>';
         return;
     }
 
-    setPanelMode('properties', '属性-零件');
+    setPanelMode('properties', 'Properties - Part');
 
     const occtForRequest = occt;
     const requestResult = massPropertiesCoordinator.request(
@@ -845,9 +1108,9 @@ function expandParentNodes(nodeElement: Element): void {
             // Find and update the expand button
             const container = current.parentElement;
             if (container) {
-                const expandBtn = container.querySelector('.expand-btn');
+                const expandBtn = container.querySelector('.expand-btn') as HTMLElement | null;
                 if (expandBtn) {
-                    expandBtn.textContent = 'v';
+                    setExpandButtonState(expandBtn, true);
                 }
             }
         }
@@ -2004,6 +2267,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         stats.fluidPorts += 1;
     });
 
+    updateModelTree();
     setStatus('Ready');
     setStatusInfo(
         `CADTool config imported: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}`
@@ -2394,6 +2658,7 @@ function clearScene(): void {
     selectedShapeId = null;
     meshIdToShapeId.clear();
     shapeSelectionHistory.length = 0;
+    externalModelTreeShapes = [];
     explodeDataMap.clear();
     massPropertiesCoordinator.clear();
     clearCadtoolRuntimeEntities();
@@ -2491,7 +2756,7 @@ function setPanelMode(mode: 'properties' | 'options', title: string): void {
 
 function buildNameInput(id: string, value: string): string {
     return `<div class="opt-name-row">
-        <label for="${id}">名称</label>
+        <label for="${id}">闂備礁鎲￠懝鍓х矓閹壋鍙?/label>
         <input id="${id}" class="opt-input" type="text" value="${escapeAttr(value)}" />
     </div>`;
 }
@@ -2531,21 +2796,21 @@ function buildDropdown(id: string, label: string, value: string, options: Array<
 function buildPartSelector(id: string, label: string, hint: string): string {
     return `<div class="opt-label">${label}</div>
     <div id="${id}" class="opt-part-selector">
-        <span>🖱 ${hint}</span>
+        <span>婵☆偓绲介崯顖炴偂?${hint}</span>
     </div>`;
 }
 
 function buildActionButtons(confirmId: string, confirmText: string, cancelId: string): string {
     return `<div class="opt-btn-row">
-        <button id="${cancelId}" class="opt-btn-secondary">取消</button>
+        <button id="${cancelId}" class="opt-btn-secondary">闂備礁鎲￠悷锕傛偋濡ゅ啰鐭?/button>
         <button id="${confirmId}" class="opt-btn-primary">${confirmText}</button>
     </div>`;
 }
 
 function buildModeSwitch(): string {
     return `<div class="opt-mode-row">
-        <button class="opt-mode-btn-active" data-mode="fast">⚡ 闪电模式</button>
-        <button class="opt-mode-btn" data-mode="standard">📐 标准模式</button>
+        <button class="opt-mode-btn-active" data-mode="fast">闂?闂傚倸鍊搁崑鍡樼閻愬搫鏋佺紒瀣嚦閻旂厧鐏崇€规洖娲ㄩ、?/button>
+        <button class="opt-mode-btn" data-mode="standard">婵☆偓绲介崯顖炲箚?闂備礁鎼粔鏉懨洪妶澶婇棷妞ゆ牗顕遍悢鐓庣伋鐎规洖娲ㄩ、?/button>
     </div>`;
 }
 
@@ -2562,22 +2827,22 @@ function buildTabBar(tabs: Array<{ id: string; text: string; active: boolean }>)
 
 function buildSelectedList(items: Array<{ name: string }>): string {
     if (items.length === 0) {
-        return '<div class="opt-selected-list"><div class="opt-hint">暂无已选零件</div></div>';
+        return '<div class="opt-selected-list"><div class="opt-hint">闂備礁鎼Λ妤呭磹閻熸嫈娑㈠Χ閸滀礁鏅犻梺鍝勮閸庮噣宕戦幘鏉戠窞闁归偊鍘鹃妶鈺呮⒑?/div></div>';
     }
     const itemsHtml = items.map(item =>
-        `<div class="opt-selected-item"><span class="checkmark">✓</span>${item.name}</div>`
+        `<div class="opt-selected-item"><span class="checkmark">闂?/span>${item.name}</div>`
     ).join('');
     return `<div class="opt-selected-list">${itemsHtml}</div>`;
 }
 
 function closeOptionsPanel(): void {
-    setPanelMode('properties', '属性');
+    setPanelMode('properties', 'Properties');
     if (selectedShapeId) {
         updatePropertiesPanel(selectedShapeId);
     } else {
         const propsEl = document.getElementById('properties-panel');
         if (propsEl) {
-            propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
+            propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">闂傚倷绶￠崑鍕囬幍顔瑰亾濮樸儱濡块柍褜鍓涢弫鎼併€佹繝鍥ㄥ瘶闁告洦鍓涢々鐑芥煏婢舵稑顩柛娆屽亾闂備焦妞挎禍婊堫敄閸涘瓨鍎撴慨妞诲亾闁?/div>';
         }
     }
 }
@@ -2598,7 +2863,7 @@ function readVec3FromInputs(prefix: string): Vec3 {
 // ============================================================================
 
 function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
-    setPanelMode('options', '选项-组合');
+    setPanelMode('options', 'Options - Group');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
@@ -2608,10 +2873,10 @@ function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-group-name', defaultName)}
         ${buildSeparator()}
-        <div class="opt-label">已选中零件：${selectedParts.length}</div>
+        <div class="opt-label">闁诲海鎳撻幉锟犳偂閿熺姴鐒垫い鎺嗗亾妞わ富鍣ｉ幊娆撳箣閿旇В鎸呴梺鍝勭墕閻忔岸顢曟禒瀣叆?{selectedParts.length}</div>
         ${buildSelectedList(partItems)}
         ${buildSeparator()}
-        ${buildActionButtons('opt-group-confirm', '确认组合', 'opt-group-cancel')}
+        ${buildActionButtons('opt-group-confirm', 'Confirm', 'opt-group-cancel')}
     </div>`;
 
     document.getElementById('opt-group-confirm')?.addEventListener('click', () => {
@@ -2650,11 +2915,11 @@ function renderFrameOptionsPanel(title: string, name: string, position: Vec3, di
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-frame-name', name)}
         ${buildSeparator()}
-        ${buildVec3Input('opt-pos', '位置（全局坐标）', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-pos', 'Position', position.x, position.y, position.z)}
         ${buildSeparator()}
-        ${buildVec3Input('opt-dir', '方向（Rx/Ry/Rz °）', direction.x, direction.y, direction.z)}
+        ${buildVec3Input('opt-dir', 'Direction (Rx/Ry/Rz)', direction.x, direction.y, direction.z)}
         ${buildSeparator()}
-        <div class="opt-hint">💡 智能推断已开启</div>
+        <div class="opt-hint">婵☆偓绲介崯顖溾偓?闂備礁鎼幊妯肩磽濮樿泛绀傛慨妞诲亾妤犵偞甯℃俊鎼佹晜閻ｅ苯濮洪柣搴ｆ嚀閹猜ゃ亹閸愵亝顫曢柟杈鹃檮閺?/div>
         ${buildSeparator()}
         ${buildModeSwitch()}
     </div>`;
@@ -2663,7 +2928,7 @@ function renderFrameOptionsPanel(title: string, name: string, position: Vec3, di
 }
 
 function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
-    setPanelMode('options', '选项-设计点');
+    setPanelMode('options', 'Options - Frame');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
@@ -2671,11 +2936,11 @@ function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
         ${buildNameInput('opt-dp-name', name)}
         ${buildSeparator()}
         ${buildTabBar([
-            { id: 'pick', text: '拾取', active: true },
-            { id: 'calc', text: '计算', active: false }
+            { id: 'pick', text: 'Pick', active: true },
+            { id: 'calc', text: 'Calc', active: false }
         ])}
         ${buildSeparator()}
-        ${buildVec3Input('opt-dp-pos', '位置', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-dp-pos', 'Position', position.x, position.y, position.z)}
         ${buildSeparator()}
         ${buildModeSwitch()}
     </div>`;
@@ -2685,35 +2950,35 @@ function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
 }
 
 const JOINT_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
-    { value: 'Revolute', text: 'Revolute（旋转）' },
-    { value: 'Prismatic', text: 'Prismatic（平移）' },
-    { value: 'Cylindrical', text: 'Cylindrical（圆柱）' },
-    { value: 'Spherical', text: 'Spherical（球）' },
-    { value: 'Universal', text: 'Universal（万向）' },
-    { value: 'Planar', text: 'Planar（平面）' },
-    { value: 'Fixed', text: 'Fixed（固定）' }
+    { value: 'Revolute', text: 'Revolute' },
+    { value: 'Prismatic', text: 'Prismatic' },
+    { value: 'Cylindrical', text: 'Cylindrical' },
+    { value: 'Spherical', text: 'Spherical' },
+    { value: 'Universal', text: 'Universal' },
+    { value: 'Planar', text: 'Planar' },
+    { value: 'Fixed', text: 'Fixed' }
 ];
 
 function renderJointOptionsPanel(name: string, jointType: string, part1Name: string, part2Name: string, position: Vec3, direction: Vec3): void {
-    setPanelMode('options', '选项-连接');
+    setPanelMode('options', 'Options - Joint');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-joint-name', name)}
-        ${buildDropdown('opt-joint-type', '类型', jointType, JOINT_TYPE_OPTIONS)}
+        ${buildDropdown('opt-joint-type', 'Type', jointType, JOINT_TYPE_OPTIONS)}
         ${buildSeparator()}
-        <div class="opt-label" style="color: #DC2626; font-weight: 500;">零件 1</div>
+        <div class="opt-label" style="color: #DC2626; font-weight: 500;">闂傚倸鍊稿Λ娆忥耿閻熸壋鏋?1</div>
         <div id="opt-joint-part1" class="opt-part-selector${part1Name ? ' has-value' : ''}">
-            <span>${part1Name || '🖱 点击选择零件 1'}</span>
+            <span>${part1Name || '婵☆偓绲介崯顖炴偂?闂備胶绮崝妤呭箠閹捐鍚规い鏇楀亾闁哄苯鎳忓鍕偓锝庝憾娴犳挳姊婚崒姘棡婵犫偓閻熸壋鏋?1'}</span>
         </div>
-        <div class="opt-label" style="color: #2563EB; font-weight: 500;">零件 2</div>
+        <div class="opt-label" style="color: #2563EB; font-weight: 500;">闂傚倸鍊稿Λ娆忥耿閻熸壋鏋?2</div>
         <div id="opt-joint-part2" class="opt-part-selector${part2Name ? ' has-value' : ''}">
-            <span>${part2Name || '🖱 点击选择零件 2'}</span>
+            <span>${part2Name || '婵☆偓绲介崯顖炴偂?闂備胶绮崝妤呭箠閹捐鍚规い鏇楀亾闁哄苯鎳忓鍕偓锝庝憾娴犳挳姊婚崒姘棡婵犫偓閻熸壋鏋?2'}</span>
         </div>
         ${buildSeparator()}
-        ${buildVec3Input('opt-joint-pos', '位置', position.x, position.y, position.z)}
-        ${buildVec3Input('opt-joint-dir', '方向', direction.x, direction.y, direction.z)}
+        ${buildVec3Input('opt-joint-pos', 'Position', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-joint-dir', 'Direction', direction.x, direction.y, direction.z)}
         ${buildSeparator()}
         ${buildModeSwitch()}
     </div>`;
@@ -2722,27 +2987,27 @@ function renderJointOptionsPanel(name: string, jointType: string, part1Name: str
 }
 
 const MOTION_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
-    { value: 'constant', text: '匀速运动' },
-    { value: 'sinusoidal', text: '正弦运动' },
-    { value: 'ramp', text: '斜坡运动' },
-    { value: 'custom', text: '自定义' }
+    { value: 'constant', text: 'Constant' },
+    { value: 'sinusoidal', text: 'Sinusoidal' },
+    { value: 'ramp', text: 'Ramp' },
+    { value: 'custom', text: 'Custom' }
 ];
 
 function renderMotionOptionsPanel(name: string, motionType: string, connectorRef: string): void {
-    setPanelMode('options', '选项-驱动');
+    setPanelMode('options', 'Options - Motion');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-motion-name', name)}
-        ${buildDropdown('opt-motion-type', '类型', motionType, MOTION_TYPE_OPTIONS)}
+        ${buildDropdown('opt-motion-type', 'Type', motionType, MOTION_TYPE_OPTIONS)}
         ${buildSeparator()}
-        <div class="opt-label">连接器</div>
+        <div class="opt-label">闂佸搫顦弲婵嬪磻閻愬灚鏆滈柟缁㈠枟閺?/div>
         <div id="opt-motion-connector" class="opt-part-selector${connectorRef ? ' has-value' : ''}">
-            <span>${connectorRef || '🖱 选择连接器'}</span>
+            <span>${connectorRef || 'Select connector'}</span>
         </div>
         ${buildSeparator()}
-        ${buildSectionHeader('驱动参数')}
+        ${buildSectionHeader('Motion Parameters')}
         <div class="opt-row">
             <label for="opt-motion-phi">phi.start</label>
             <input id="opt-motion-phi" class="opt-input" type="number" step="0.01" value="0" />
@@ -2859,6 +3124,7 @@ function handleCreateFluidTankSlice(): void {
     };
     fluidSlices.set(id, slice);
 
+    updateModelTree();
     setStatusInfo(`Fluid slice created: ${slice.name}`);
     renderCustomProperties('Fluid Slice Properties', [
         { label: 'ID', value: slice.id },
@@ -2881,6 +3147,7 @@ function handleCreateFluidPort(): void {
     };
     fluidPorts.set(id, port);
 
+    updateModelTree();
     setStatusInfo(`Fluid port created: ${port.name}`);
     renderCustomProperties('Fluid Port Properties', [
         { label: 'ID', value: port.id },
@@ -3147,7 +3414,7 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
         });
     }
 
-    renderFrameOptionsPanel('选项-标架', marker.name,
+    renderFrameOptionsPanel('Edit Frame', marker.name,
         marker.position,
         orientationToDirection(marker.orientation));
     setStatusInfo(`Marker created: ${marker.name}`);
@@ -3190,7 +3457,7 @@ function createRefFrameFromPlacement(selectedShape: LoadedShape, position: Vec3,
         });
     }
 
-    renderFrameOptionsPanel('选项-标架', refFrame.name,
+    renderFrameOptionsPanel('Edit Frame', refFrame.name,
         refFrame.position,
         orientationToDirection(refFrame.orientation));
     setStatusInfo(`Reference marker created: ${refFrame.name}`);
@@ -3257,7 +3524,7 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
         });
 
         setStatusInfo(`Marker edited: ${marker.name}`);
-        renderFrameOptionsPanel('选项-标架', marker.name,
+        renderFrameOptionsPanel('Edit Frame', marker.name,
             marker.position,
             orientationToDirection(marker.orientation));
         vscode.postMessage({
@@ -3287,7 +3554,7 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
     });
 
     setStatusInfo(`Reference marker edited: ${refFrame.name}`);
-    renderFrameOptionsPanel('选项-标架', refFrame.name,
+    renderFrameOptionsPanel('Edit Frame', refFrame.name,
         refFrame.position,
         orientationToDirection(refFrame.orientation));
     vscode.postMessage({
@@ -3493,7 +3760,18 @@ function handleMessage(event: MessageEvent): void {
             setStatus(message.text);
             break;
         case 'updateModelTree':
-            // External update from extension
+            externalModelTreeShapes = Array.isArray(message.shapes)
+                ? message.shapes
+                    .filter((item: unknown): item is { id: string; name: string } => {
+                        if (!item || typeof item !== 'object') {
+                            return false;
+                        }
+                        const id = (item as { id?: unknown }).id;
+                        const name = (item as { name?: unknown }).name;
+                        return typeof id === 'string' && typeof name === 'string';
+                    })
+                : [];
+            updateModelTree();
             break;
         case 'updateProperties':
             updatePropertiesPanel(message.shapeId);
@@ -3611,7 +3889,7 @@ document.addEventListener('DOMContentLoaded', () => {
         exportModel();
     });
 
-    // Ribbon button handlers — direct dispatch to handleMbsAction
+    // Ribbon button handlers 闂?direct dispatch to handleMbsAction
     document.querySelectorAll('.ribbon-btn[data-action-id]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -3662,3 +3940,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
