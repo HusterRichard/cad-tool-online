@@ -273,6 +273,202 @@ function setStatusInfo(text: string): void {
     }
 }
 
+let ribbonResizeObserver: ResizeObserver | null = null;
+
+function ensureRibbonMoreControls(ribbon: HTMLElement): {
+    moreGroup: HTMLElement;
+    moreSeparator: HTMLElement;
+    moreButton: HTMLButtonElement;
+    moreMenu: HTMLElement;
+} {
+    let moreGroup = document.getElementById('ribbon-more-group') as HTMLElement | null;
+    let moreSeparator = document.getElementById('ribbon-more-separator') as HTMLElement | null;
+
+    if (!moreGroup || !moreSeparator) {
+        moreSeparator = document.createElement('div');
+        moreSeparator.id = 'ribbon-more-separator';
+        moreSeparator.className = 'ribbon-separator';
+
+        moreGroup = document.createElement('div');
+        moreGroup.id = 'ribbon-more-group';
+        moreGroup.className = 'ribbon-tab-group ribbon-more-group';
+        moreGroup.innerHTML = `
+            <div class="ribbon-tab-content">
+                <button class="ribbon-btn has-dropdown ribbon-more-btn" id="btn-ribbon-more" title="更多命令">
+                    <span class="ribbon-btn-icon ribbon-more-icon">...</span>
+                    <span class="ribbon-btn-text">更多</span>
+                    <span class="ribbon-btn-arrow">▼</span>
+                </button>
+                <div class="ribbon-dropdown" id="ribbon-more-menu"></div>
+            </div>
+            <div class="ribbon-tab-label">更多</div>
+        `;
+
+        ribbon.appendChild(moreSeparator);
+        ribbon.appendChild(moreGroup);
+    }
+
+    const moreButton = document.getElementById('btn-ribbon-more') as HTMLButtonElement;
+    const moreMenu = document.getElementById('ribbon-more-menu') as HTMLElement;
+
+    if (moreButton.dataset.bound !== '1') {
+        moreButton.dataset.bound = '1';
+        moreButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            moreMenu.classList.toggle('show');
+        });
+        document.addEventListener('click', () => {
+            moreMenu.classList.remove('show');
+        });
+    }
+
+    return { moreGroup, moreSeparator, moreButton, moreMenu };
+}
+
+function buildRibbonMoreMenu(menu: HTMLElement, hiddenGroups: HTMLElement[]): void {
+    menu.innerHTML = '';
+
+    hiddenGroups.forEach((group) => {
+        const groupTitle = group.querySelector('.ribbon-tab-label')?.textContent?.trim() || '命令';
+        const buttons = Array.from(group.querySelectorAll('.ribbon-btn')) as HTMLButtonElement[];
+
+        buttons.forEach((sourceBtn) => {
+            const actionText =
+                sourceBtn.querySelector('.ribbon-btn-text')?.textContent?.trim()
+                || sourceBtn.title
+                || sourceBtn.id
+                || '命令';
+            const iconSrc = (sourceBtn.querySelector('.ribbon-btn-icon img') as HTMLImageElement | null)?.src;
+
+            const item = document.createElement('div');
+            item.className = 'ribbon-dropdown-item';
+            item.innerHTML = `
+                <span class="ribbon-dropdown-item-icon">${iconSrc ? `<img src="${iconSrc}" alt="">` : '•'}</span>
+                <span class="ribbon-dropdown-item-label">${groupTitle} · ${actionText}</span>
+            `;
+            item.addEventListener('click', (event) => {
+                event.stopPropagation();
+                menu.classList.remove('show');
+                sourceBtn.click();
+            });
+            menu.appendChild(item);
+        });
+    });
+}
+
+function updateRibbonSeparators(ribbon: HTMLElement): void {
+    const children = Array.from(ribbon.children) as HTMLElement[];
+    const isVisibleGroup = (node: HTMLElement): boolean => {
+        if (!node.classList.contains('ribbon-tab-group')) return false;
+        if (node.classList.contains('ribbon-group-hidden')) return false;
+        return node.style.display !== 'none';
+    };
+
+    children.forEach((node, index) => {
+        if (!node.classList.contains('ribbon-separator')) return;
+
+        let hasPrevVisibleGroup = false;
+        let hasNextVisibleGroup = false;
+
+        for (let i = index - 1; i >= 0; i--) {
+            if (children[i].classList.contains('ribbon-tab-group')) {
+                hasPrevVisibleGroup = isVisibleGroup(children[i]);
+                break;
+            }
+        }
+        for (let i = index + 1; i < children.length; i++) {
+            if (children[i].classList.contains('ribbon-tab-group')) {
+                hasNextVisibleGroup = isVisibleGroup(children[i]);
+                break;
+            }
+        }
+
+        node.classList.toggle('ribbon-separator-hidden', !(hasPrevVisibleGroup && hasNextVisibleGroup));
+    });
+}
+
+function applyRibbonResponsiveMode(): void {
+    const ribbon = document.querySelector('.ribbon-bar') as HTMLElement | null;
+    if (!ribbon) return;
+
+    const { moreGroup, moreSeparator, moreMenu } = ensureRibbonMoreControls(ribbon);
+    const allGroups = Array.from(ribbon.querySelectorAll('.ribbon-tab-group')) as HTMLElement[];
+    const groups = allGroups.filter((group) => group.id !== 'ribbon-more-group');
+
+    groups.forEach((group) => group.classList.remove('ribbon-group-hidden'));
+    moreGroup.style.display = 'none';
+    moreSeparator.style.display = 'none';
+    moreMenu.classList.remove('show');
+
+    const width = ribbon.clientWidth;
+    ribbon.classList.toggle('compact', width < 1700);
+    ribbon.classList.toggle('icon-only', width < 1360);
+
+    const hideOrder = [9, 8, 7, 5, 4, 3, 2, 1, 6, 0];
+    let hideCursor = 0;
+    const isOverflowing = (): boolean => ribbon.scrollWidth > ribbon.clientWidth + 1;
+    const hideNextGroup = (): boolean => {
+        while (hideCursor < hideOrder.length) {
+            const target = groups[hideOrder[hideCursor]];
+            hideCursor += 1;
+            if (target && !target.classList.contains('ribbon-group-hidden')) {
+                target.classList.add('ribbon-group-hidden');
+                return true;
+            }
+        }
+        return false;
+    };
+
+    while (isOverflowing() && hideNextGroup()) {
+        // keep hiding low-priority groups until ribbon fits
+    }
+
+    let hiddenGroups = groups.filter((group) => group.classList.contains('ribbon-group-hidden'));
+    if (hiddenGroups.length > 0) {
+        moreGroup.style.display = '';
+        moreSeparator.style.display = '';
+        while (isOverflowing() && hideNextGroup()) {
+            // account for "more" control itself
+        }
+        hiddenGroups = groups.filter((group) => group.classList.contains('ribbon-group-hidden'));
+    }
+
+    if (hiddenGroups.length === 0) {
+        moreGroup.style.display = 'none';
+        moreSeparator.style.display = 'none';
+        moreMenu.classList.remove('show');
+    } else {
+        buildRibbonMoreMenu(moreMenu, hiddenGroups);
+    }
+
+    updateRibbonSeparators(ribbon);
+}
+
+function setupRibbonAdaptiveLayout(): void {
+    const ribbon = document.querySelector('.ribbon-bar') as HTMLElement | null;
+    if (!ribbon) return;
+
+    document.querySelectorAll('.ribbon-btn').forEach((btn) => {
+        const el = btn as HTMLElement;
+        if (el.title) return;
+        const text = el.querySelector('.ribbon-btn-text')?.textContent?.trim();
+        if (text) {
+            el.title = text;
+        }
+    });
+
+    applyRibbonResponsiveMode();
+    if (typeof ResizeObserver !== 'undefined') {
+        ribbonResizeObserver?.disconnect();
+        ribbonResizeObserver = new ResizeObserver(() => {
+            applyRibbonResponsiveMode();
+        });
+        ribbonResizeObserver.observe(ribbon);
+    } else {
+        window.addEventListener('resize', applyRibbonResponsiveMode);
+    }
+}
+
 function showLoading(text: string = 'Loading...'): void {
     const overlay = document.getElementById('loading-overlay');
     const loadingText = document.getElementById('loading-text');
@@ -4095,6 +4291,7 @@ window.addEventListener('message', handleMessage);
 
 document.addEventListener('DOMContentLoaded', () => {
     setupRenderConfigUI();
+    setupRibbonAdaptiveLayout();
     init();
 
     // Panel close button handler

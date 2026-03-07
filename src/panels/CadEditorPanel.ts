@@ -782,7 +782,7 @@ export class CadEditorPanel {
             height: 100px;
             flex-shrink: 0;
             gap: 6px;
-            overflow-x: auto;
+            overflow: hidden;
         }
         .ribbon-tab-group {
             display: flex;
@@ -790,6 +790,7 @@ export class CadEditorPanel {
             padding: 4px 6px;
             min-width: 50px;
             gap: 2px;
+            flex: 0 0 auto;
         }
         .ribbon-tab-content {
             display: flex;
@@ -797,6 +798,7 @@ export class CadEditorPanel {
             flex: 1;
             align-items: flex-start;
             padding-top: 4px;
+            position: relative;
         }
         .ribbon-tab-label {
             font-size: 11px;
@@ -820,6 +822,7 @@ export class CadEditorPanel {
             font-family: inherit;
             min-width: 46px;
             gap: 2px;
+            flex: 0 0 auto;
         }
         .ribbon-btn:hover {
             background: var(--color-bg-hover);
@@ -886,6 +889,12 @@ export class CadEditorPanel {
             text-align: center;
             font-size: 14px;
         }
+        .ribbon-dropdown-item-icon img {
+            width: 16px;
+            height: 16px;
+            object-fit: contain;
+            vertical-align: middle;
+        }
         .ribbon-dropdown-item-label {
             flex: 1;
         }
@@ -894,6 +903,80 @@ export class CadEditorPanel {
             background: var(--color-border-hover);
             margin: 4px 0;
             align-self: stretch;
+            flex: 0 0 1px;
+        }
+        .ribbon-group-hidden {
+            display: none !important;
+        }
+        .ribbon-separator-hidden {
+            display: none !important;
+        }
+        .ribbon-more-group {
+            display: none;
+        }
+        .ribbon-more-icon {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            line-height: 1;
+        }
+        .ribbon-bar.compact {
+            height: 84px;
+            padding: 3px 6px;
+            gap: 4px;
+        }
+        .ribbon-bar.compact .ribbon-tab-group {
+            padding: 3px 4px;
+        }
+        .ribbon-bar.compact .ribbon-tab-content {
+            gap: 3px;
+            padding-top: 2px;
+        }
+        .ribbon-bar.compact .ribbon-btn {
+            min-width: 40px;
+            padding: 2px 3px;
+        }
+        .ribbon-bar.compact .ribbon-btn-icon,
+        .ribbon-bar.compact .ribbon-btn-icon img {
+            width: 28px;
+            height: 28px;
+        }
+        .ribbon-bar.compact .ribbon-btn-text {
+            font-size: 10px;
+        }
+        .ribbon-bar.icon-only {
+            height: 54px;
+            padding: 2px 4px;
+            gap: 3px;
+        }
+        .ribbon-bar.icon-only .ribbon-tab-group {
+            padding: 2px 3px;
+            min-width: auto;
+        }
+        .ribbon-bar.icon-only .ribbon-tab-content {
+            gap: 2px;
+            padding-top: 0;
+            align-items: center;
+        }
+        .ribbon-bar.icon-only .ribbon-btn {
+            min-width: 34px;
+            padding: 2px;
+            gap: 0;
+        }
+        .ribbon-bar.icon-only .ribbon-btn-icon,
+        .ribbon-bar.icon-only .ribbon-btn-icon img {
+            width: 24px;
+            height: 24px;
+        }
+        .ribbon-bar.icon-only .ribbon-btn-text,
+        .ribbon-bar.icon-only .ribbon-tab-label {
+            display: none;
+        }
+        .ribbon-bar.icon-only .ribbon-more-btn .ribbon-btn-arrow {
+            display: none;
+        }
+        .ribbon-bar.icon-only .ribbon-separator {
+            margin: 2px 0;
         }
         .status-bar {
             height: 24px;
