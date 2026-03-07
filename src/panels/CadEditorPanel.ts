@@ -465,11 +465,15 @@ export class CadEditorPanel {
             display: flex;
             flex: 1;
             overflow: hidden;
+            position: relative;
+        }
+        .main-body.resizing {
+            cursor: col-resize;
+            user-select: none;
         }
         .sidebar {
             width: 265px;
             background-color: var(--color-bg-surface);
-            border-right: 1px solid var(--color-border);
             display: flex;
             flex-direction: column;
             overflow-y: auto;
@@ -478,11 +482,33 @@ export class CadEditorPanel {
         .sidebar-right {
             width: 280px;
             background-color: var(--color-bg-surface);
-            border-left: 1px solid var(--color-border);
             display: flex;
             flex-direction: column;
             overflow-y: auto;
             flex-shrink: 0;
+        }
+        .sidebar-resizer {
+            width: 6px;
+            flex: 0 0 6px;
+            cursor: col-resize;
+            position: relative;
+            background: transparent;
+        }
+        .sidebar-resizer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 2px;
+            width: 1px;
+            background: var(--color-border);
+            opacity: 0.95;
+        }
+        .sidebar-resizer:hover::before,
+        .sidebar-resizer.dragging::before {
+            width: 2px;
+            left: 2px;
+            background: #2563EB;
         }
         .panel {
             border-bottom: 1px solid var(--color-border);
@@ -1629,6 +1655,7 @@ export class CadEditorPanel {
                     </div>
                 </div>
             </div>
+            <div class="sidebar-resizer" id="left-sidebar-resizer" role="separator" aria-label="Resize model browser"></div>
             <!-- Viewport -->
             <div class="viewport">
                 <div id="canvas-container">
@@ -1699,6 +1726,7 @@ export class CadEditorPanel {
                 </div>
             </div>
             </div>
+            <div class="sidebar-resizer" id="right-sidebar-resizer" role="separator" aria-label="Resize properties panel"></div>
             <!-- Right Sidebar: Properties / Options -->
             <div class="sidebar-right">
                 <div class="panel">

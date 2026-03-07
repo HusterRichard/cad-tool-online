@@ -469,6 +469,99 @@ function setupRibbonAdaptiveLayout(): void {
     }
 }
 
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+}
+
+function setupSidebarResize(): void {
+    const mainBody = document.querySelector('.main-body') as HTMLElement | null;
+    const leftSidebar = document.querySelector('.sidebar') as HTMLElement | null;
+    const rightSidebar = document.querySelector('.sidebar-right') as HTMLElement | null;
+    const leftResizer = document.getElementById('left-sidebar-resizer') as HTMLElement | null;
+    const rightResizer = document.getElementById('right-sidebar-resizer') as HTMLElement | null;
+
+    if (!mainBody || !leftSidebar || !rightSidebar || !leftResizer || !rightResizer) {
+        return;
+    }
+
+    const minLeftWidth = 220;
+    const maxLeftWidth = 560;
+    const minRightWidth = 240;
+    const maxRightWidth = 560;
+    const minViewportWidth = 420;
+
+    const handleTotalWidth = (): number => leftResizer.offsetWidth + rightResizer.offsetWidth;
+    const notifyViewportResize = (): void => {
+        window.dispatchEvent(new Event('resize'));
+    };
+    const getWidth = (el: HTMLElement): number => el.getBoundingClientRect().width;
+
+    const getAllowedLeftMax = (): number => {
+        const available = mainBody.clientWidth - getWidth(rightSidebar) - minViewportWidth - handleTotalWidth();
+        return Math.max(minLeftWidth, Math.min(maxLeftWidth, available));
+    };
+    const getAllowedRightMax = (): number => {
+        const available = mainBody.clientWidth - getWidth(leftSidebar) - minViewportWidth - handleTotalWidth();
+        return Math.max(minRightWidth, Math.min(maxRightWidth, available));
+    };
+
+    const applyLeftWidth = (value: number): void => {
+        const width = clamp(value, minLeftWidth, getAllowedLeftMax());
+        leftSidebar.style.width = `${Math.round(width)}px`;
+    };
+    const applyRightWidth = (value: number): void => {
+        const width = clamp(value, minRightWidth, getAllowedRightMax());
+        rightSidebar.style.width = `${Math.round(width)}px`;
+    };
+
+    const startDrag = (target: 'left' | 'right', startEvent: PointerEvent): void => {
+        startEvent.preventDefault();
+        const startX = startEvent.clientX;
+        const initialLeft = getWidth(leftSidebar);
+        const initialRight = getWidth(rightSidebar);
+        const activeHandle = target === 'left' ? leftResizer : rightResizer;
+
+        mainBody.classList.add('resizing');
+        activeHandle.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+
+        const onMove = (moveEvent: PointerEvent): void => {
+            const dx = moveEvent.clientX - startX;
+            if (target === 'left') {
+                applyLeftWidth(initialLeft + dx);
+            } else {
+                applyRightWidth(initialRight - dx);
+            }
+            notifyViewportResize();
+        };
+
+        const onUp = (): void => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            mainBody.classList.remove('resizing');
+            activeHandle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            notifyViewportResize();
+            applyRibbonResponsiveMode();
+        };
+
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp, { once: true });
+    };
+
+    leftResizer.addEventListener('pointerdown', (event) => startDrag('left', event));
+    rightResizer.addEventListener('pointerdown', (event) => startDrag('right', event));
+
+    const enforceBounds = (): void => {
+        applyLeftWidth(getWidth(leftSidebar));
+        applyRightWidth(getWidth(rightSidebar));
+        notifyViewportResize();
+    };
+
+    enforceBounds();
+    window.addEventListener('resize', enforceBounds);
+}
+
 function showLoading(text: string = 'Loading...'): void {
     const overlay = document.getElementById('loading-overlay');
     const loadingText = document.getElementById('loading-text');
@@ -4292,6 +4385,7 @@ window.addEventListener('message', handleMessage);
 document.addEventListener('DOMContentLoaded', () => {
     setupRenderConfigUI();
     setupRibbonAdaptiveLayout();
+    setupSidebarResize();
     init();
 
     // Panel close button handler
