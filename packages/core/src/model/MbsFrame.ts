@@ -1,4 +1,4 @@
-import { Vec3, Mat3 } from '../types';
+import type { Mat3, Vec3 } from '../types';
 
 export interface IMbsFrame {
     id: string;
@@ -25,15 +25,86 @@ export class MbsFrame implements IMbsFrame {
     }
 
     setOrientation(matrix: Mat3): void {
-        this.orientation = matrix;
+        this.orientation = { m: [...matrix.m] };
+    }
+
+    setParentId(parentId: string | undefined): void {
+        this.parentId = parentId;
     }
 }
 
-export class MbsMarker extends MbsFrame {
+export interface IMbsMarkerBase extends IMbsFrame {
     groupId: string;
+    size: number;
+    relatedConnectorIds: string[];
+    isManual: boolean;
+}
+
+export class MbsMarkerBase extends MbsFrame implements IMbsMarkerBase {
+    groupId: string;
+    size = -1;
+    relatedConnectorIds: string[] = [];
+    isManual = false;
 
     constructor(id: string, name: string, groupId: string) {
         super(id, name);
         this.groupId = groupId;
+    }
+
+    setSize(size: number): void {
+        this.size = size;
+    }
+
+    setManual(isManual: boolean): void {
+        this.isManual = isManual;
+    }
+
+    appendRelatedConnectorId(connectorId: string): void {
+        if (!this.relatedConnectorIds.includes(connectorId)) {
+            this.relatedConnectorIds.push(connectorId);
+        }
+    }
+
+    removeRelatedConnectorId(connectorId: string): void {
+        this.relatedConnectorIds = this.relatedConnectorIds.filter((id) => id !== connectorId);
+    }
+
+    clearRelatedConnectorIds(): void {
+        this.relatedConnectorIds = [];
+    }
+}
+
+export class MbsMarker extends MbsMarkerBase {
+    relatedRefMarkerIds: string[] = [];
+
+    appendRefMarker(refMarkerId: string): void {
+        if (!this.relatedRefMarkerIds.includes(refMarkerId)) {
+            this.relatedRefMarkerIds.push(refMarkerId);
+        }
+    }
+
+    removeRefMarker(refMarkerId: string): void {
+        this.relatedRefMarkerIds = this.relatedRefMarkerIds.filter((id) => id !== refMarkerId);
+    }
+
+    isIndependentMarker(): boolean {
+        return this.isManual && this.relatedRefMarkerIds.length === 0;
+    }
+}
+
+export class MbsRefMarker extends MbsMarkerBase {
+    relatedMarkerId?: string;
+
+    constructor(id: string, name: string, groupId: string, relatedMarkerId?: string) {
+        super(id, name, groupId);
+        this.relatedMarkerId = relatedMarkerId;
+    }
+
+    setRelatedMarker(markerId: string | undefined): void {
+        this.relatedMarkerId = markerId;
+    }
+
+    isIndependentMarker(): boolean {
+        return this.isManual && !this.relatedMarkerId;
     }
 }
