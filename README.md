@@ -2,7 +2,6 @@
 
 > 面向多体动力学（MBS）建模场景的 VSCode CAD 插件：在本地完成 STEP 导入、3D 可视化与基础建模操作。
 
-[![License](https://img.shields.io/badge/license-Internal-blue.svg)](LICENSE)
 [![VSCode](https://img.shields.io/badge/VSCode-%5E1.80.0-blue.svg)](https://code.visualstudio.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)

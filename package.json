@@ -6,6 +6,11 @@
   "displayName": "CadToolOnline",
   "description": "Online CAD tool for multi-body dynamics design",
   "publisher": "cadtool",
+  "repository": {
+    "type": "git",
+    "url": "https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline.git"
+  },
+  "homepage": "https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline",
   "engines": {
     "vscode": "^1.80.0",
     "node": ">=18.0.0",
@@ -88,7 +93,7 @@
     "build:wasm:debug": "cd packages/geo/cpp && cmake --preset debug && cmake --build --preset debug",
     "check:ribbon-icons": "node scripts/check-ribbon-action-icons.mjs --file cadtoolonline.pen --out docs/outputs/RIBBON_ICON_ACCEPTANCE.json",
     "vscode:prepublish": "pnpm run build:all",
-    "package": "pnpm run build:all && vsce package --no-dependencies"
+    "package": "pnpm run build:all && vsce package --no-dependencies --skip-license --baseContentUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/blob/main/ --baseImagesUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/raw/main/"
   },
   "dependencies": {
     "@cadtool-online/core": "workspace:*",

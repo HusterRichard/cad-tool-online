@@ -29,10 +29,35 @@ scripts/**
 pnpm-workspace.yaml
 pnpm-lock.yaml
 
-# Include dist folder (extension + webview + wasm)
-!dist/**
+# Exclude dist by default, then include runtime artifacts only
+dist/**
+!dist/extension.cjs
+!dist/webview/webview.js
+!dist/wasm/**
+dist/wasm/*.d.ts
 
 # Exclude unnecessary files
 *.map
 .eslintrc*
 .prettierrc*
+.VSCodeCounter/**
+ref/**
+view-result/**
+ai-artifacts/**
+docs/**
+report/**
+tests/**
+data/**
+demo/**
+prompts/**
+*.pen
+*.vsix
+cad-ui-err.png
+plan.md
+TASK.md
+CLAUDE.md
+.project-structure.md
+.mcp.json
+.env.example
+public/**
+!public/icons/png/32/**
