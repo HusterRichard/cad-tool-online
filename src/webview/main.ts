@@ -3,7 +3,7 @@
 
 import { ThreeViewer } from '@cadtool-online/three';
 import { OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
-import type { EdgeData, MeshData } from '@cadtool-online/core';
+import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import { markerCreator, type MbsMarker } from '@cadtool-online/core';
 import {
     DEFAULT_RENDER_CONFIG,
@@ -61,8 +61,38 @@ let selectedShapeId: string | null = null;
 const meshIdToShapeId: Map<string, string> = new Map();
 
 // Marker creation state
-let isCreatingMarker = false;
 const createdMarkers: MbsMarker[] = [];
+const createdRefFrames = new Map<string, MbsRefFrameEntity>();
+const mbsDesignPoints = new Map<string, MbsDesignPointEntity>();
+const frameCreationHistory: Array<{ id: string; kind: FrameEntityKind }> = [];
+let editingFrameTarget: { id: string; kind: FrameEntityKind } | null = null;
+
+type FrameEntityKind = 'marker' | 'refFrame';
+type CanvasInteractionMode = 'none' | 'createMarker' | 'createRefFrame' | 'createDesignPoint' | 'editFrame';
+let canvasInteractionMode: CanvasInteractionMode = 'none';
+
+interface MbsRefFrameEntity {
+    id: string;
+    name: string;
+    groupId: string;
+    position: Vec3;
+    orientation: Mat3;
+    relatedMarkerId?: string;
+    createdAt: string;
+}
+
+interface MbsDesignPointEntity {
+    id: string;
+    name: string;
+    groupId: string;
+    position: Vec3;
+    direction?: Vec3;
+    markerRefId?: string;
+    size: number;
+    isDirectionReverse: boolean;
+    offsetValue: number;
+    createdAt: string;
+}
 
 interface MbsGroupEntity {
     id: string;
@@ -679,16 +709,20 @@ function updatePropertiesPanel(shapeId: string | null): void {
 
     if (!shapeId) {
         massPropertiesCoordinator.cancelPending();
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Select an object to view properties</div>';
+        setPanelMode('properties', '属性');
+        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
         return;
     }
 
     const shape = loadedShapes.get(shapeId);
     if (!shape) {
         massPropertiesCoordinator.cancelPending();
+        setPanelMode('properties', '属性');
         propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">Shape not found</div>';
         return;
     }
+
+    setPanelMode('properties', '属性-零件');
 
     const occtForRequest = occt;
     const requestResult = massPropertiesCoordinator.request(
@@ -1285,6 +1319,20 @@ interface CadtoolConfigExportData {
     marker: Array<{
         name: string;
         groupRef: string;
+        position?: Vec3;
+        direction?: Vec3;
+        refMarker?: boolean;
+        relatedMarkerRef?: string;
+    }>;
+    designPoint: Array<{
+        name: string;
+        groupRef: string;
+        markerRef?: string;
+        position: Vec3;
+        direction?: Vec3;
+        size?: number;
+        isDirectionReverse?: boolean;
+        offsetValue?: number;
     }>;
     connector: Array<{
         name: string;
@@ -1312,6 +1360,7 @@ interface CadtoolConfigExportData {
 interface CadtoolConfigImportStats {
     groups: number;
     markers: number;
+    designPoints: number;
     connectors: number;
     motions: number;
     ribSlices: number;
@@ -1326,6 +1375,7 @@ type JsonRecord = Record<string, unknown>;
 const DEFAULT_IMPORT_STATS: CadtoolConfigImportStats = {
     groups: 0,
     markers: 0,
+    designPoints: 0,
     connectors: 0,
     motions: 0,
     ribSlices: 0,
@@ -1417,6 +1467,94 @@ function normalizeVector(vector: { x: number; y: number; z: number } | null): { 
     };
 }
 
+function cloneVec3(vec: Vec3): Vec3 {
+    return { x: vec.x, y: vec.y, z: vec.z };
+}
+
+function cloneMat3(mat: Mat3): Mat3 {
+    return { m: [...mat.m] };
+}
+
+function createOrientationFromNormal(normal: Vec3): Mat3 {
+    const normalized = normalizeVector(normal) ?? { x: 0, y: 0, z: 1 };
+    let tempX: Vec3;
+    if (Math.abs(normalized.z) > 0.9) {
+        tempX = { x: 1, y: 0, z: 0 };
+    } else {
+        tempX = { x: 0, y: 0, z: 1 };
+    }
+
+    const yAxis = normalizeVector({
+        x: normalized.y * tempX.z - normalized.z * tempX.y,
+        y: normalized.z * tempX.x - normalized.x * tempX.z,
+        z: normalized.x * tempX.y - normalized.y * tempX.x
+    }) ?? { x: 0, y: 1, z: 0 };
+
+    const xAxis = normalizeVector({
+        x: yAxis.y * normalized.z - yAxis.z * normalized.y,
+        y: yAxis.z * normalized.x - yAxis.x * normalized.z,
+        z: yAxis.x * normalized.y - yAxis.y * normalized.x
+    }) ?? { x: 1, y: 0, z: 0 };
+
+    return {
+        m: [
+            xAxis.x, xAxis.y, xAxis.z,
+            yAxis.x, yAxis.y, yAxis.z,
+            normalized.x, normalized.y, normalized.z
+        ]
+    };
+}
+
+function orientationToDirection(orientation: Mat3): Vec3 {
+    const direction = normalizeVector({
+        x: orientation.m[2],
+        y: orientation.m[5],
+        z: orientation.m[8]
+    });
+    return direction ?? { x: 0, y: 0, z: 1 };
+}
+
+function formatVec3(vec: Vec3): string {
+    return `${vec.x.toFixed(3)}, ${vec.y.toFixed(3)}, ${vec.z.toFixed(3)}`;
+}
+
+function recordFrameCreation(id: string, kind: FrameEntityKind): void {
+    frameCreationHistory.push({ id, kind });
+    if (frameCreationHistory.length > 200) {
+        frameCreationHistory.splice(0, frameCreationHistory.length - 200);
+    }
+}
+
+function setCanvasCursor(cursor: string): void {
+    const container = document.getElementById('canvas-container');
+    if (container) {
+        container.style.cursor = cursor;
+    }
+}
+
+function resetCanvasInteraction(): void {
+    editingFrameTarget = null;
+    canvasInteractionMode = 'none';
+    setCanvasCursor('default');
+}
+
+function resolveLatestExistingFrameFromHistory(): { index: number; id: string; kind: FrameEntityKind } | null {
+    for (let i = frameCreationHistory.length - 1; i >= 0; i -= 1) {
+        const item = frameCreationHistory[i];
+        const exists = item.kind === 'marker'
+            ? createdMarkers.some((marker) => marker.id === item.id)
+            : createdRefFrames.has(item.id);
+
+        if (exists) {
+            return { index: i, id: item.id, kind: item.kind };
+        }
+
+        frameCreationHistory.splice(i, 1);
+    }
+
+    return null;
+}
+
 function buildShapeNameToIdMap(): Map<string, string> {
     const shapeNameToId = new Map<string, string>();
     loadedShapes.forEach((shape) => {
@@ -1440,20 +1578,21 @@ function clearCadtoolRuntimeEntities(): void {
         createdMarkers.forEach(marker => {
             viewer.removeFrame(marker.id);
         });
+        createdRefFrames.forEach((refFrame) => {
+            viewer.removeFrame(refFrame.id);
+        });
     }
 
     createdMarkers.length = 0;
-    isCreatingMarker = false;
+    createdRefFrames.clear();
+    mbsDesignPoints.clear();
+    frameCreationHistory.length = 0;
+    resetCanvasInteraction();
     mbsGroups.clear();
     mbsJoints.clear();
     mbsMotions.clear();
     fluidSlices.clear();
     fluidPorts.clear();
-
-    const container = document.getElementById('canvas-container');
-    if (container) {
-        container.style.cursor = 'default';
-    }
 }
 
 function importCadtoolConfig(data: unknown, sourceName?: string): void {
@@ -1529,6 +1668,9 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         stats.groups += 1;
     });
 
+    const markerNameToId = new Map<string, string>();
+    const frameNameToFrame = new Map<string, { id: string; kind: FrameEntityKind }>();
+
     const markers = getConfigArray(data, 'marker', stats);
     markers.forEach((entry, index) => {
         if (!isJsonRecord(entry)) {
@@ -1546,6 +1688,8 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const groupRef = toNonEmptyString(entry.groupRef);
         const partRef = toNonEmptyString(entry.partRef);
+        const relatedMarkerRef = toNonEmptyString(entry.relatedMarkerRef) ?? toNonEmptyString(entry.markerRef);
+        const refMarkerFlag = entry.refMarker === true || entry.refMarker === 'true' || Boolean(relatedMarkerRef);
 
         let groupId: string | undefined;
         if (groupRef) {
@@ -1575,24 +1719,152 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             addImportWarning(stats, `marker "${name}" has invalid direction; defaulting to +Z.`);
         }
 
-        const marker = markerCreator.createMarker({
-            position: parsedPosition ?? { x: 0, y: 0, z: 0 },
-            normal: parsedDirection ?? { x: 0, y: 0, z: 1 },
-            groupId,
-            name
-        });
+        if (refMarkerFlag) {
+            let relatedMarkerId: string | undefined;
+            if (relatedMarkerRef) {
+                relatedMarkerId = markerNameToId.get(relatedMarkerRef) ?? relatedMarkerRef;
+            }
 
-        createdMarkers.push(marker);
-        if (viewer) {
-            viewer.addFrame({
-                id: marker.id,
-                name: marker.name,
-                position: marker.position,
-                orientation: marker.orientation,
-                isPrimary: true
+            const relatedMarker = relatedMarkerId
+                ? createdMarkers.find((marker) => marker.id === relatedMarkerId)
+                : undefined;
+            if (relatedMarkerRef && !relatedMarker) {
+                addImportWarning(stats, `ref marker "${name}" references unknown relatedMarkerRef "${relatedMarkerRef}".`);
+            }
+
+            const resolvedPosition = parsedPosition
+                ?? (relatedMarker ? cloneVec3(relatedMarker.position) : { x: 0, y: 0, z: 0 });
+            const resolvedOrientation = parsedDirection
+                ? createOrientationFromNormal(parsedDirection)
+                : (relatedMarker ? cloneMat3(relatedMarker.orientation) : createOrientationFromNormal({ x: 0, y: 0, z: 1 }));
+            const refFrame: MbsRefFrameEntity = {
+                id: nextEntityId('refMarker', createdRefFrames.size),
+                name,
+                groupId: relatedMarker?.groupId ?? groupId,
+                position: resolvedPosition,
+                orientation: resolvedOrientation,
+                relatedMarkerId: relatedMarker?.id ?? relatedMarkerId,
+                createdAt: new Date().toISOString()
+            };
+
+            createdRefFrames.set(refFrame.id, refFrame);
+            if (relatedMarker) {
+                relatedMarker.appendRefMarker(refFrame.id);
+            }
+
+            if (viewer) {
+                viewer.addFrame({
+                    id: refFrame.id,
+                    name: refFrame.name,
+                    position: refFrame.position,
+                    orientation: refFrame.orientation,
+                    isPrimary: false
+                });
+            }
+
+            recordFrameCreation(refFrame.id, 'refFrame');
+            frameNameToFrame.set(refFrame.name, { id: refFrame.id, kind: 'refFrame' });
+        } else {
+            const marker = markerCreator.createMarker({
+                position: parsedPosition ?? { x: 0, y: 0, z: 0 },
+                normal: parsedDirection ?? { x: 0, y: 0, z: 1 },
+                groupId,
+                name
             });
+
+            createdMarkers.push(marker);
+            markerNameToId.set(marker.name, marker.id);
+            if (viewer) {
+                viewer.addFrame({
+                    id: marker.id,
+                    name: marker.name,
+                    position: marker.position,
+                    orientation: marker.orientation,
+                    isPrimary: true
+                });
+            }
+
+            recordFrameCreation(marker.id, 'marker');
+            frameNameToFrame.set(marker.name, { id: marker.id, kind: 'marker' });
+        }
+
+        if (frameNameToFrame.size > 0 && frameNameToFrame.get(name)?.id) {
+            const duplicates = Array.from(frameNameToFrame.keys()).filter((frameName) => frameName === name).length;
+            if (duplicates > 1) {
+                addImportWarning(stats, `Duplicate marker name "${name}" found; latest entry is used for references.`);
+            }
         }
         stats.markers += 1;
+    });
+
+    const designPointEntries = getConfigArray(data, 'designPoint', stats);
+    designPointEntries.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `designPoint[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        if (!name) {
+            stats.skipped += 1;
+            addImportWarning(stats, `designPoint[${index}] is missing a valid "name" and was skipped.`);
+            return;
+        }
+
+        const groupRef = toNonEmptyString(entry.groupRef);
+        const markerRef = toNonEmptyString(entry.markerRef);
+        let groupId = selectedShapeId ?? '__unassigned__';
+
+        if (groupRef) {
+            groupId = groupNameToId.get(groupRef) ?? shapeNameToId.get(groupRef) ?? groupRef;
+            if (!groupNameToId.has(groupRef) && !shapeNameToId.has(groupRef)) {
+                addImportWarning(stats, `designPoint "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`);
+            }
+        }
+
+        let markerRefId: string | undefined;
+        if (markerRef) {
+            const resolved = frameNameToFrame.get(markerRef);
+            markerRefId = resolved?.id ?? markerRef;
+            if (!resolved) {
+                addImportWarning(stats, `designPoint "${name}" references unknown markerRef "${markerRef}", keeping raw reference.`);
+            }
+        }
+
+        const parsedPosition = parseVector3(entry.position);
+        const parsedDirection = normalizeVector(parseVector3(entry.direction));
+        const markerRefEntity = markerRefId
+            ? createdMarkers.find((marker) => marker.id === markerRefId)
+                ?? createdRefFrames.get(markerRefId)
+            : undefined;
+
+        const position = parsedPosition
+            ?? (markerRefEntity ? cloneVec3(markerRefEntity.position) : { x: 0, y: 0, z: 0 });
+        const sizeValue = typeof entry.size === 'number' && Number.isFinite(entry.size)
+            ? entry.size
+            : -1;
+        const isDirectionReverse = typeof entry.isDirectionReverse === 'boolean'
+            ? entry.isDirectionReverse
+            : false;
+        const offsetValue = typeof entry.offsetValue === 'number' && Number.isFinite(entry.offsetValue)
+            ? entry.offsetValue
+            : 0;
+
+        const designPoint: MbsDesignPointEntity = {
+            id: nextEntityId('designPoint', mbsDesignPoints.size),
+            name,
+            groupId,
+            markerRefId,
+            position,
+            direction: parsedDirection ?? (markerRefEntity ? orientationToDirection(markerRefEntity.orientation) : undefined),
+            size: sizeValue,
+            isDirectionReverse,
+            offsetValue,
+            createdAt: new Date().toISOString()
+        };
+        mbsDesignPoints.set(designPoint.id, designPoint);
+        stats.designPoints += 1;
     });
 
     const connectors = getConfigArray(data, 'connector', stats);
@@ -1734,10 +2006,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
     setStatus('Ready');
     setStatusInfo(
-        `CADTool config imported: groups=${stats.groups}, markers=${stats.markers}, connectors=${stats.connectors}, motions=${stats.motions}`
+        `CADTool config imported: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}`
     );
 
-    const summary = `CADTool config import complete${sourceLabel}: groups=${stats.groups}, markers=${stats.markers}, connectors=${stats.connectors}, motions=${stats.motions}, ribSlices=${stats.ribSlices}, fluidPorts=${stats.fluidPorts}, skipped=${stats.skipped}.`;
+    const summary = `CADTool config import complete${sourceLabel}: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}, ribSlices=${stats.ribSlices}, fluidPorts=${stats.fluidPorts}, skipped=${stats.skipped}.`;
     vscode.postMessage({
         command: 'alert',
         text: summary
@@ -1774,14 +2046,45 @@ function resolveGroupRefName(groupOrShapeId: string | undefined): string {
 }
 
 function buildCadtoolConfigExportData(): CadtoolConfigExportData {
+    const frameIdToName = new Map<string, string>();
+    createdMarkers.forEach((marker) => frameIdToName.set(marker.id, marker.name));
+    createdRefFrames.forEach((refFrame) => frameIdToName.set(refFrame.id, refFrame.name));
+
+    const markerEntries = createdMarkers.map((marker) => ({
+        name: marker.name,
+        groupRef: resolveGroupRefName(marker.groupId),
+        position: cloneVec3(marker.position),
+        direction: orientationToDirection(marker.orientation)
+    }));
+
+    const refMarkerEntries = Array.from(createdRefFrames.values()).map((refFrame) => ({
+        name: refFrame.name,
+        groupRef: resolveGroupRefName(refFrame.groupId),
+        position: cloneVec3(refFrame.position),
+        direction: orientationToDirection(refFrame.orientation),
+        refMarker: true,
+        relatedMarkerRef: refFrame.relatedMarkerId
+            ? (frameIdToName.get(refFrame.relatedMarkerId) ?? refFrame.relatedMarkerId)
+            : undefined
+    }));
+
     return {
         group: Array.from(mbsGroups.values()).map(group => ({
             name: group.name,
             parts: group.memberShapeIds.map(resolvePartRefName)
         })),
-        marker: createdMarkers.map(marker => ({
-            name: marker.name,
-            groupRef: resolveGroupRefName(marker.groupId)
+        marker: [...markerEntries, ...refMarkerEntries],
+        designPoint: Array.from(mbsDesignPoints.values()).map((point) => ({
+            name: point.name,
+            groupRef: resolveGroupRefName(point.groupId),
+            markerRef: point.markerRefId
+                ? (frameIdToName.get(point.markerRefId) ?? point.markerRefId)
+                : undefined,
+            position: cloneVec3(point.position),
+            direction: point.direction ? cloneVec3(point.direction) : undefined,
+            size: point.size,
+            isDirectionReverse: point.isDirectionReverse,
+            offsetValue: point.offsetValue
         })),
         connector: Array.from(mbsJoints.values()).map(joint => ({
             name: joint.name,
@@ -1821,7 +2124,7 @@ function exportCadtoolConfig(): void {
 
         setStatus('Ready');
         setStatusInfo(
-            `CADTool config exported: groups=${exportData.group.length}, connectors=${exportData.connector.length}, motions=${exportData.motion.length}`
+            `CADTool config exported: groups=${exportData.group.length}, markers=${exportData.marker.length}, designPoints=${exportData.designPoint.length}, connectors=${exportData.connector.length}, motions=${exportData.motion.length}`
         );
     } catch (error) {
         console.error('Failed to export CADTool config:', error);
@@ -2175,33 +2478,318 @@ function renderCustomProperties(title: string, rows: Array<{ label: string; valu
     propsEl.innerHTML = lines.join('');
 }
 
-function handleCreateGroup(parentGroupId?: string): void {
-    const id = nextEntityId('group', mbsGroups.size);
-    const name = `Group${mbsGroups.size + 1}`;
-    const memberShapeIds = selectedShapeId ? [selectedShapeId] : [];
+// ============================================================================
+// Options Panel Builders
+// ============================================================================
 
-    const group: MbsGroupEntity = {
-        id,
-        name,
-        parentGroupId,
-        memberShapeIds,
-        createdAt: new Date().toISOString()
-    };
-    mbsGroups.set(id, group);
+function setPanelMode(mode: 'properties' | 'options', title: string): void {
+    const headerText = document.getElementById('panel-header-text');
+    const closeBtn = document.getElementById('panel-header-close');
+    if (headerText) headerText.textContent = title;
+    if (closeBtn) closeBtn.style.display = mode === 'options' ? 'inline' : 'none';
+}
 
-    setStatusInfo(`Group created: ${name}`);
-    renderCustomProperties('Group Properties', [
-        { label: 'ID', value: group.id },
-        { label: 'Name', value: group.name },
-        { label: 'Parent', value: group.parentGroupId ?? '(root)' },
-        { label: 'Members', value: group.memberShapeIds.map(activeShapeName).join(', ') || '(empty)' },
-        { label: 'Created', value: group.createdAt }
-    ]);
+function buildNameInput(id: string, value: string): string {
+    return `<div class="opt-name-row">
+        <label for="${id}">名称</label>
+        <input id="${id}" class="opt-input" type="text" value="${escapeAttr(value)}" />
+    </div>`;
+}
 
-    vscode.postMessage({
-        command: 'alert',
-        text: `Created group "${group.name}" with ${group.memberShapeIds.length} member(s).`
+function buildSeparator(): string {
+    return '<div class="opt-separator"></div>';
+}
+
+function buildVec3Input(prefix: string, label: string, x: number, y: number, z: number): string {
+    return `<div class="opt-label">${label}</div>
+    <div class="opt-vec3-row">
+        <div class="opt-vec3-group">
+            <span class="opt-vec3-label">X</span>
+            <input id="${prefix}-x" class="opt-vec3-input" type="number" step="0.01" value="${x.toFixed(4)}" />
+        </div>
+        <div class="opt-vec3-group">
+            <span class="opt-vec3-label">Y</span>
+            <input id="${prefix}-y" class="opt-vec3-input" type="number" step="0.01" value="${y.toFixed(4)}" />
+        </div>
+        <div class="opt-vec3-group">
+            <span class="opt-vec3-label">Z</span>
+            <input id="${prefix}-z" class="opt-vec3-input" type="number" step="0.01" value="${z.toFixed(4)}" />
+        </div>
+    </div>`;
+}
+
+function buildDropdown(id: string, label: string, value: string, options: Array<{ value: string; text: string }>): string {
+    const optionsHtml = options.map(opt =>
+        `<option value="${escapeAttr(opt.value)}"${opt.value === value ? ' selected' : ''}>${opt.text}</option>`
+    ).join('');
+    return `<div class="opt-row">
+        <label for="${id}">${label}</label>
+        <select id="${id}" class="opt-dropdown">${optionsHtml}</select>
+    </div>`;
+}
+
+function buildPartSelector(id: string, label: string, hint: string): string {
+    return `<div class="opt-label">${label}</div>
+    <div id="${id}" class="opt-part-selector">
+        <span>🖱 ${hint}</span>
+    </div>`;
+}
+
+function buildActionButtons(confirmId: string, confirmText: string, cancelId: string): string {
+    return `<div class="opt-btn-row">
+        <button id="${cancelId}" class="opt-btn-secondary">取消</button>
+        <button id="${confirmId}" class="opt-btn-primary">${confirmText}</button>
+    </div>`;
+}
+
+function buildModeSwitch(): string {
+    return `<div class="opt-mode-row">
+        <button class="opt-mode-btn-active" data-mode="fast">⚡ 闪电模式</button>
+        <button class="opt-mode-btn" data-mode="standard">📐 标准模式</button>
+    </div>`;
+}
+
+function buildSectionHeader(text: string): string {
+    return `<div class="opt-section-header">${text}</div>`;
+}
+
+function buildTabBar(tabs: Array<{ id: string; text: string; active: boolean }>): string {
+    const tabsHtml = tabs.map(tab =>
+        `<button class="${tab.active ? 'opt-tab-active' : 'opt-tab'}" data-tab="${tab.id}">${tab.text}</button>`
+    ).join('');
+    return `<div class="opt-tab-bar">${tabsHtml}</div>`;
+}
+
+function buildSelectedList(items: Array<{ name: string }>): string {
+    if (items.length === 0) {
+        return '<div class="opt-selected-list"><div class="opt-hint">暂无已选零件</div></div>';
+    }
+    const itemsHtml = items.map(item =>
+        `<div class="opt-selected-item"><span class="checkmark">✓</span>${item.name}</div>`
+    ).join('');
+    return `<div class="opt-selected-list">${itemsHtml}</div>`;
+}
+
+function closeOptionsPanel(): void {
+    setPanelMode('properties', '属性');
+    if (selectedShapeId) {
+        updatePropertiesPanel(selectedShapeId);
+    } else {
+        const propsEl = document.getElementById('properties-panel');
+        if (propsEl) {
+            propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
+        }
+    }
+}
+
+function escapeAttr(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function readVec3FromInputs(prefix: string): Vec3 {
+    const x = parseFloat((document.getElementById(`${prefix}-x`) as HTMLInputElement)?.value ?? '0');
+    const y = parseFloat((document.getElementById(`${prefix}-y`) as HTMLInputElement)?.value ?? '0');
+    const z = parseFloat((document.getElementById(`${prefix}-z`) as HTMLInputElement)?.value ?? '0');
+    return { x: isNaN(x) ? 0 : x, y: isNaN(y) ? 0 : y, z: isNaN(z) ? 0 : z };
+}
+
+// ============================================================================
+// Options Panel Renderers
+// ============================================================================
+
+function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
+    setPanelMode('options', '选项-组合');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    const defaultName = `Group${mbsGroups.size + 1}`;
+    const partItems = selectedParts.map(s => ({ name: s.name }));
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-group-name', defaultName)}
+        ${buildSeparator()}
+        <div class="opt-label">已选中零件：${selectedParts.length}</div>
+        ${buildSelectedList(partItems)}
+        ${buildSeparator()}
+        ${buildActionButtons('opt-group-confirm', '确认组合', 'opt-group-cancel')}
+    </div>`;
+
+    document.getElementById('opt-group-confirm')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('opt-group-name') as HTMLInputElement;
+        const name = nameInput?.value?.trim() || defaultName;
+        const memberShapeIds = selectedParts.map(s => s.id);
+
+        const id = nextEntityId('group', mbsGroups.size);
+        const group: MbsGroupEntity = {
+            id,
+            name,
+            parentGroupId: undefined,
+            memberShapeIds,
+            createdAt: new Date().toISOString()
+        };
+        mbsGroups.set(id, group);
+
+        setStatusInfo(`Group created: ${name}`);
+        closeOptionsPanel();
+        vscode.postMessage({
+            command: 'alert',
+            text: `Created group "${name}" with ${memberShapeIds.length} member(s).`
+        });
     });
+
+    document.getElementById('opt-group-cancel')?.addEventListener('click', () => {
+        closeOptionsPanel();
+    });
+}
+
+function renderFrameOptionsPanel(title: string, name: string, position: Vec3, direction: Vec3): void {
+    setPanelMode('options', title);
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-frame-name', name)}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-pos', '位置（全局坐标）', position.x, position.y, position.z)}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-dir', '方向（Rx/Ry/Rz °）', direction.x, direction.y, direction.z)}
+        ${buildSeparator()}
+        <div class="opt-hint">💡 智能推断已开启</div>
+        ${buildSeparator()}
+        ${buildModeSwitch()}
+    </div>`;
+
+    bindModeSwitchEvents(propsEl);
+}
+
+function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
+    setPanelMode('options', '选项-设计点');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-dp-name', name)}
+        ${buildSeparator()}
+        ${buildTabBar([
+            { id: 'pick', text: '拾取', active: true },
+            { id: 'calc', text: '计算', active: false }
+        ])}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-dp-pos', '位置', position.x, position.y, position.z)}
+        ${buildSeparator()}
+        ${buildModeSwitch()}
+    </div>`;
+
+    bindModeSwitchEvents(propsEl);
+    bindTabBarEvents(propsEl);
+}
+
+const JOINT_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
+    { value: 'Revolute', text: 'Revolute（旋转）' },
+    { value: 'Prismatic', text: 'Prismatic（平移）' },
+    { value: 'Cylindrical', text: 'Cylindrical（圆柱）' },
+    { value: 'Spherical', text: 'Spherical（球）' },
+    { value: 'Universal', text: 'Universal（万向）' },
+    { value: 'Planar', text: 'Planar（平面）' },
+    { value: 'Fixed', text: 'Fixed（固定）' }
+];
+
+function renderJointOptionsPanel(name: string, jointType: string, part1Name: string, part2Name: string, position: Vec3, direction: Vec3): void {
+    setPanelMode('options', '选项-连接');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-joint-name', name)}
+        ${buildDropdown('opt-joint-type', '类型', jointType, JOINT_TYPE_OPTIONS)}
+        ${buildSeparator()}
+        <div class="opt-label" style="color: #DC2626; font-weight: 500;">零件 1</div>
+        <div id="opt-joint-part1" class="opt-part-selector${part1Name ? ' has-value' : ''}">
+            <span>${part1Name || '🖱 点击选择零件 1'}</span>
+        </div>
+        <div class="opt-label" style="color: #2563EB; font-weight: 500;">零件 2</div>
+        <div id="opt-joint-part2" class="opt-part-selector${part2Name ? ' has-value' : ''}">
+            <span>${part2Name || '🖱 点击选择零件 2'}</span>
+        </div>
+        ${buildSeparator()}
+        ${buildVec3Input('opt-joint-pos', '位置', position.x, position.y, position.z)}
+        ${buildVec3Input('opt-joint-dir', '方向', direction.x, direction.y, direction.z)}
+        ${buildSeparator()}
+        ${buildModeSwitch()}
+    </div>`;
+
+    bindModeSwitchEvents(propsEl);
+}
+
+const MOTION_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
+    { value: 'constant', text: '匀速运动' },
+    { value: 'sinusoidal', text: '正弦运动' },
+    { value: 'ramp', text: '斜坡运动' },
+    { value: 'custom', text: '自定义' }
+];
+
+function renderMotionOptionsPanel(name: string, motionType: string, connectorRef: string): void {
+    setPanelMode('options', '选项-驱动');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-motion-name', name)}
+        ${buildDropdown('opt-motion-type', '类型', motionType, MOTION_TYPE_OPTIONS)}
+        ${buildSeparator()}
+        <div class="opt-label">连接器</div>
+        <div id="opt-motion-connector" class="opt-part-selector${connectorRef ? ' has-value' : ''}">
+            <span>${connectorRef || '🖱 选择连接器'}</span>
+        </div>
+        ${buildSeparator()}
+        ${buildSectionHeader('驱动参数')}
+        <div class="opt-row">
+            <label for="opt-motion-phi">phi.start</label>
+            <input id="opt-motion-phi" class="opt-input" type="number" step="0.01" value="0" />
+        </div>
+        <div class="opt-row">
+            <label for="opt-motion-w">w.start</label>
+            <input id="opt-motion-w" class="opt-input" type="number" step="0.01" value="0" />
+        </div>
+        ${buildSeparator()}
+        ${buildModeSwitch()}
+    </div>`;
+
+    bindModeSwitchEvents(propsEl);
+}
+
+function bindModeSwitchEvents(container: HTMLElement): void {
+    container.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            container.querySelectorAll('[data-mode]').forEach(b => {
+                b.className = (b as HTMLElement).dataset.mode === (btn as HTMLElement).dataset.mode
+                    ? 'opt-mode-btn-active'
+                    : 'opt-mode-btn';
+            });
+        });
+    });
+}
+
+function bindTabBarEvents(container: HTMLElement): void {
+    container.querySelectorAll('[data-tab]').forEach(tab => {
+        tab.addEventListener('click', () => {
+            container.querySelectorAll('[data-tab]').forEach(t => {
+                t.className = (t as HTMLElement).dataset.tab === (tab as HTMLElement).dataset.tab
+                    ? 'opt-tab-active'
+                    : 'opt-tab';
+            });
+        });
+    });
+}
+
+function handleCreateGroup(parentGroupId?: string): void {
+    const selectedParts: LoadedShape[] = [];
+    if (selectedShapeId) {
+        const shape = loadedShapes.get(selectedShapeId);
+        if (shape) selectedParts.push(shape);
+    }
+
+    renderGroupOptionsPanel(selectedParts);
 }
 
 function handleGroupProperties(): void {
@@ -2225,66 +2813,21 @@ function handleGroupProperties(): void {
 
 function handleCreateJoint(jointType: string): void {
     const participants = resolveJointParticipants();
-    if (!participants) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'Need at least two selected parts to create a joint.'
-        });
-        return;
-    }
-
-    const id = nextEntityId('joint', mbsJoints.size);
+    const part1Name = participants ? activeShapeName(participants.part1) : '';
+    const part2Name = participants ? activeShapeName(participants.part2) : '';
     const name = `${jointType || 'joint'}_${mbsJoints.size + 1}`;
-    const joint: MbsJointEntity = {
-        id,
-        name,
-        jointType: jointType || 'unknown',
-        part1: participants.part1,
-        part2: participants.part2,
-        createdAt: new Date().toISOString()
-    };
-    mbsJoints.set(id, joint);
+    const position: Vec3 = { x: 0, y: 0, z: 0 };
+    const direction: Vec3 = { x: 0, y: 0, z: 1 };
 
-    setStatusInfo(`Joint created: ${joint.name}`);
-    renderCustomProperties('Joint Properties', [
-        { label: 'ID', value: joint.id },
-        { label: 'Name', value: joint.name },
-        { label: 'Type', value: joint.jointType },
-        { label: 'Part 1', value: activeShapeName(joint.part1) },
-        { label: 'Part 2', value: activeShapeName(joint.part2) },
-        { label: 'Created', value: joint.createdAt }
-    ]);
+    renderJointOptionsPanel(name, jointType || 'Revolute', part1Name, part2Name, position, direction);
 }
 
 function handleCreateMotion(motionType: string): void {
     const latestJoint = Array.from(mbsJoints.values()).at(-1);
-    if (!latestJoint) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'No joint found. Please create a joint first.'
-        });
-        return;
-    }
-
-    const id = nextEntityId('motion', mbsMotions.size);
+    const connectorRef = latestJoint?.name ?? '';
     const name = `${motionType || 'motion'}_${mbsMotions.size + 1}`;
-    const motion: MbsMotionEntity = {
-        id,
-        name,
-        motionType: motionType || 'unknown',
-        connectorRef: latestJoint.name,
-        createdAt: new Date().toISOString()
-    };
-    mbsMotions.set(id, motion);
 
-    setStatusInfo(`Motion created: ${motion.name}`);
-    renderCustomProperties('Motion Properties', [
-        { label: 'ID', value: motion.id },
-        { label: 'Name', value: motion.name },
-        { label: 'Motion Type', value: motion.motionType },
-        { label: 'Connector Ref', value: motion.connectorRef },
-        { label: 'Created', value: motion.createdAt }
-    ]);
+    renderMotionOptionsPanel(name, motionType || 'constant', connectorRef);
 }
 
 function handleMotionProperties(): void {
@@ -2437,15 +2980,11 @@ function startMarkerCreation(): void {
         return;
     }
 
-    isCreatingMarker = true;
-    setStatus('Click on a face to create marker (娉曞悜鍚戝)');
+    resetCanvasInteraction();
+    canvasInteractionMode = 'createMarker';
+    setStatus('Click on a face to create marker');
     setStatusInfo('Marker creation mode active');
-
-    // Change cursor to crosshair
-    const container = document.getElementById('canvas-container');
-    if (container) {
-        container.style.cursor = 'crosshair';
-    }
+    setCanvasCursor('crosshair');
 
     vscode.postMessage({
         command: 'alert',
@@ -2454,35 +2993,118 @@ function startMarkerCreation(): void {
 }
 
 /**
- * Handle click on canvas to create marker
+ * Start reference marker creation mode
  */
-function handleCanvasClick(event: MouseEvent): void {
-    if (!isCreatingMarker || !viewer || !occt || !selectedShapeId) return;
-
-    const selectedShape = loadedShapes.get(selectedShapeId);
-    if (!selectedShape || !selectedShape.shapeId) {
-        console.warn('Selected shape has no shapeId');
+function startRefFrameCreation(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a part first to create a reference marker.'
+        });
+        return;
+    }
+    if (createdMarkers.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please create a basic marker first before creating a reference marker.'
+        });
         return;
     }
 
-    // Get click position in canvas coordinates
+    resetCanvasInteraction();
+    canvasInteractionMode = 'createRefFrame';
+    setStatus('Click on a face to create reference marker');
+    setStatusInfo('Reference marker creation mode active');
+    setCanvasCursor('crosshair');
+
+    vscode.postMessage({
+        command: 'alert',
+        text: 'Click on a face to place the reference marker. It will be linked to the latest basic marker.'
+    });
+}
+
+/**
+ * Start design point creation mode
+ */
+function startDesignPointCreation(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a part first to create a design point.'
+        });
+        return;
+    }
+
+    resetCanvasInteraction();
+    canvasInteractionMode = 'createDesignPoint';
+    setStatus('Click on a face to create design point');
+    setStatusInfo('Design point creation mode active');
+    setCanvasCursor('crosshair');
+
+    vscode.postMessage({
+        command: 'alert',
+        text: 'Click on a face to place the design point.'
+    });
+}
+
+/**
+ * Start frame editing mode
+ */
+function startFrameEditMode(): void {
+    if (!selectedShapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a part first to edit a frame.'
+        });
+        return;
+    }
+
+    const target = resolveLatestExistingFrameFromHistory();
+    if (!target) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No frame available to edit. Please create a marker or reference marker first.'
+        });
+        return;
+    }
+
+    resetCanvasInteraction();
+    canvasInteractionMode = 'editFrame';
+    editingFrameTarget = { id: target.id, kind: target.kind };
+    setStatus('Click on a face to reposition the frame');
+    setStatusInfo(`Editing ${target.kind === 'marker' ? 'marker' : 'reference marker'}: ${target.id}`);
+    setCanvasCursor('crosshair');
+}
+
+function resolveFacePlacement(event: MouseEvent): { selectedShape: LoadedShape; position: Vec3; normal: Vec3 } | null {
+    if (!viewer || !occt || !selectedShapeId) {
+        return null;
+    }
+
+    const selectedShape = loadedShapes.get(selectedShapeId);
+    if (!selectedShape || !selectedShape.shapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Selected part has no geometry to place marker/design point.'
+        });
+        return null;
+    }
+
     const container = document.getElementById('canvas-container');
-    if (!container) return;
+    if (!container) {
+        return null;
+    }
 
     const rect = container.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    // Get ray from camera through click point
     const ray = viewer.getRayFromScreenPoint(x, y);
     if (!ray) {
         console.warn('Failed to get ray from screen point');
-        return;
+        return null;
     }
 
-    console.log('[Marker Creation] Ray:', ray);
-
-    // Call OCCT to get face normal at intersection point
     const result = occt.getFaceNormalAtPoint(
         selectedShape.shapeId,
         ray.origin,
@@ -2494,22 +3116,27 @@ function handleCanvasClick(event: MouseEvent): void {
             command: 'alert',
             text: 'No face found at click position. Please click on a face.'
         });
-        return;
+        return null;
     }
 
-    console.log('[Marker Creation] Face normal result:', result);
+    return {
+        selectedShape,
+        position: cloneVec3(result.position),
+        normal: cloneVec3(result.normal)
+    };
+}
 
-    // Create marker using MarkerCreator
+function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
     const marker = markerCreator.createMarker({
-        position: result.position,
-        normal: result.normal,
-        groupId: selectedShape.id, // Use selected shape as parent
+        position,
+        normal,
+        groupId: selectedShape.id,
         name: `Marker${createdMarkers.length + 1}`
     });
 
     createdMarkers.push(marker);
+    recordFrameCreation(marker.id, 'marker');
 
-    // Visualize marker in 3D viewer
     if (viewer) {
         viewer.addFrame({
             id: marker.id,
@@ -2520,22 +3147,189 @@ function handleCanvasClick(event: MouseEvent): void {
         });
     }
 
-    console.log('[Marker Creation] Created marker:', marker);
-
-    // Exit marker creation mode
-    isCreatingMarker = false;
-    const container2 = document.getElementById('canvas-container');
-    if (container2) {
-        container2.style.cursor = 'default';
-    }
-
-    setStatus('Ready');
+    renderFrameOptionsPanel('选项-标架', marker.name,
+        marker.position,
+        orientationToDirection(marker.orientation));
     setStatusInfo(`Marker created: ${marker.name}`);
-
     vscode.postMessage({
         command: 'alert',
-        text: `Marker "${marker.name}" created successfully at position (${result.position.x.toFixed(2)}, ${result.position.y.toFixed(2)}, ${result.position.z.toFixed(2)})`
+        text: `Marker "${marker.name}" created successfully at position (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`
     });
+}
+
+function createRefFrameFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): boolean {
+    const relatedMarker = createdMarkers.at(-1);
+    if (!relatedMarker) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No basic marker found. Please create a basic marker first.'
+        });
+        return false;
+    }
+
+    const refFrame: MbsRefFrameEntity = {
+        id: nextEntityId('refMarker', createdRefFrames.size),
+        name: `RefMarker${createdRefFrames.size + 1}`,
+        groupId: selectedShape.id,
+        position: cloneVec3(position),
+        orientation: createOrientationFromNormal(normal),
+        relatedMarkerId: relatedMarker.id,
+        createdAt: new Date().toISOString()
+    };
+    createdRefFrames.set(refFrame.id, refFrame);
+    relatedMarker.appendRefMarker(refFrame.id);
+    recordFrameCreation(refFrame.id, 'refFrame');
+
+    if (viewer) {
+        viewer.addFrame({
+            id: refFrame.id,
+            name: refFrame.name,
+            position: refFrame.position,
+            orientation: refFrame.orientation,
+            isPrimary: false
+        });
+    }
+
+    renderFrameOptionsPanel('选项-标架', refFrame.name,
+        refFrame.position,
+        orientationToDirection(refFrame.orientation));
+    setStatusInfo(`Reference marker created: ${refFrame.name}`);
+    vscode.postMessage({
+        command: 'alert',
+        text: `Reference marker "${refFrame.name}" created and linked to "${relatedMarker.name}".`
+    });
+    return true;
+}
+
+function createDesignPointFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
+    const latestFrame = resolveLatestExistingFrameFromHistory();
+    const designPoint: MbsDesignPointEntity = {
+        id: nextEntityId('designPoint', mbsDesignPoints.size),
+        name: `DesignPoint${mbsDesignPoints.size + 1}`,
+        groupId: selectedShape.id,
+        position: cloneVec3(position),
+        direction: normalizeVector(cloneVec3(normal)) ?? { x: 0, y: 0, z: 1 },
+        markerRefId: latestFrame?.id,
+        size: -1,
+        isDirectionReverse: false,
+        offsetValue: 0,
+        createdAt: new Date().toISOString()
+    };
+    mbsDesignPoints.set(designPoint.id, designPoint);
+
+    renderDesignPointOptionsPanel(designPoint.name, designPoint.position);
+    setStatusInfo(`Design point created: ${designPoint.name}`);
+    vscode.postMessage({
+        command: 'alert',
+        text: `Design point "${designPoint.name}" created successfully.`
+    });
+}
+
+function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
+    const target = editingFrameTarget;
+    if (!target || !viewer) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No frame selected for editing.'
+        });
+        return false;
+    }
+
+    const orientation = createOrientationFromNormal(normal);
+    if (target.kind === 'marker') {
+        const marker = createdMarkers.find((item) => item.id === target.id);
+        if (!marker) {
+            vscode.postMessage({
+                command: 'alert',
+                text: 'Selected marker no longer exists.'
+            });
+            return false;
+        }
+
+        marker.setPosition(position.x, position.y, position.z);
+        marker.setOrientation(orientation);
+        viewer.updateFrame({
+            id: marker.id,
+            name: marker.name,
+            position: marker.position,
+            orientation: marker.orientation,
+            isPrimary: true
+        });
+
+        setStatusInfo(`Marker edited: ${marker.name}`);
+        renderFrameOptionsPanel('选项-标架', marker.name,
+            marker.position,
+            orientationToDirection(marker.orientation));
+        vscode.postMessage({
+            command: 'alert',
+            text: `Marker "${marker.name}" updated.`
+        });
+        return true;
+    }
+
+    const refFrame = createdRefFrames.get(target.id);
+    if (!refFrame) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Selected reference marker no longer exists.'
+        });
+        return false;
+    }
+
+    refFrame.position = cloneVec3(position);
+    refFrame.orientation = orientation;
+    viewer.updateFrame({
+        id: refFrame.id,
+        name: refFrame.name,
+        position: refFrame.position,
+        orientation: refFrame.orientation,
+        isPrimary: false
+    });
+
+    setStatusInfo(`Reference marker edited: ${refFrame.name}`);
+    renderFrameOptionsPanel('选项-标架', refFrame.name,
+        refFrame.position,
+        orientationToDirection(refFrame.orientation));
+    vscode.postMessage({
+        command: 'alert',
+        text: `Reference marker "${refFrame.name}" updated.`
+    });
+    return true;
+}
+
+/**
+ * Handle click on canvas for marker/ref marker/design point/frame editing
+ */
+function handleCanvasClick(event: MouseEvent): void {
+    if (canvasInteractionMode === 'none') return;
+
+    const placement = resolveFacePlacement(event);
+    if (!placement) return;
+
+    let completed = false;
+    switch (canvasInteractionMode) {
+        case 'createMarker':
+            createMarkerFromPlacement(placement.selectedShape, placement.position, placement.normal);
+            completed = true;
+            break;
+        case 'createRefFrame':
+            completed = createRefFrameFromPlacement(placement.selectedShape, placement.position, placement.normal);
+            break;
+        case 'createDesignPoint':
+            createDesignPointFromPlacement(placement.selectedShape, placement.position, placement.normal);
+            completed = true;
+            break;
+        case 'editFrame':
+            completed = editFrameFromPlacement(placement.position, placement.normal);
+            break;
+        default:
+            break;
+    }
+
+    if (completed) {
+        resetCanvasInteraction();
+        setStatus('Ready');
+    }
 }
 
 function handleMbsAction(action: string, params: Record<string, unknown>): void {
@@ -2559,28 +3353,88 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             startMarkerCreation();
             break;
         }
+        case 'createRefFrame': {
+            startRefFrameCreation();
+            break;
+        }
+        case 'createDesignPoint': {
+            startDesignPointCreation();
+            break;
+        }
         case 'editFrame': {
-            setStatusInfo('Edit frame action is ready for interactive editing workflow.');
+            startFrameEditMode();
             break;
         }
         case 'deleteFrame': {
-            if (createdMarkers.length === 0) {
+            const target = resolveLatestExistingFrameFromHistory();
+            if (!target) {
                 vscode.postMessage({
                     command: 'alert',
-                    text: 'No markers to delete'
+                    text: 'No marker or reference marker to delete.'
                 });
                 return;
             }
 
-            const lastMarker = createdMarkers.pop();
-            if (lastMarker && viewer) {
-                viewer.removeFrame(lastMarker.id);
+            if (target.kind === 'marker') {
+                const markerIndex = createdMarkers.findIndex((marker) => marker.id === target.id);
+                if (markerIndex < 0) {
+                    frameCreationHistory.splice(target.index, 1);
+                    return;
+                }
+
+                const marker = createdMarkers[markerIndex];
+                if (marker.relatedRefMarkerIds.length > 0) {
+                    vscode.postMessage({
+                        command: 'alert',
+                        text: `Marker "${marker.name}" has reference markers and cannot be deleted.`
+                    });
+                    return;
+                }
+
+                createdMarkers.splice(markerIndex, 1);
+                mbsDesignPoints.forEach((point) => {
+                    if (point.markerRefId === marker.id) {
+                        point.markerRefId = undefined;
+                    }
+                });
+
+                if (viewer) {
+                    viewer.removeFrame(marker.id);
+                }
+                frameCreationHistory.splice(target.index, 1);
+                setStatusInfo(`Marker deleted: ${marker.name}`);
                 vscode.postMessage({
                     command: 'alert',
-                    text: `Marker "${lastMarker.name}" deleted`
+                    text: `Marker "${marker.name}" deleted.`
                 });
-                setStatusInfo(`Marker deleted: ${lastMarker.name}`);
+                break;
             }
+
+            const refFrame = createdRefFrames.get(target.id);
+            if (!refFrame) {
+                frameCreationHistory.splice(target.index, 1);
+                return;
+            }
+
+            if (refFrame.relatedMarkerId) {
+                const parentMarker = createdMarkers.find((marker) => marker.id === refFrame.relatedMarkerId);
+                parentMarker?.removeRefMarker(refFrame.id);
+            }
+            createdRefFrames.delete(refFrame.id);
+            mbsDesignPoints.forEach((point) => {
+                if (point.markerRefId === refFrame.id) {
+                    point.markerRefId = undefined;
+                }
+            });
+            if (viewer) {
+                viewer.removeFrame(refFrame.id);
+            }
+            frameCreationHistory.splice(target.index, 1);
+            setStatusInfo(`Reference marker deleted: ${refFrame.name}`);
+            vscode.postMessage({
+                command: 'alert',
+                text: `Reference marker "${refFrame.name}" deleted.`
+            });
             break;
         }
         case 'createJoint': {
@@ -2743,6 +3597,11 @@ document.addEventListener('DOMContentLoaded', () => {
     setupRenderConfigUI();
     init();
 
+    // Panel close button handler
+    document.getElementById('panel-header-close')?.addEventListener('click', () => {
+        closeOptionsPanel();
+    });
+
     // Button handlers
     document.getElementById('btn-import')?.addEventListener('click', () => {
         vscode.postMessage({ command: 'importStep' });
@@ -2750,6 +3609,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('btn-export')?.addEventListener('click', () => {
         exportModel();
+    });
+
+    // Ribbon button handlers — direct dispatch to handleMbsAction
+    document.querySelectorAll('.ribbon-btn[data-action-id]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const actionId = (btn as HTMLElement).dataset.actionId;
+            if (!actionId) return;
+
+            const params: Record<string, unknown> = {};
+            if (actionId.startsWith('createJoint_')) {
+                params.jointType = actionId.replace('createJoint_', '');
+                handleMbsAction('createJoint', params);
+            } else if (actionId.startsWith('createMotion_')) {
+                params.motionType = actionId.replace('createMotion_', '');
+                handleMbsAction('createMotion', params);
+            } else {
+                handleMbsAction(actionId, params);
+            }
+        });
     });
 
     document.getElementById('btn-fit')?.addEventListener('click', () => {

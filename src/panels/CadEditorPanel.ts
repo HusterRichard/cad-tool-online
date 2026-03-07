@@ -268,6 +268,20 @@ export class CadEditorPanel {
                     action: 'createFrame'
                 });
                 break;
+            case 'createRefFrame':
+                vscode.window.showInformationMessage('Create reference frame');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createRefFrame'
+                });
+                break;
+            case 'createDesignPoint':
+                vscode.window.showInformationMessage('Create design point');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'createDesignPoint'
+                });
+                break;
             case 'editFrame':
                 vscode.window.showInformationMessage('Edit frame');
                 this._panel.webview.postMessage({
@@ -474,6 +488,9 @@ export class CadEditorPanel {
             letter-spacing: 0.5px;
             cursor: pointer;
             user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         .panel-header:hover {
             background-color: var(--color-bg-hover);
@@ -481,6 +498,261 @@ export class CadEditorPanel {
         .panel-content {
             padding: var(--spacing-md);
             font-size: var(--font-size-lg);
+        }
+        /* Options Panel Styles */
+        .panel-close-btn {
+            color: #9CA3AF;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .panel-close-btn:hover {
+            color: #1F2937;
+            background-color: #E5E7EB;
+        }
+        .opt-section {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px;
+        }
+        .opt-name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .opt-name-row label {
+            font-size: 12px;
+            color: #1F2937;
+            white-space: nowrap;
+            min-width: 36px;
+        }
+        .opt-input {
+            width: 100%;
+            background: #FFFFFF;
+            border: 1px solid #D1D5DB;
+            border-radius: 3px;
+            height: 22px;
+            padding: 0 6px;
+            font-size: 12px;
+            color: #1F2937;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .opt-input:focus {
+            border-color: #2563EB;
+        }
+        .opt-separator {
+            height: 1px;
+            background-color: #E5E7EB;
+            margin: 4px 0;
+        }
+        .opt-vec3-row {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .opt-vec3-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex: 1;
+        }
+        .opt-vec3-label {
+            font-size: 10px;
+            color: #9CA3AF;
+            text-align: center;
+        }
+        .opt-vec3-input {
+            width: 100%;
+            background: #FFFFFF;
+            border: 1px solid #D1D5DB;
+            border-radius: 3px;
+            height: 22px;
+            padding: 0 4px;
+            font-size: 11px;
+            color: #1F2937;
+            text-align: center;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .opt-vec3-input:focus {
+            border-color: #2563EB;
+        }
+        .opt-dropdown {
+            width: 100%;
+            background: #FFFFFF;
+            border: 1px solid #D1D5DB;
+            border-radius: 3px;
+            height: 24px;
+            padding: 0 4px;
+            font-size: 12px;
+            color: #1F2937;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .opt-dropdown:focus {
+            border-color: #2563EB;
+        }
+        .opt-part-selector {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            background: #EFF6FF;
+            border: 1px dashed #2563EB;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #2563EB;
+            min-height: 28px;
+        }
+        .opt-part-selector:hover {
+            background: #DBEAFE;
+        }
+        .opt-part-selector.has-value {
+            background: #FFFFFF;
+            border-style: solid;
+            color: #1F2937;
+        }
+        .opt-btn-primary {
+            background: #2563EB;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 16px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .opt-btn-primary:hover {
+            background: #1D4ED8;
+        }
+        .opt-btn-secondary {
+            background: #F3F4F6;
+            color: #374151;
+            border: 1px solid #D1D5DB;
+            border-radius: 4px;
+            padding: 6px 16px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .opt-btn-secondary:hover {
+            background: #E5E7EB;
+        }
+        .opt-mode-btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            border: 1px solid #D1D5DB;
+            border-radius: 3px;
+            background: #FFFFFF;
+            color: #6B7280;
+            cursor: pointer;
+        }
+        .opt-mode-btn:hover {
+            background: #F3F4F6;
+        }
+        .opt-mode-btn-active {
+            padding: 4px 10px;
+            font-size: 11px;
+            border: 1px solid #2563EB;
+            border-radius: 3px;
+            background: #DBEAFE;
+            color: #2563EB;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .opt-section-header {
+            background: #F3F4F6;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #374151;
+            border-radius: 3px;
+        }
+        .opt-tab-active {
+            padding: 4px 12px;
+            font-size: 12px;
+            border: none;
+            border-bottom: 2px solid #2563EB;
+            background: transparent;
+            color: #2563EB;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .opt-tab {
+            padding: 4px 12px;
+            font-size: 12px;
+            border: none;
+            border-bottom: 2px solid transparent;
+            background: transparent;
+            color: #9CA3AF;
+            cursor: pointer;
+        }
+        .opt-tab:hover {
+            color: #6B7280;
+        }
+        .opt-selected-list {
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 3px;
+            max-height: 120px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 4px;
+        }
+        .opt-selected-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            font-size: 12px;
+            color: #1F2937;
+        }
+        .opt-selected-item .checkmark {
+            color: #2563EB;
+            font-size: 12px;
+        }
+        .opt-hint {
+            font-size: 11px;
+            color: #6B7280;
+            font-style: italic;
+        }
+        .opt-label {
+            font-size: 12px;
+            color: #6B7280;
+            margin-bottom: 2px;
+        }
+        .opt-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .opt-row label {
+            font-size: 12px;
+            color: #6B7280;
+            white-space: nowrap;
+            min-width: 60px;
+        }
+        .opt-btn-row {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 4px;
+        }
+        .opt-tab-bar {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .opt-mode-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
         }
         .viewport {
             flex: 1;
@@ -963,6 +1235,14 @@ export class CadEditorPanel {
                             <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_marker.png" alt="标架"></span>
                             <span class="ribbon-btn-text">标架</span>
                         </button>
+                        <button class="ribbon-btn" data-action-id="createRefFrame">
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_refmarker.png" alt="参考标架"></span>
+                            <span class="ribbon-btn-text">参考标架</span>
+                        </button>
+                        <button class="ribbon-btn" data-action-id="createDesignPoint">
+                            <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="设计点"></span>
+                            <span class="ribbon-btn-text">设计点</span>
+                        </button>
                         <button class="ribbon-btn" data-action-id="editFrame">
                             <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="编辑"></span>
                             <span class="ribbon-btn-text">编辑</span>
@@ -1156,10 +1436,13 @@ export class CadEditorPanel {
                 </div>
             </div>
             </div>
-            <!-- Right Sidebar: Properties -->
+            <!-- Right Sidebar: Properties / Options -->
             <div class="sidebar-right">
                 <div class="panel">
-                    <div class="panel-header">属性</div>
+                    <div class="panel-header" id="panel-header">
+                        <span id="panel-header-text">属性</span>
+                        <span id="panel-header-close" class="panel-close-btn" style="display:none">✕</span>
+                    </div>
                     <div class="panel-content" id="properties-panel">
                         <div style="color: var(--color-text-disabled); font-style: italic;">选择对象以查看属性</div>
                     </div>
@@ -1174,40 +1457,6 @@ export class CadEditorPanel {
     </div>
     <script nonce="${nonce}">
         window.WASM_BASE_URL = "${wasmUri}";
-
-        // Ribbon Menu Event Handling
-        (function() {
-            // Handle ribbon buttons with action
-            document.querySelectorAll('.ribbon-btn[data-action-id]').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const actionId = btn.dataset.actionId;
-                    handleRibbonAction(actionId);
-                });
-            });
-
-            function handleRibbonAction(actionId) {
-                if (!actionId) {
-                    return;
-                }
-
-                const params = {};
-
-                if (actionId.startsWith('createJoint_')) {
-                    params.jointType = actionId.replace('createJoint_', '');
-                } else if (actionId.startsWith('createMotion_')) {
-                    params.motionType = actionId.replace('createMotion_', '');
-                }
-
-                // Post message to VSCode extension
-                const vscode = acquireVsCodeApi();
-                vscode.postMessage({
-                    command: 'ribbonAction',
-                    action: actionId,
-                    params: params
-                });
-            }
-        })();
     </script>
     <script nonce="${nonce}" type="module" src="${webviewUri}"></script>
 </body>
