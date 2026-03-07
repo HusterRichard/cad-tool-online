@@ -163,6 +163,33 @@ const explodeDataMap: Map<string, ExplodeData> = new Map();
 
 let renderConfig: RenderConfigState = loadRenderConfigState();
 const massPropertiesCoordinator = new MassPropertiesCoordinator(createAfterRenderScheduler());
+const selectedDensityByShapeId = new Map<string, number>();
+
+interface MaterialOption {
+    id: string;
+    name: string;
+    density: number;
+}
+
+const DEFAULT_MATERIAL_DENSITY = 7800;
+const CUSTOM_MATERIAL_DENSITY = 7850;
+const MATERIAL_OPTIONS: MaterialOption[] = [
+    { id: 'wood', name: '木制', density: 700 },
+    { id: 'water', name: '水', density: 1000 },
+    { id: 'abs', name: 'ABS', density: 1060 },
+    { id: 'concrete', name: '混凝土', density: 2400 },
+    { id: 'glass', name: '玻璃', density: 2600 },
+    { id: 'aluminum', name: '铝', density: 2700 },
+    { id: 'iron', name: '铁', density: 7870 },
+    { id: 'steel', name: '钢', density: 7800 },
+    { id: 'titanium', name: '钛', density: 4540 },
+    { id: 'brass', name: '黄铜', density: 8600 },
+    { id: 'copper', name: '铜', density: 8940 },
+    { id: 'silver', name: '银', density: 10500 },
+    { id: 'lead', name: '铅', density: 11340 },
+    { id: 'gold', name: '黄金', density: 19320 },
+    { id: 'custom-default', name: '自定义', density: CUSTOM_MATERIAL_DENSITY }
+];
 
 function loadRenderConfigState(): RenderConfigState {
     try {
@@ -906,9 +933,28 @@ type MassPropertiesViewState =
 function bindColorChangeButtons(propsEl: HTMLElement): void {
     propsEl.querySelectorAll('.color-change-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const targetShapeId = (e.target as HTMLElement).dataset.shapeId;
+            const targetShapeId = (e.currentTarget as HTMLElement).dataset.shapeId;
             if (targetShapeId) {
                 showColorPicker(targetShapeId);
+            }
+        });
+    });
+}
+
+function bindMaterialSelect(propsEl: HTMLElement): void {
+    propsEl.querySelectorAll('.property-material-select').forEach(selectEl => {
+        selectEl.addEventListener('change', (e) => {
+            const select = e.currentTarget as HTMLSelectElement;
+            const targetShapeId = select.dataset.shapeId;
+            const nextDensity = Number.parseFloat(select.value);
+            if (!targetShapeId || !Number.isFinite(nextDensity) || nextDensity <= 0) {
+                return;
+            }
+
+            selectedDensityByShapeId.set(targetShapeId, nextDensity);
+            if (selectedShapeId === targetShapeId) {
+                massPropertiesCoordinator.cancelPending();
+                updatePropertiesPanel(targetShapeId);
             }
         });
     });
@@ -951,17 +997,51 @@ function formatInteger(value: number): string {
     return Math.round(value).toString();
 }
 
-function inferMaterialName(density: number): string {
+function getMaterialDensity(shapeId: string): number {
+    const saved = selectedDensityByShapeId.get(shapeId);
+    if (!Number.isFinite(saved) || !saved || saved <= 0) {
+        selectedDensityByShapeId.set(shapeId, DEFAULT_MATERIAL_DENSITY);
+        return DEFAULT_MATERIAL_DENSITY;
+    }
+    return saved;
+}
+
+function findMaterialByDensity(density: number): MaterialOption | null {
     if (!Number.isFinite(density)) {
-        return '自定义';
+        return null;
     }
-    if (density >= 7600 && density <= 8000) {
-        return '钢';
+    const match = MATERIAL_OPTIONS.find((option) => Math.abs(option.density - density) < 0.5);
+    return match ?? null;
+}
+
+function formatMaterialOptionLabel(material: MaterialOption): string {
+    return `${material.name}:${formatInteger(material.density)}kg/m^3`;
+}
+
+function createMaterialRow(shapeId: string, density: number): string {
+    const known = findMaterialByDensity(density);
+    const options = [...MATERIAL_OPTIONS];
+    if (!known) {
+        options.push({
+            id: 'custom-current',
+            name: '自定义',
+            density
+        });
     }
-    if (density >= 2600 && density <= 2800) {
-        return '铝';
-    }
-    return '自定义';
+
+    const optionsHtml = options.map((material) => {
+        const selected = Math.abs(material.density - density) < 0.5 ? ' selected' : '';
+        return `<option value="${material.density}"${selected}>${formatMaterialOptionLabel(material)}</option>`;
+    }).join('');
+
+    return `<div class="property-row">
+        <span class="property-label">材料</span>
+        <span class="property-value">
+            <select class="property-material-select" data-shape-id="${shapeId}">
+                ${optionsHtml}
+            </select>
+        </span>
+    </div>`;
 }
 
 function getInertiaRows(mass: MassProperties): [number, number, number][] {
@@ -1028,24 +1108,20 @@ function renderPropertiesPanel(shape: LoadedShape, massState: MassPropertiesView
     html += '<div class="property-separator"></div>';
     html += '<div class="property-section-header">物理属性</div>';
     html += createPropertyRow('零件个数', partCount.toString(), { boxed: true });
+    const currentDensity = getMaterialDensity(shape.id);
+    html += createMaterialRow(shape.id, currentDensity);
 
     if (massState.kind === 'loading') {
+        html += createPropertyRow('密度', `${formatInteger(currentDensity)} kg/m^3`);
         html += createPropertyRow('状态', '计算中...');
     } else if (massState.kind === 'unavailable' || massState.kind === 'hidden') {
+        html += createPropertyRow('密度', `${formatInteger(currentDensity)} kg/m^3`);
         html += createPropertyRow('状态', '不可用');
     } else if (massState.kind === 'ready') {
         const densityValue = formatInteger(massState.value.density);
-        const materialText = `${inferMaterialName(massState.value.density)} ${densityValue}kg/m³`;
-        html += `<div class="property-row">
-            <span class="property-label">材料</span>
-            <span class="property-value property-value-select">
-                <span>${materialText}</span>
-                <span class="property-select-arrow">▼</span>
-            </span>
-        </div>`;
-        html += createPropertyRow('密度', `${densityValue} kg/m³`);
+        html += createPropertyRow('密度', `${densityValue} kg/m^3`);
         html += createPropertyRow('总质量', `${formatPhysicsNumber(massState.value.mass, 5)} kg`);
-        html += createPropertyRow('体积', `${formatPhysicsNumber(massState.value.volume, 5)} m³`);
+        html += createPropertyRow('体积', `${formatPhysicsNumber(massState.value.volume, 5)} m^3`);
 
         html += '<div class="property-sub-header">  质心</div>';
         html += createVectorRow([
@@ -1063,6 +1139,7 @@ function renderPropertiesPanel(shape: LoadedShape, massState: MassPropertiesView
 
     propsEl.innerHTML = html;
     bindColorChangeButtons(propsEl);
+    bindMaterialSelect(propsEl);
 }
 
 function updatePropertiesPanel(shapeId: string | null): void {
@@ -1085,16 +1162,17 @@ function updatePropertiesPanel(shapeId: string | null): void {
     }
 
     setPanelMode('properties', '属性-零件');
+    const targetDensity = getMaterialDensity(shape.id);
 
     const occtForRequest = occt;
     const requestResult = massPropertiesCoordinator.request(
-        { uiShapeId: shape.id, kernelShapeId: shape.shapeId },
+        { uiShapeId: shape.id, kernelShapeId: shape.shapeId, density: targetDensity },
         occtForRequest
             ? {
                 hasShape: (targetShapeId: string) => occtForRequest.hasShape(targetShapeId),
-                getMass: (targetShapeId: string) => {
+                getMass: (targetShapeId: string, density: number) => {
                     try {
-                        return occtForRequest.getMassProperties(targetShapeId);
+                        return occtForRequest.getMassProperties(targetShapeId, density);
                     } catch (error) {
                         console.warn('Failed to get mass properties:', error);
                         return null;
@@ -1369,6 +1447,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             let meshCount = 0;
             rootShapes.length = 0;
             loadedShapes.clear();
+            selectedDensityByShapeId.clear();
 
             const buildShapeTree = (node: any, parent?: LoadedShape): LoadedShape => {
                 const shape: LoadedShape = {
@@ -1450,6 +1529,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             let addedCount = 0;
             rootShapes.length = 0;
             loadedShapes.clear();
+            selectedDensityByShapeId.clear();
 
             const totalShapes = result.shapes.length;
             const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
@@ -1624,7 +1704,8 @@ function exportModel(): void {
             // Get mass properties if available
             if (occt && shape.shapeId && occt.hasShape(shape.shapeId)) {
                 try {
-                    const massProps = occt.getMassProperties(shape.shapeId);
+                    const density = getMaterialDensity(shape.id);
+                    const massProps = occt.getMassProperties(shape.shapeId, density);
                     if (massProps && partData.properties) {
                         partData.properties.volume = massProps.volume;
                         partData.properties.surfaceArea = massProps.surfaceArea;
@@ -2755,6 +2836,7 @@ function clearScene(): void {
     loadedShapes.clear();
     rootShapes.length = 0;
     selectedShapeId = null;
+    selectedDensityByShapeId.clear();
     meshIdToShapeId.clear();
     shapeSelectionHistory.length = 0;
     externalModelTreeShapes = [];

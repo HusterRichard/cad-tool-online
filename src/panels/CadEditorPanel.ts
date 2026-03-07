@@ -1071,21 +1071,20 @@ export class CadEditorPanel {
         .property-swatch-btn:hover {
             border-color: #9CA3AF;
         }
-        .property-value-select {
+        .property-material-select {
+            width: 100%;
             height: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
             padding: 2px 6px;
             background: #FFFFFF;
             border: 1px solid #E5E7EB;
             border-radius: 3px;
+            color: #111827;
+            font-size: 12px;
+            outline: none;
+            cursor: pointer;
         }
-        .property-select-arrow {
-            color: #9CA3AF;
-            font-size: 9px;
-            flex: 0 0 auto;
+        .property-material-select:focus {
+            border-color: #2563EB;
         }
         .property-check {
             width: 16px;

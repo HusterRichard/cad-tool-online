@@ -81,6 +81,14 @@ export interface IOcctWrapper {
 let wasmModule: CadGeoModule | null = null;
 let shapeCounter = 0;
 
+// OCCT mass properties are computed in model-space length units.
+// Current STEP import pipeline uses millimeters as model length.
+// Convert all derived properties to SI for UI/export consistency.
+const MODEL_LENGTH_TO_METER = 1e-3;
+const MODEL_AREA_TO_M2 = MODEL_LENGTH_TO_METER * MODEL_LENGTH_TO_METER;
+const MODEL_VOLUME_TO_M3 = MODEL_AREA_TO_M2 * MODEL_LENGTH_TO_METER;
+const MODEL_INERTIA_TO_KG_M2 = MODEL_VOLUME_TO_M3 * MODEL_AREA_TO_M2;
+
 export class OcctWrapper implements IOcctWrapper {
     private initialized = false;
 
@@ -254,19 +262,36 @@ export class OcctWrapper implements IOcctWrapper {
             return null;
         }
 
-        // Convert to MassProperties format
+        const massSi = result.mass * MODEL_VOLUME_TO_M3;
+        const volumeSi = result.volume * MODEL_VOLUME_TO_M3;
+        const surfaceAreaSi = result.surfaceArea * MODEL_AREA_TO_M2;
+        const centerOfMassSi = {
+            x: result.centerOfMass.x * MODEL_LENGTH_TO_METER,
+            y: result.centerOfMass.y * MODEL_LENGTH_TO_METER,
+            z: result.centerOfMass.z * MODEL_LENGTH_TO_METER
+        };
+        const inertiaSi = {
+            ixx: result.inertia.ixx * MODEL_INERTIA_TO_KG_M2,
+            iyy: result.inertia.iyy * MODEL_INERTIA_TO_KG_M2,
+            izz: result.inertia.izz * MODEL_INERTIA_TO_KG_M2,
+            ixy: result.inertia.ixy * MODEL_INERTIA_TO_KG_M2,
+            ixz: result.inertia.ixz * MODEL_INERTIA_TO_KG_M2,
+            iyz: result.inertia.iyz * MODEL_INERTIA_TO_KG_M2
+        };
+
+        // Convert to MassProperties format in SI units
         return {
-            mass: result.mass,
-            volume: result.volume,
-            surfaceArea: result.surfaceArea,
+            mass: massSi,
+            volume: volumeSi,
+            surfaceArea: surfaceAreaSi,
             density: result.density,
-            centerOfMass: result.centerOfMass,
-            inertia: result.inertia,
+            centerOfMass: centerOfMassSi,
+            inertia: inertiaSi,
             inertiaMatrix: {
                 m: [
-                    result.inertia.ixx, result.inertia.ixy, result.inertia.ixz,
-                    result.inertia.ixy, result.inertia.iyy, result.inertia.iyz,
-                    result.inertia.ixz, result.inertia.iyz, result.inertia.izz
+                    inertiaSi.ixx, inertiaSi.ixy, inertiaSi.ixz,
+                    inertiaSi.ixy, inertiaSi.iyy, inertiaSi.iyz,
+                    inertiaSi.ixz, inertiaSi.iyz, inertiaSi.izz
                 ]
             }
         };

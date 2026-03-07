@@ -3,11 +3,12 @@ import type { MassProperties } from '@cadtool-online/geo';
 export interface MassPropertiesRequestTarget {
     uiShapeId: string;
     kernelShapeId?: string;
+    density?: number;
 }
 
 export interface MassPropertiesRequestDeps {
     hasShape: (shapeId: string) => boolean;
-    getMass: (shapeId: string) => MassProperties | null;
+    getMass: (shapeId: string, density: number) => MassProperties | null;
 }
 
 export type MassPropertiesResolutionCallback = (uiShapeId: string, massProperties: MassProperties | null) => void;
@@ -36,9 +37,11 @@ export class MassPropertiesCoordinator {
         const requestVersion = this.requestVersion;
 
         const kernelShapeId = target.kernelShapeId;
+        const density = Number.isFinite(target.density) ? Number(target.density) : 7850;
         if (!kernelShapeId || !deps) {
             return { state: 'none' };
         }
+        const cacheKey = `${kernelShapeId}@${density.toFixed(6)}`;
 
         let shapeExists = false;
         try {
@@ -51,10 +54,10 @@ export class MassPropertiesCoordinator {
             return { state: 'none' };
         }
 
-        if (this.cache.has(kernelShapeId)) {
+        if (this.cache.has(cacheKey)) {
             return {
                 state: 'cached',
-                massProperties: this.cache.get(kernelShapeId) ?? null
+                massProperties: this.cache.get(cacheKey) ?? null
             };
         }
 
@@ -65,12 +68,12 @@ export class MassPropertiesCoordinator {
 
             let massProperties: MassProperties | null = null;
             try {
-                massProperties = deps.getMass(kernelShapeId);
+                massProperties = deps.getMass(kernelShapeId, density);
             } catch {
                 massProperties = null;
             }
 
-            this.cache.set(kernelShapeId, massProperties);
+            this.cache.set(cacheKey, massProperties);
 
             if (requestVersion !== this.requestVersion) {
                 return;
