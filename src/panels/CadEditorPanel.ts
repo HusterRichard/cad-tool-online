@@ -14,10 +14,14 @@ export class CadEditorPanel {
     // Model state
     private _loadedShapes: Map<string, { name: string; meshData?: unknown }> = new Map();
 
-    public static createOrShow(extensionUri: vscode.Uri) {
+    public static async createOrShow(
+        extensionUri: vscode.Uri,
+        options?: { openInNewWindow?: boolean }
+    ): Promise<void> {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
+        const openInNewWindow = options?.openInNewWindow ?? true;
 
         if (CadEditorPanel.currentPanel) {
             CadEditorPanel.currentPanel._panel.reveal(column);
@@ -36,6 +40,19 @@ export class CadEditorPanel {
         );
 
         CadEditorPanel.currentPanel = new CadEditorPanel(panel, extensionUri);
+
+        if (openInNewWindow) {
+            await CadEditorPanel._tryMoveActiveEditorToNewWindow();
+        }
+    }
+
+    private static async _tryMoveActiveEditorToNewWindow(): Promise<void> {
+        try {
+            await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+        } catch {
+            // Fallback: if command is unavailable on current VSCode version,
+            // keep using the docked webview panel.
+        }
     }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {

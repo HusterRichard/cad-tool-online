@@ -10,13 +10,20 @@ export function activate(context: vscode.ExtensionContext) {
     registerCadtoolLanguageFeatures(context);
     registerModelicaCadtoolFeatures(context);
 
+    const openCadEditor = async () => {
+        console.log('Opening CAD Editor...');
+        vscode.window.showInformationMessage('Opening CAD Editor...');
+        await CadEditorPanel.createOrShow(context.extensionUri, { openInNewWindow: true });
+    };
+
     const openEditorCommand = vscode.commands.registerCommand(
         'cadtool-online.openEditor',
-        () => {
-            console.log('Opening CAD Editor...');
-            vscode.window.showInformationMessage('Opening CAD Editor...');
-            CadEditorPanel.createOrShow(context.extensionUri);
-        }
+        openCadEditor
+    );
+
+    const openEditorFromMenuCommand = vscode.commands.registerCommand(
+        'cadtool-online.openEditorFromMenu',
+        openCadEditor
     );
 
     const openCadtoolDocsCommand = vscode.commands.registerCommand(
@@ -58,6 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         openEditorCommand,
+        openEditorFromMenuCommand,
         openCadtoolDocsCommand,
         exportCadtoolConfigCommand,
         importCadtoolConfigCommand

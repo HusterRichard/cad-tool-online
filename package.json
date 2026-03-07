@@ -23,6 +23,7 @@
     "onLanguage:json",
     "onLanguage:jsonc",
     "onLanguage:modelica",
+    "onCommand:cadtool-online.openEditorFromMenu",
     "onCommand:cadtool-online.openCadtoolDocs",
     "onCommand:cadtool-online.exportCadtoolConfig",
     "onCommand:cadtool-online.importCadtoolConfig",
@@ -34,6 +35,11 @@
       {
         "command": "cadtool-online.openEditor",
         "title": "Open CAD Editor",
+        "category": "CadToolOnline"
+      },
+      {
+        "command": "cadtool-online.openEditorFromMenu",
+        "title": "CADTool",
         "category": "CadToolOnline"
       },
       {
@@ -76,7 +82,21 @@
         "language": "jsonc",
         "path": "./snippets/cadtool.code-snippets"
       }
-    ]
+    ],
+    "menus": {
+      "file/newFile": [
+        {
+          "command": "cadtool-online.openEditorFromMenu",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cadtool-online.openEditorFromMenu",
+          "when": "true"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "pnpm -r build",
