@@ -1,4 +1,5 @@
 import type { MassProperties } from '@cadtool-online/geo';
+import type { MassPropertiesWorkerClient } from './massPropertiesWorkerClient';
 
 export interface MassPropertiesRequestTarget {
     uiShapeId: string;
@@ -12,7 +13,6 @@ export interface MassPropertiesRequestDeps {
 }
 
 export type MassPropertiesResolutionCallback = (uiShapeId: string, massProperties: MassProperties | null) => void;
-export type TaskScheduler = (task: () => void) => void;
 
 export type MassPropertiesRequestResult =
     | { state: 'none' }
@@ -22,11 +22,8 @@ export type MassPropertiesRequestResult =
 export class MassPropertiesCoordinator {
     private readonly cache = new Map<string, MassProperties | null>();
     private requestVersion = 0;
-    private readonly schedule: TaskScheduler;
 
-    constructor(schedule: TaskScheduler = createAfterRenderScheduler()) {
-        this.schedule = schedule;
-    }
+    constructor(private readonly workerClient: MassPropertiesWorkerClient) {}
 
     request(
         target: MassPropertiesRequestTarget,
@@ -61,26 +58,32 @@ export class MassPropertiesCoordinator {
             };
         }
 
-        this.schedule(() => {
-            if (requestVersion !== this.requestVersion) {
-                return;
-            }
+        this.workerClient
+            .requestMass(kernelShapeId, density)
+            .then((massProperties) => {
+                if (requestVersion !== this.requestVersion) {
+                    return;
+                }
 
-            let massProperties: MassProperties | null = null;
-            try {
-                massProperties = deps.getMass(kernelShapeId, density);
-            } catch {
-                massProperties = null;
-            }
+                if (massProperties) {
+                    this.cache.set(cacheKey, massProperties);
+                    onResolved(target.uiShapeId, massProperties);
+                    return;
+                }
 
-            this.cache.set(cacheKey, massProperties);
+                const fallbackMass = this.safeGetMass(deps, kernelShapeId, density);
+                this.cache.set(cacheKey, fallbackMass);
+                onResolved(target.uiShapeId, fallbackMass);
+            })
+            .catch(() => {
+                if (requestVersion !== this.requestVersion) {
+                    return;
+                }
 
-            if (requestVersion !== this.requestVersion) {
-                return;
-            }
-
-            onResolved(target.uiShapeId, massProperties);
-        });
+                const fallbackMass = this.safeGetMass(deps, kernelShapeId, density);
+                this.cache.set(cacheKey, fallbackMass);
+                onResolved(target.uiShapeId, fallbackMass);
+            });
 
         return { state: 'scheduled' };
     }
@@ -92,17 +95,14 @@ export class MassPropertiesCoordinator {
     clear(): void {
         this.cache.clear();
         this.requestVersion += 1;
+        this.workerClient.clear();
     }
-}
 
-export function createAfterRenderScheduler(): TaskScheduler {
-    return (task) => {
-        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-            window.requestAnimationFrame(() => {
-                setTimeout(task, 0);
-            });
-            return;
+    private safeGetMass(deps: MassPropertiesRequestDeps, shapeId: string, density: number): MassProperties | null {
+        try {
+            return deps.getMass(shapeId, density);
+        } catch {
+            return null;
         }
-        setTimeout(task, 0);
-    };
+    }
 }

@@ -24,7 +24,8 @@ import {
     type VisualPreset
 } from './renderConfig';
 import { invokeViewerMethod } from './viewerCapabilities';
-import { MassPropertiesCoordinator, createAfterRenderScheduler } from './massPropertiesCoordinator';
+import { MassPropertiesCoordinator } from './massPropertiesCoordinator';
+import { MassPropertiesWorkerClient } from './massPropertiesWorkerClient';
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -162,7 +163,8 @@ interface ExplodeData {
 const explodeDataMap: Map<string, ExplodeData> = new Map();
 
 let renderConfig: RenderConfigState = loadRenderConfigState();
-const massPropertiesCoordinator = new MassPropertiesCoordinator(createAfterRenderScheduler());
+const massPropertiesWorkerClient = new MassPropertiesWorkerClient(window.WASM_BASE_URL ?? null);
+const massPropertiesCoordinator = new MassPropertiesCoordinator(massPropertiesWorkerClient);
 const selectedDensityByShapeId = new Map<string, number>();
 
 interface MaterialOption {
@@ -1660,6 +1662,13 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             throw new Error(result.error || 'Failed to read STEP file');
         }
 
+        const workerBuffer = arrayBuffer.slice(0);
+        massPropertiesWorkerClient
+            .syncStep(result.shapes, workerBuffer, baseId)
+            .catch((error) => {
+                console.warn('[massWorker] Step sync failed', error);
+            });
+
         showProgress(30, 'Building hierarchy...');
         setStatus('Building model hierarchy...');
         await new Promise(resolve => setTimeout(resolve, 10));
@@ -3112,6 +3121,9 @@ function updateExplodeValue(percent: number): void {
 // ============================================================================
 
 function clearScene(): void {
+    // Reset worker state before clearing geometry
+    massPropertiesWorkerClient.clear();
+
     // Remove all meshes from viewer
     loadedShapes.forEach((shape) => {
         if (viewer && shape.meshId) {
