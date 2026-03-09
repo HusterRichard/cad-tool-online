@@ -111,6 +111,7 @@
     "setup:wasm": "node scripts/setup_wasm_deps.mjs",
     "build:wasm": "cd packages/geo/cpp && cmake --preset release && cmake --build --preset release",
     "build:wasm:debug": "cd packages/geo/cpp && cmake --preset debug && cmake --build --preset debug",
+    "setup:git-rules": "node scripts/setup-git-rules.mjs",
     "check:ribbon-icons": "node scripts/check-ribbon-action-icons.mjs --file cadtoolonline.pen --out docs/outputs/RIBBON_ICON_ACCEPTANCE.json",
     "vscode:prepublish": "pnpm run build:all",
     "package": "pnpm run build:all && vsce package --no-dependencies --skip-license --baseContentUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/blob/main/ --baseImagesUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/raw/main/"

@@ -74,7 +74,29 @@ pnpm format            # 代码格式化
 pnpm build:extension   # 构建 VSCode Extension 入口
 pnpm build:webview     # 构建 Webview
 pnpm package           # 生成 VSIX 包
+pnpm setup:git-rules   # 安装提交规则与 commit 模板
 ```
+
+## 提交规范
+
+首次克隆仓库后执行一次：
+
+```bash
+pnpm setup:git-rules
+```
+
+该命令会为当前仓库配置：
+
+- `core.hooksPath=.githooks`
+- `commit.template=.gitmessage.txt`
+
+提交标题格式统一为：
+
+```text
+<type>: <task id><简要描述>
+```
+
+完整规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## WASM 构建（可选）
 

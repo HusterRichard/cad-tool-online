@@ -1,0 +1,12 @@
+﻿# 提交标题格式：
+# <type>: <task id><简要描述>
+# 示例：feat: T013 新增装配体导入校验
+#
+# 常用 type：feat / fix / refactor / docs / test / chore / perf / ci
+#
+# 正文建议说明关键改动与影响：
+# - ...
+# - ...
+#
+# Co-authored-by: <Name>
+
