@@ -273,6 +273,34 @@ export class CadEditorPanel {
                     action: 'createChildGroup'
                 });
                 break;
+            case 'renameGroup':
+                vscode.window.showInformationMessage('Rename selected group');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'renameGroup'
+                });
+                break;
+            case 'moveToGroup':
+                vscode.window.showInformationMessage('Move selected group items');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'moveToGroup'
+                });
+                break;
+            case 'ungroupGroup':
+                vscode.window.showInformationMessage('Ungroup selected group');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'ungroupGroup'
+                });
+                break;
+            case 'deleteSelection':
+                vscode.window.showInformationMessage('Delete selected group items');
+                this._panel.webview.postMessage({
+                    command: 'mbsAction',
+                    action: 'deleteSelection'
+                });
+                break;
             case 'groupProperties':
                 vscode.window.showInformationMessage('Show group properties');
                 this._panel.webview.postMessage({
@@ -1055,6 +1083,17 @@ export class CadEditorPanel {
         .tree-node.selected {
             background-color: var(--color-bg-active);
         }
+        .tree-node.dragging {
+            opacity: 0.55;
+        }
+        .tree-node.drop-target-valid {
+            background-color: rgba(34, 197, 94, 0.16);
+            outline: 1px solid rgba(34, 197, 94, 0.75);
+        }
+        .tree-node.drop-target-invalid {
+            background-color: rgba(239, 68, 68, 0.14);
+            outline: 1px solid rgba(239, 68, 68, 0.75);
+        }
         .tree-node .expand-btn {
             width: 12px;
             height: 12px;
@@ -1497,7 +1536,7 @@ export class CadEditorPanel {
                         <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_group.png" alt="组合"></span>
                         <span class="ribbon-btn-text">组合</span>
                     </button>
-                    <button class="ribbon-btn" data-action-id="createChildGroup">
+                    <button class="ribbon-btn" data-action-id="ungroupGroup">
                         <span class="ribbon-btn-icon"><img src="${icons32}/cad_ungroup.png" alt="分解"></span>
                         <span class="ribbon-btn-text">分解</span>
                     </button>

@@ -5,8 +5,12 @@ import { ThreeViewer } from '@cadtool-online/three';
 import { OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
 import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
+    aggregateMassProperties,
     buildModelBrowserTree,
+    getUniqueGroupName as getUniqueGroupNameFromState,
     markerCreator,
+    renameGroupNode as renameGroupNodeInState,
+    sanitizeGroupName,
     type BrowserNamedEntityInput,
     type MbsMarker,
     type ModelBrowserNode
@@ -77,6 +81,7 @@ let selectedShapeId: string | null = null;
 let selectedGroupId: string | null = null;
 let activeSelectionKey: string | null = null;
 const selectedNodeIds = new Set<string>();
+let treeContextMenuEl: HTMLDivElement | null = null;
 
 // Mesh ID to Shape ID mapping for selection synchronization
 const meshIdToShapeId: Map<string, string> = new Map();
@@ -415,6 +420,8 @@ function removeGroupById(groupId: string): boolean {
         return false;
     }
     delete groupDesignState.groupsById[groupId];
+    selectedNodeIds.delete(toGroupSelectionKey(groupId));
+    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
     rebuildGroupIndexes();
     if (selectedGroupId === groupId) {
         selectSelection(null);
@@ -434,6 +441,14 @@ function getSelectedShapeIds(): string[] {
         .map((selectionKey) => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: 'shape' | 'group'; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'shape')
+        .map((entry) => entry.id);
+}
+
+function getSelectedGroupIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: 'shape' | 'group'; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'group')
         .map((entry) => entry.id);
 }
 
@@ -471,6 +486,100 @@ function syncViewerSelectionFromState(): void {
     });
 }
 
+type GroupMassSummary = {
+    totalPartCount: number;
+    computedPartCount: number;
+    missingPartIds: string[];
+    volume: number;
+    mass: number;
+    density: number;
+    centerOfMass: Vec3;
+    inertiaMatrix: Mat3;
+};
+
+function collectGroupPartIdsRecursive(groupId: string, collected: Set<string> = new Set<string>()): Set<string> {
+    const group = getGroupNode(groupId);
+    if (!group) {
+        return collected;
+    }
+
+    group.memberPartIds.forEach((partId) => collected.add(partId));
+    group.childGroupIds.forEach((childGroupId) => collectGroupPartIdsRecursive(childGroupId, collected));
+    return collected;
+}
+
+function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null {
+    if (!occt) {
+        return null;
+    }
+
+    const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
+    if (partIds.length === 0) {
+        return {
+            totalPartCount: 0,
+            computedPartCount: 0,
+            missingPartIds: [],
+            volume: 0,
+            mass: 0,
+            density: 0,
+            centerOfMass: { x: 0, y: 0, z: 0 },
+            inertiaMatrix: { m: [0, 0, 0, 0, 0, 0, 0, 0, 0] }
+        };
+    }
+
+    const partMasses: MassProperties[] = [];
+    const missingPartIds: string[] = [];
+
+    partIds.forEach((partId) => {
+        const shape = loadedShapes.get(partId);
+        if (!shape?.shapeId || !occt.hasShape(shape.shapeId)) {
+            missingPartIds.push(partId);
+            return;
+        }
+
+        try {
+            const density = getMaterialDensity(partId);
+            const mass = occt.getMassProperties(shape.shapeId, density);
+            if (!mass) {
+                missingPartIds.push(partId);
+                return;
+            }
+            partMasses.push(mass);
+        } catch {
+            missingPartIds.push(partId);
+        }
+    });
+
+    if (partMasses.length === 0) {
+        return {
+            totalPartCount: partIds.length,
+            computedPartCount: 0,
+            missingPartIds,
+            volume: 0,
+            mass: 0,
+            density: 0,
+            centerOfMass: { x: 0, y: 0, z: 0 },
+            inertiaMatrix: { m: [0, 0, 0, 0, 0, 0, 0, 0, 0] }
+        };
+    }
+
+    const aggregate = aggregateMassProperties(partMasses);
+    if (!aggregate) {
+        return null;
+    }
+
+    return {
+        totalPartCount: partIds.length,
+        computedPartCount: partMasses.length,
+        missingPartIds,
+        volume: aggregate.volume,
+        mass: aggregate.mass,
+        density: aggregate.density,
+        centerOfMass: aggregate.centerOfMass,
+        inertiaMatrix: aggregate.inertiaMatrix
+    };
+}
+
 function renderSelectedGroupProperties(groupId: string): void {
     const group = getGroupNode(groupId);
     if (!group) {
@@ -478,15 +587,60 @@ function renderSelectedGroupProperties(groupId: string): void {
         return;
     }
 
-    renderCustomProperties('Group Properties', [
-        { label: 'ID', value: group.id },
-        { label: 'Name', value: group.name },
-        { label: 'Parent', value: group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : '(root)' },
-        { label: 'Children', value: group.childGroupIds.length.toString() },
-        { label: 'Members', value: group.memberPartIds.map(activeShapeName).join(', ') || '(empty)' },
-        { label: 'Type', value: group.kind },
-        { label: 'Created', value: group.createdAt }
-    ]);
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) {
+        return;
+    }
+
+    const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
+    const massSummary = aggregateGroupMassProperties(groupId);
+    const missingText = massSummary && massSummary.missingPartIds.length > 0
+        ? massSummary.missingPartIds.map(activeShapeName).join(', ')
+        : '(none)';
+    const inertiaRows = massSummary
+        ? [
+            [massSummary.inertiaMatrix.m[0], massSummary.inertiaMatrix.m[1], massSummary.inertiaMatrix.m[2]] as [number, number, number],
+            [massSummary.inertiaMatrix.m[3], massSummary.inertiaMatrix.m[4], massSummary.inertiaMatrix.m[5]] as [number, number, number],
+            [massSummary.inertiaMatrix.m[6], massSummary.inertiaMatrix.m[7], massSummary.inertiaMatrix.m[8]] as [number, number, number]
+        ]
+        : null;
+
+    let html = '';
+    html += '<div class="property-section-header">基本属性</div>';
+    html += createPropertyRow('ID', group.id, { boxed: true });
+    html += createPropertyRow('Name', group.name, { boxed: true });
+    html += createPropertyRow('Parent', group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : '(root)');
+    html += createPropertyRow('Type', group.kind);
+    html += createPropertyRow('Children', group.childGroupIds.length.toString());
+    html += createPropertyRow('Direct Members', group.memberPartIds.length.toString());
+    html += createPropertyRow('Total Parts', partIds.length.toString());
+    html += createPropertyRow('Created', group.createdAt);
+    html += '<div class="property-separator"></div>';
+    html += '<div class="property-section-header">物理属性</div>';
+
+    if (!massSummary) {
+        html += createPropertyRow('状态', '不可用');
+    } else {
+        html += createPropertyRow('Computed Parts', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
+        html += createPropertyRow('Missing Parts', missingText);
+        html += createPropertyRow('Total Mass', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
+        html += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
+        html += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
+        html += '<div class="property-sub-header">  质心</div>';
+        html += createVectorRow([
+            massSummary.centerOfMass.x,
+            massSummary.centerOfMass.y,
+            massSummary.centerOfMass.z
+        ], 'm');
+        if (inertiaRows) {
+            html += '<div class="property-sub-header">  惯性张量</div>';
+            html += createVectorRow(inertiaRows[0]);
+            html += createVectorRow(inertiaRows[1]);
+            html += createVectorRow(inertiaRows[2], 'kg·m²');
+        }
+    }
+
+    propsEl.innerHTML = html;
 }
 
 function updateSelectionPropertiesPanel(): void {
@@ -564,16 +718,7 @@ function syncSelectionFromViewer(activeMeshId: string | null): void {
 }
 
 function getUniqueGroupName(baseName: string): string {
-    const trimmed = baseName.trim() || `Group${listGroups().length + 1}`;
-    const existingNames = new Set(listGroups().map((group) => group.name));
-    if (!existingNames.has(trimmed)) {
-        return trimmed;
-    }
-    let index = 1;
-    while (existingNames.has(`${trimmed}_${index}`)) {
-        index += 1;
-    }
-    return `${trimmed}_${index}`;
+    return getUniqueGroupNameFromState(groupDesignState, sanitizeGroupName(baseName, `Group${listGroups().length + 1}`));
 }
 
 function createGroupFromParts(
@@ -607,10 +752,473 @@ function createGroupFromParts(
     return group;
 }
 
+function renameSelectedGroup(nextName: string): GroupNode {
+    const groupId = getActiveGroupId();
+    if (!groupId) {
+        throw new Error('Select a group first.');
+    }
+
+    groupDesignState = renameGroupNodeInState(groupDesignState, groupId, nextName) as GroupDesignState;
+    const renamedGroup = getGroupNode(groupId);
+    if (!renamedGroup) {
+        throw new Error(`Group "${groupId}" no longer exists.`);
+    }
+    return renamedGroup;
+}
+
 function isGroupReferenced(groupId: string): boolean {
     return createdMarkers.some((marker) => marker.groupId === groupId)
         || Array.from(createdRefFrames.values()).some((refFrame) => refFrame.groupId === groupId)
         || Array.from(mbsDesignPoints.values()).some((point) => point.groupId === groupId);
+}
+
+function collectDescendantGroupIds(groupId: string, collected: Set<string> = new Set<string>()): Set<string> {
+    const group = getGroupNode(groupId);
+    if (!group) {
+        return collected;
+    }
+
+    group.childGroupIds.forEach((childGroupId) => {
+        if (collected.has(childGroupId)) {
+            return;
+        }
+        collected.add(childGroupId);
+        collectDescendantGroupIds(childGroupId, collected);
+    });
+
+    return collected;
+}
+
+function getTopLevelSelectedGroupIds(groupIds: string[]): string[] {
+    const selectedIds = new Set(groupIds);
+    return Array.from(new Set(groupIds)).filter((groupId) => {
+        let parentGroupId = getGroupNode(groupId)?.parentGroupId ?? null;
+        while (parentGroupId) {
+            if (selectedIds.has(parentGroupId)) {
+                return false;
+            }
+            parentGroupId = getGroupNode(parentGroupId)?.parentGroupId ?? null;
+        }
+        return true;
+    });
+}
+
+function normalizeSiblingOrders(parentGroupId: string | null): void {
+    const siblingIds = getOrderedChildGroupIds(parentGroupId);
+    siblingIds.forEach((groupId, index) => {
+        const group = getGroupNode(groupId);
+        if (group) {
+            group.order = index + 1;
+        }
+    });
+    rebuildGroupIndexes();
+}
+
+function moveGroupToParent(groupId: string, targetParentGroupId: string | null): void {
+    const group = getGroupNode(groupId);
+    if (!group) {
+        return;
+    }
+
+    const previousParentGroupId = group.parentGroupId;
+    group.parentGroupId = targetParentGroupId;
+    group.order = getOrderedChildGroupIds(targetParentGroupId)
+        .filter((siblingGroupId) => siblingGroupId !== groupId)
+        .length + 1;
+    rebuildGroupIndexes();
+    normalizeSiblingOrders(previousParentGroupId);
+    if (previousParentGroupId !== targetParentGroupId) {
+        normalizeSiblingOrders(targetParentGroupId);
+    }
+}
+
+function movePartIdsToGroup(partIds: string[], targetGroupId: string | null): number {
+    const uniquePartIds = Array.from(new Set(partIds));
+    const ownerMap = buildPartOwnerGroupMap();
+
+    uniquePartIds.forEach((partId) => {
+        const ownerGroupId = ownerMap.get(partId);
+        const ownerGroup = getGroupNode(ownerGroupId);
+        if (ownerGroup) {
+            ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter((memberPartId) => memberPartId !== partId);
+        }
+    });
+
+    if (targetGroupId) {
+        const targetGroup = getGroupNode(targetGroupId);
+        if (targetGroup) {
+            const mergedPartIds = new Set(targetGroup.memberPartIds);
+            uniquePartIds.forEach((partId) => mergedPartIds.add(partId));
+            targetGroup.memberPartIds = Array.from(mergedPartIds);
+        }
+    }
+
+    syncUngroupedPartIds();
+    return uniquePartIds.length;
+}
+
+function moveSelectedNodesToGroup(targetGroupId: string | null): { movedGroups: number; movedParts: number } {
+    const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
+    const coveredGroupIds = new Set<string>();
+    selectedGroupIds.forEach((groupId) => {
+        coveredGroupIds.add(groupId);
+        collectDescendantGroupIds(groupId).forEach((descendantGroupId) => coveredGroupIds.add(descendantGroupId));
+    });
+    const ownerMap = buildPartOwnerGroupMap();
+    const selectedPartIds = getSelectedShapeIds().filter((partId) => {
+        const ownerGroupId = ownerMap.get(partId);
+        return !ownerGroupId || !coveredGroupIds.has(ownerGroupId);
+    });
+
+    const invalidGroupId = selectedGroupIds.find((groupId) => {
+        if (!targetGroupId) {
+            return false;
+        }
+        if (groupId === targetGroupId) {
+            return true;
+        }
+        return collectDescendantGroupIds(groupId).has(targetGroupId);
+    });
+
+    if (invalidGroupId) {
+        throw new Error(`Invalid move target for group "${getGroupNode(invalidGroupId)?.name ?? invalidGroupId}".`);
+    }
+
+    const movedParts = movePartIdsToGroup(selectedPartIds, targetGroupId);
+    selectedGroupIds.forEach((groupId) => moveGroupToParent(groupId, targetGroupId));
+    updateTreeSelectionClasses();
+    updateSelectionPropertiesPanel();
+
+    return {
+        movedGroups: selectedGroupIds.length,
+        movedParts
+    };
+}
+
+function ungroupSelectedGroup(): { movedGroups: number; movedParts: number; parentGroupId: string | null } {
+    const groupId = getActiveGroupId();
+    const group = getGroupNode(groupId);
+    if (!group || !groupId) {
+        throw new Error('Select a group first.');
+    }
+    if (isGroupReferenced(groupId)) {
+        throw new Error(`Group "${group.name}" is referenced by design entities.`);
+    }
+
+    const parentGroupId = group.parentGroupId ?? null;
+    const childGroupIds = getOrderedChildGroupIds(groupId);
+    const memberPartIds = [...group.memberPartIds];
+
+    movePartIdsToGroup(memberPartIds, parentGroupId);
+    childGroupIds.forEach((childGroupId) => moveGroupToParent(childGroupId, parentGroupId));
+    removeGroupById(groupId);
+    normalizeSiblingOrders(parentGroupId);
+    if (parentGroupId) {
+        selectSelection({ kind: 'group', id: parentGroupId });
+    } else {
+        selectSelection(null);
+    }
+
+    return {
+        movedGroups: childGroupIds.length,
+        movedParts: memberPartIds.length,
+        parentGroupId
+    };
+}
+
+function buildMoveTargetOptions(selectedGroupIds: string[]): Array<{ value: string; text: string }> {
+    const blockedGroupIds = new Set<string>();
+    selectedGroupIds.forEach((groupId) => {
+        blockedGroupIds.add(groupId);
+        collectDescendantGroupIds(groupId).forEach((descendantGroupId) => blockedGroupIds.add(descendantGroupId));
+    });
+
+    return [
+        { value: '__root__', text: '根节点（未分组）' },
+        ...listGroups()
+            .filter((group) => !blockedGroupIds.has(group.id))
+            .map((group) => ({
+                value: group.id,
+                text: group.name
+            }))
+    ];
+}
+
+function getDraggableSelectionPayload(anchorSelectionKey: string): string[] {
+    if (selectedNodeIds.has(anchorSelectionKey)) {
+        return Array.from(selectedNodeIds);
+    }
+    return [anchorSelectionKey];
+}
+
+function validateMoveSelectionToGroup(targetGroupId: string | null): { valid: boolean; reason?: string } {
+    const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
+    const selectedShapeIds = getSelectedShapeIds();
+    if (selectedGroupIds.length === 0 && selectedShapeIds.length === 0) {
+        return { valid: false, reason: 'No selection' };
+    }
+
+    const invalidGroupId = selectedGroupIds.find((groupId) => {
+        if (!targetGroupId) {
+            return false;
+        }
+        if (groupId === targetGroupId) {
+            return true;
+        }
+        return collectDescendantGroupIds(groupId).has(targetGroupId);
+    });
+
+    if (invalidGroupId) {
+        return {
+            valid: false,
+            reason: `Cannot move into "${getGroupNode(invalidGroupId)?.name ?? invalidGroupId}".`
+        };
+    }
+
+    return { valid: true };
+}
+
+function clearTreeDropIndicators(): void {
+    document.querySelectorAll<HTMLElement>('.tree-node.drop-target-valid, .tree-node.drop-target-invalid').forEach((node) => {
+        node.classList.remove('drop-target-valid', 'drop-target-invalid');
+    });
+}
+
+function applyTreeDropIndicator(node: HTMLElement, isValid: boolean): void {
+    node.classList.toggle('drop-target-valid', isValid);
+    node.classList.toggle('drop-target-invalid', !isValid);
+}
+
+function syncDragSelection(selectionKeys: string[]): void {
+    if (selectionKeys.length === 0) {
+        return;
+    }
+
+    const activeKey = selectionKeys.at(-1) ?? null;
+    selectedNodeIds.clear();
+    selectionKeys.forEach((selectionKey) => selectedNodeIds.add(selectionKey));
+    activeSelectionKey = activeKey;
+
+    const active = parseSelectionKey(activeSelectionKey);
+    selectedShapeId = active?.kind === 'shape' ? active.id : null;
+    selectedGroupId = active?.kind === 'group' ? active.id : null;
+    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+    updateTreeSelectionClasses();
+    syncViewerSelectionFromState();
+    updateSelectionPropertiesPanel();
+
+    if (selectedShapeId) {
+        rememberShapeSelection(selectedShapeId);
+        vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
+    }
+}
+
+function handleTreeDrop(targetGroupId: string | null): void {
+    const validation = validateMoveSelectionToGroup(targetGroupId);
+    if (!validation.valid) {
+        if (validation.reason) {
+            vscode.postMessage({ command: 'alert', text: validation.reason });
+        }
+        return;
+    }
+
+    const result = moveSelectedNodesToGroup(targetGroupId);
+    updateModelTree();
+    setStatusInfo(`Moved ${result.movedParts} part(s) and ${result.movedGroups} group(s).`);
+}
+
+function isLeafShape(shape: LoadedShape): boolean {
+    return !shape.children || shape.children.length === 0;
+}
+
+function removeShapeFromHierarchy(shapeId: string, shapes: LoadedShape[]): LoadedShape | null {
+    const index = shapes.findIndex((shape) => shape.id === shapeId);
+    if (index >= 0) {
+        const [removedShape] = shapes.splice(index, 1);
+        return removedShape;
+    }
+
+    for (const shape of shapes) {
+        if (!shape.children || shape.children.length === 0) {
+            continue;
+        }
+        const removedShape = removeShapeFromHierarchy(shapeId, shape.children);
+        if (removedShape) {
+            return removedShape;
+        }
+    }
+
+    return null;
+}
+
+function getPartDeletionReferences(shapeId: string): string[] {
+    const references: string[] = [];
+
+    createdMarkers.forEach((marker) => {
+        if (marker.groupId === shapeId) {
+            references.push(`marker:${marker.name}`);
+        }
+    });
+    Array.from(createdRefFrames.values()).forEach((refFrame) => {
+        if (refFrame.groupId === shapeId) {
+            references.push(`refMarker:${refFrame.name}`);
+        }
+    });
+    Array.from(mbsDesignPoints.values()).forEach((point) => {
+        if (point.groupId === shapeId) {
+            references.push(`designPoint:${point.name}`);
+        }
+    });
+    Array.from(mbsJoints.values()).forEach((joint) => {
+        if (joint.part1 === shapeId || joint.part2 === shapeId) {
+            references.push(`joint:${joint.name}`);
+        }
+    });
+    Array.from(fluidSlices.values()).forEach((slice) => {
+        if (slice.shapeRef === shapeId) {
+            references.push(`ribSlice:${slice.name}`);
+        }
+    });
+    Array.from(fluidPorts.values()).forEach((port) => {
+        if (port.shapeRef === shapeId) {
+            references.push(`fluidPort:${port.name}`);
+        }
+    });
+
+    return references;
+}
+
+function deletePartById(shapeId: string): { deleted: boolean; name: string; blockedBy: string[] } {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) {
+        return { deleted: false, name: shapeId, blockedBy: ['missing'] };
+    }
+    if (!isLeafShape(shape)) {
+        return { deleted: false, name: shape.name, blockedBy: ['non-leaf shape'] };
+    }
+
+    const blockedBy = getPartDeletionReferences(shapeId);
+    if (blockedBy.length > 0) {
+        return { deleted: false, name: shape.name, blockedBy };
+    }
+
+    const ownerGroupId = resolveOwningGroupId(shapeId);
+    const ownerGroup = getGroupNode(ownerGroupId);
+    if (ownerGroup) {
+        ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter((memberPartId) => memberPartId !== shapeId);
+    }
+
+    selectedNodeIds.delete(toShapeSelectionKey(shapeId));
+    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+    selectedDensityByShapeId.delete(shapeId);
+    massPropertiesWorkerClient.notifyShapeDeleted(shapeId);
+
+    if (shape.meshId) {
+        meshIdToShapeId.delete(shape.meshId);
+        viewer?.removeMesh(shape.meshId);
+    }
+    if (occt && shape.shapeId) {
+        occt.deleteShape(shape.shapeId);
+    }
+
+    loadedShapes.delete(shapeId);
+    removeShapeFromHierarchy(shapeId, rootShapes);
+    syncUngroupedPartIds();
+
+    for (let index = shapeSelectionHistory.length - 1; index >= 0; index -= 1) {
+        if (shapeSelectionHistory[index] === shapeId) {
+            shapeSelectionHistory.splice(index, 1);
+        }
+    }
+
+    if (selectedShapeId === shapeId) {
+        selectSelection(null);
+    } else {
+        updateTreeSelectionClasses();
+        updateSelectionPropertiesPanel();
+    }
+
+    return { deleted: true, name: shape.name, blockedBy: [] };
+}
+
+function deleteSelectedGroups(): { deletedCount: number; blockedMessages: string[] } {
+    const blockedMessages: string[] = [];
+    let deletedCount = 0;
+
+    getTopLevelSelectedGroupIds(getSelectedGroupIds()).forEach((groupId) => {
+        const group = getGroupNode(groupId);
+        if (!group) {
+            return;
+        }
+        if (group.childGroupIds.length > 0) {
+            blockedMessages.push(`Group "${group.name}" still has child groups.`);
+            return;
+        }
+        if (group.memberPartIds.length > 0) {
+            blockedMessages.push(`Group "${group.name}" still has members.`);
+            return;
+        }
+        if (isGroupReferenced(group.id)) {
+            blockedMessages.push(`Group "${group.name}" is referenced by design entities.`);
+            return;
+        }
+        if (removeGroupById(group.id)) {
+            deletedCount += 1;
+        }
+    });
+
+    return { deletedCount, blockedMessages };
+}
+
+function handleDeleteSelection(): void {
+    const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
+    const coveredGroupIds = new Set<string>();
+    selectedGroupIds.forEach((groupId) => {
+        coveredGroupIds.add(groupId);
+        collectDescendantGroupIds(groupId).forEach((descendantGroupId) => coveredGroupIds.add(descendantGroupId));
+    });
+
+    const ownerMap = buildPartOwnerGroupMap();
+    const selectedPartIds = getSelectedShapeIds().filter((shapeId) => {
+        const ownerGroupId = ownerMap.get(shapeId);
+        return !ownerGroupId || !coveredGroupIds.has(ownerGroupId);
+    });
+
+    if (selectedGroupIds.length === 0 && selectedPartIds.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Select one or more parts/groups first.'
+        });
+        return;
+    }
+
+    let deletedPartCount = 0;
+    const blockedMessages: string[] = [];
+
+    selectedPartIds.forEach((shapeId) => {
+        const result = deletePartById(shapeId);
+        if (result.deleted) {
+            deletedPartCount += 1;
+            return;
+        }
+        blockedMessages.push(`Part "${result.name}" blocked by ${result.blockedBy.join(', ')}.`);
+    });
+
+    const groupDeleteResult = deleteSelectedGroups();
+    blockedMessages.push(...groupDeleteResult.blockedMessages);
+
+    updateModelTree();
+    setStatusInfo(`Deleted ${deletedPartCount} part(s) and ${groupDeleteResult.deletedCount} group(s).`);
+
+    if (blockedMessages.length > 0) {
+        const message = blockedMessages.length > 4
+            ? `${blockedMessages.slice(0, 4).join(' | ')} | ... and ${blockedMessages.length - 4} more.`
+            : blockedMessages.join(' | ');
+        vscode.postMessage({
+            command: 'alert',
+            text: message
+        });
+    }
 }
 
 function loadRenderConfigState(): RenderConfigState {
@@ -1336,6 +1944,7 @@ function updateModelTree(): void {
     const treeEl = document.getElementById('model-tree');
     if (!treeEl) return;
 
+    hideTreeContextMenu();
     const nodes = buildModelTreeNodes();
     if (nodes.length === 0) {
         treeEl.innerHTML = '<div style="color: #808080; font-style: italic;">No model loaded</div>';
@@ -1630,6 +2239,104 @@ function setVisibilityButtonState(visibilityBtn: HTMLElement, visible: boolean):
     visibilityBtn.textContent = visible ? 'ON' : 'OFF';
 }
 
+function getTreeContextMenu(): HTMLDivElement {
+    if (treeContextMenuEl) {
+        return treeContextMenuEl;
+    }
+
+    treeContextMenuEl = document.createElement('div');
+    treeContextMenuEl.style.position = 'fixed';
+    treeContextMenuEl.style.zIndex = '2000';
+    treeContextMenuEl.style.minWidth = '160px';
+    treeContextMenuEl.style.padding = '6px 0';
+    treeContextMenuEl.style.background = '#252526';
+    treeContextMenuEl.style.border = '1px solid #3c3c3c';
+    treeContextMenuEl.style.borderRadius = '6px';
+    treeContextMenuEl.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.35)';
+    treeContextMenuEl.style.display = 'none';
+    document.body.appendChild(treeContextMenuEl);
+
+    document.addEventListener('click', () => {
+        if (treeContextMenuEl) {
+            treeContextMenuEl.style.display = 'none';
+        }
+    });
+
+    return treeContextMenuEl;
+}
+
+function hideTreeContextMenu(): void {
+    if (treeContextMenuEl) {
+        treeContextMenuEl.style.display = 'none';
+    }
+}
+
+function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: string; action: string }> {
+    if (nodeData.groupId) {
+        return [
+            { label: '新建子组', action: 'createChildGroup' },
+            { label: '重命名', action: 'renameGroup' },
+            { label: '移动到...', action: 'moveToGroup' },
+            { label: '分解', action: 'ungroupGroup' },
+            { label: '删除', action: 'deleteSelection' },
+            { label: '属性', action: 'groupProperties' }
+        ];
+    }
+
+    if (nodeData.shapeId) {
+        return [
+            { label: '组合', action: 'createGroup' },
+            { label: '移动到...', action: 'moveToGroup' },
+            { label: '删除', action: 'deleteSelection' }
+        ];
+    }
+
+    return [];
+}
+
+function showTreeContextMenu(x: number, y: number, nodeData: ModelTreeNode): void {
+    const actions = buildTreeContextMenuActions(nodeData);
+    if (actions.length === 0) {
+        return;
+    }
+
+    const menu = getTreeContextMenu();
+    menu.innerHTML = '';
+
+    actions.forEach((item) => {
+        const actionEl = document.createElement('button');
+        actionEl.type = 'button';
+        actionEl.textContent = item.label;
+        actionEl.style.display = 'block';
+        actionEl.style.width = '100%';
+        actionEl.style.padding = '8px 14px';
+        actionEl.style.background = 'transparent';
+        actionEl.style.border = 'none';
+        actionEl.style.color = '#cccccc';
+        actionEl.style.textAlign = 'left';
+        actionEl.style.cursor = 'pointer';
+        actionEl.addEventListener('mouseenter', () => {
+            actionEl.style.background = '#094771';
+        });
+        actionEl.addEventListener('mouseleave', () => {
+            actionEl.style.background = 'transparent';
+        });
+        actionEl.addEventListener('click', (event) => {
+            event.stopPropagation();
+            hideTreeContextMenu();
+            handleMbsAction(item.action, {});
+        });
+        menu.appendChild(actionEl);
+    });
+
+    menu.style.display = 'block';
+    const { innerWidth, innerHeight } = window;
+    const menuWidth = 180;
+    const menuHeight = actions.length * 38 + 12;
+    menu.style.left = `${Math.min(x, innerWidth - menuWidth - 12)}px`;
+    menu.style.top = `${Math.min(y, innerHeight - menuHeight - 12)}px`;
+}
+
 function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     const container = document.createElement('div');
     container.className = 'tree-node-container';
@@ -1648,6 +2355,9 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
     if (nodeData.selectionKey) {
         node.dataset.selectionKey = nodeData.selectionKey;
+    }
+    if (nodeData.groupId || nodeData.id === 'category_objects') {
+        node.dataset.dropTarget = nodeData.groupId ?? '__root__';
     }
 
     if (nodeData.children && nodeData.children.length > 0) {
@@ -1712,6 +2422,34 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     name.textContent = nodeData.label;
     node.appendChild(name);
 
+    if (nodeData.selectionKey && (nodeData.groupId || nodeData.shapeId)) {
+        node.draggable = true;
+        node.addEventListener('dragstart', (event) => {
+            const selectionKey = nodeData.selectionKey ?? '';
+            const parsed = parseSelectionKey(selectionKey);
+            if (!parsed || !event.dataTransfer) {
+                event.preventDefault();
+                return;
+            }
+
+            if (!selectedNodeIds.has(selectionKey)) {
+                selectSelection(parsed);
+            }
+
+            const selectionKeys = getDraggableSelectionPayload(selectionKey);
+            syncDragSelection(selectionKeys);
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-cadtool-selection', JSON.stringify(selectionKeys));
+            event.dataTransfer.setData('text/plain', selectionKeys.join(','));
+            node.classList.add('dragging');
+            hideTreeContextMenu();
+        });
+        node.addEventListener('dragend', () => {
+            node.classList.remove('dragging');
+            clearTreeDropIndicators();
+        });
+    }
+
     if (nodeData.selectionKey) {
         node.addEventListener('click', (event) => {
             const additive = event.ctrlKey || event.metaKey;
@@ -1723,6 +2461,55 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
                 additive,
                 toggle: additive
             });
+        });
+        node.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const parsed = parseSelectionKey(nodeData.selectionKey ?? null);
+            if (!parsed) {
+                return;
+            }
+            if (!selectedNodeIds.has(nodeData.selectionKey ?? '')) {
+                selectSelection(parsed);
+            }
+            showTreeContextMenu(event.clientX, event.clientY, nodeData);
+        });
+    }
+
+    if (node.dataset.dropTarget) {
+        node.addEventListener('dragover', (event) => {
+            const targetGroupId = node.dataset.dropTarget === '__root__' ? null : node.dataset.dropTarget ?? null;
+            const validation = validateMoveSelectionToGroup(targetGroupId);
+            applyTreeDropIndicator(node, validation.valid);
+            if (validation.valid) {
+                event.preventDefault();
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = 'move';
+                }
+            }
+        });
+        node.addEventListener('dragleave', () => {
+            node.classList.remove('drop-target-valid', 'drop-target-invalid');
+        });
+        node.addEventListener('drop', (event) => {
+            event.preventDefault();
+            clearTreeDropIndicators();
+
+            const rawPayload = event.dataTransfer?.getData('application/x-cadtool-selection') ?? '';
+            if (rawPayload) {
+                try {
+                    const parsedPayload = JSON.parse(rawPayload) as unknown;
+                    if (Array.isArray(parsedPayload)) {
+                        const selectionKeys = parsedPayload.filter((item): item is string => typeof item === 'string');
+                        syncDragSelection(selectionKeys);
+                    }
+                } catch (error) {
+                    console.warn('Failed to parse tree drag payload:', error);
+                }
+            }
+
+            const targetGroupId = node.dataset.dropTarget === '__root__' ? null : node.dataset.dropTarget ?? null;
+            handleTreeDrop(targetGroupId);
         });
     }
 
@@ -4006,6 +4793,103 @@ function renderGroupOptionsPanel(selectedParts: LoadedShape[], parentGroupId: st
     });
 }
 
+function renderMoveOptionsPanel(): void {
+    setPanelMode('options', '选项-移动');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) {
+        return;
+    }
+
+    const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
+    const selectedPartItems = getSelectedShapeIds()
+        .map((shapeId) => loadedShapes.get(shapeId))
+        .filter((shape): shape is LoadedShape => Boolean(shape))
+        .map((shape) => ({ name: `零件: ${shape.name}` }));
+    const selectedGroupItems = selectedGroupIds
+        .map((groupId) => getGroupNode(groupId))
+        .filter((group): group is GroupNode => Boolean(group))
+        .map((group) => ({ name: `分组: ${group.name}` }));
+    const selectedItems = [...selectedGroupItems, ...selectedPartItems];
+    const moveTargetOptions = buildMoveTargetOptions(selectedGroupIds);
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildDropdown('opt-move-target', '目标位置', '__root__', moveTargetOptions)}
+        ${buildSeparator()}
+        <div class="opt-label">待移动对象：${selectedItems.length}</div>
+        ${buildSelectedList(selectedItems)}
+        ${buildSeparator()}
+        ${buildActionButtons('opt-move-confirm', '确认移动', 'opt-move-cancel')}
+    </div>`;
+
+    document.getElementById('opt-move-confirm')?.addEventListener('click', () => {
+        const targetSelect = document.getElementById('opt-move-target') as HTMLSelectElement | null;
+        const targetValue = targetSelect?.value ?? '__root__';
+        const targetGroupId = targetValue === '__root__' ? null : targetValue;
+
+        try {
+            const result = moveSelectedNodesToGroup(targetGroupId);
+            updateModelTree();
+            closeOptionsPanel();
+            setStatusInfo(`Moved ${result.movedParts} part(s) and ${result.movedGroups} group(s).`);
+        } catch (error) {
+            vscode.postMessage({
+                command: 'alert',
+                text: error instanceof Error ? error.message : `Move failed: ${error}`
+            });
+        }
+    });
+
+    document.getElementById('opt-move-cancel')?.addEventListener('click', () => {
+        closeOptionsPanel();
+    });
+}
+
+function renderRenameGroupOptionsPanel(): void {
+    const group = getGroupNode(getActiveGroupId());
+    if (!group) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Select a group first.'
+        });
+        return;
+    }
+
+    setPanelMode('options', '选项-重命名');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) {
+        return;
+    }
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-rename-group-name', group.name)}
+        ${buildSeparator()}
+        <div class="opt-label">当前分组：${group.name}</div>
+        ${buildSeparator()}
+        ${buildActionButtons('opt-rename-group-confirm', '确认重命名', 'opt-rename-group-cancel')}
+    </div>`;
+
+    document.getElementById('opt-rename-group-confirm')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('opt-rename-group-name') as HTMLInputElement | null;
+        const requestedName = nameInput?.value ?? group.name;
+
+        try {
+            const renamedGroup = renameSelectedGroup(requestedName);
+            updateModelTree();
+            closeOptionsPanel();
+            setStatusInfo(`Group renamed: ${renamedGroup.name}`);
+        } catch (error) {
+            vscode.postMessage({
+                command: 'alert',
+                text: error instanceof Error ? error.message : `Rename failed: ${error}`
+            });
+        }
+    });
+
+    document.getElementById('opt-rename-group-cancel')?.addEventListener('click', () => {
+        closeOptionsPanel();
+    });
+}
+
 function renderFrameOptionsPanel(title: string, name: string, position: Vec3, direction: Vec3): void {
     setPanelMode('options', title);
     const propsEl = document.getElementById('properties-panel');
@@ -4150,6 +5034,31 @@ function handleCreateGroup(parentGroupId: string | null = null): void {
     renderGroupOptionsPanel(selectedParts, parentGroupId);
 }
 
+function handleMoveToGroup(): void {
+    const selectedShapeIds = getSelectedShapeIds();
+    const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
+    if (selectedShapeIds.length === 0 && selectedGroupIds.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Select one or more parts/groups first.'
+        });
+        return;
+    }
+    renderMoveOptionsPanel();
+}
+
+function handleRenameGroup(): void {
+    const group = getGroupNode(getActiveGroupId());
+    if (!group) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Select a group first.'
+        });
+        return;
+    }
+    renderRenameGroupOptionsPanel();
+}
+
 function handleCreateDefaultGroup(): void {
     syncUngroupedPartIds();
     const memberShapeIds = [...groupDesignState.ungroupedPartIds];
@@ -4208,6 +5117,19 @@ function handleGroupProperties(): void {
         return;
     }
     renderSelectedGroupProperties(target.id);
+}
+
+function handleUngroupGroup(): void {
+    try {
+        const result = ungroupSelectedGroup();
+        updateModelTree();
+        setStatusInfo(`Ungrouped: moved ${result.movedParts} part(s) and ${result.movedGroups} child group(s).`);
+    } catch (error) {
+        vscode.postMessage({
+            command: 'alert',
+            text: error instanceof Error ? error.message : `Ungroup failed: ${error}`
+        });
+    }
 }
 
 function handleCreateJoint(jointType: string): void {
@@ -4777,6 +5699,22 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             handleCreateGroup(parentGroupId);
             break;
         }
+        case 'renameGroup': {
+            handleRenameGroup();
+            break;
+        }
+        case 'moveToGroup': {
+            handleMoveToGroup();
+            break;
+        }
+        case 'ungroupGroup': {
+            handleUngroupGroup();
+            break;
+        }
+        case 'deleteSelection': {
+            handleDeleteSelection();
+            break;
+        }
         case 'createDefaultGroup': {
             handleCreateDefaultGroup();
             break;
@@ -5037,6 +5975,25 @@ document.addEventListener('DOMContentLoaded', () => {
     setupRibbonAdaptiveLayout();
     setupSidebarResize();
     init();
+
+    document.addEventListener('keydown', (event) => {
+        const target = event.target as HTMLElement | null;
+        const isTypingTarget = Boolean(
+            target
+            && (target.tagName === 'INPUT'
+                || target.tagName === 'TEXTAREA'
+                || target.tagName === 'SELECT'
+                || target.isContentEditable)
+        );
+        if (event.key !== 'Delete' || isTypingTarget) {
+            return;
+        }
+        if (getSelectedShapeIds().length === 0 && getSelectedGroupIds().length === 0) {
+            return;
+        }
+        event.preventDefault();
+        handleMbsAction('deleteSelection', {});
+    });
 
     // Panel close button handler
     document.getElementById('panel-header-close')?.addEventListener('click', () => {
