@@ -6,3 +6,4 @@ export * from './types';
 export * from './services/MarkerCreator';
 export * from './modelBrowser';
 export * from './groupDesign';
+export * from './massAggregation';
