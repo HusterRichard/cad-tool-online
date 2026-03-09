@@ -1,5 +1,12 @@
 ﻿# CADTool 2026a 帮助文档页面索引（74页）
 
+## 本地输出文档
+
+- `docs/outputs/GROUP_DESIGN_PLAN_2026-03-09.md`
+- `docs/outputs/GROUP_DESIGN_BASELINE_2026-03-09.md`
+- `docs/outputs/GROUP_DESIGN_DELIVERY_2026-03-09.md`
+- `docs/outputs/GROUP_DESIGN_QA_2026-03-09.md`
+
 | 页面 | 一级标题 | 关键章节 |
 |---|---|---|
 | ref/Docs/CADToolBox/Doc/CADToolBox.html | CAD 工具 | - |
