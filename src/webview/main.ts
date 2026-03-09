@@ -84,6 +84,7 @@ let selectedGroupId: string | null = null;
 let activeSelectionKey: string | null = null;
 const selectedNodeIds = new Set<string>();
 let treeContextMenuEl: HTMLDivElement | null = null;
+let isSyncingViewerSelection = false;
 
 // Mesh ID to Shape ID mapping for selection synchronization
 const meshIdToShapeId: Map<string, string> = new Map();
@@ -466,6 +467,16 @@ function updateTreeSelectionClasses(): void {
     });
 }
 
+function collectMeshBackedShapeIds(shape: LoadedShape): string[] {
+    if (shape.meshId) {
+        return [shape.id];
+    }
+    if (!shape.children || shape.children.length === 0) {
+        return [shape.id];
+    }
+    return shape.children.flatMap((child) => collectMeshBackedShapeIds(child));
+}
+
 function syncViewerSelectionFromState(): void {
     if (!viewer) {
         return;
@@ -476,23 +487,28 @@ function syncViewerSelectionFromState(): void {
             getSelectedShapeIds()
                 .flatMap((shapeId) => {
                     const shape = loadedShapes.get(shapeId);
-                    return shape ? collectLeafShapeIds(shape) : [shapeId];
+                    return shape ? collectMeshBackedShapeIds(shape) : [shapeId];
                 })
         ))
             .map((shapeId) => loadedShapes.get(shapeId)?.meshId)
             .filter((meshId): meshId is string => Boolean(meshId))
     );
     const currentMeshIds = new Set(viewer.getSelectedIds());
-    currentMeshIds.forEach((meshId) => {
-        if (!targetMeshIds.has(meshId)) {
-            viewer.deselect(meshId);
-        }
-    });
-    targetMeshIds.forEach((meshId) => {
-        if (!currentMeshIds.has(meshId)) {
-            viewer.select(meshId);
-        }
-    });
+    isSyncingViewerSelection = true;
+    try {
+        currentMeshIds.forEach((meshId) => {
+            if (!targetMeshIds.has(meshId)) {
+                viewer.deselect(meshId);
+            }
+        });
+        targetMeshIds.forEach((meshId) => {
+            if (!currentMeshIds.has(meshId)) {
+                viewer.select(meshId);
+            }
+        });
+    } finally {
+        isSyncingViewerSelection = false;
+    }
 }
 
 type GroupMassSummary = {
@@ -5933,6 +5949,9 @@ async function initViewer(): Promise<void> {
 
         // Listen for selection changes from 3D viewer
         viewer.onSelectionChange((event) => {
+            if (isSyncingViewerSelection) {
+                return;
+            }
             if (event.type === 'select' && event.objectId) {
                 syncSelectionFromViewer(event.objectId);
             } else if (event.type === 'deselect') {
