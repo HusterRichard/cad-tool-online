@@ -74,6 +74,7 @@
 // For random color generation
 #include <cmath>
 #include <algorithm>
+#include <cctype>
 #include <locale>
 #include <codecvt>
 
@@ -495,6 +496,141 @@ std::string extendedStringToUtf8(const TCollection_ExtendedString& extStr) {
     }
 }
 
+std::string trimAsciiWhitespace(const std::string& value) {
+    auto begin = value.begin();
+    while (begin != value.end() && std::isspace(static_cast<unsigned char>(*begin))) {
+        ++begin;
+    }
+
+    auto end = value.end();
+    while (end != begin && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
+        --end;
+    }
+
+    return std::string(begin, end);
+}
+
+bool isValidPartName(const std::string& name);
+
+bool isPlaceholderOccurrenceName(const std::string& name) {
+    const std::string trimmed = trimAsciiWhitespace(name);
+    if (trimmed.empty() || trimmed == "NONE" || trimmed == "Unknown" || trimmed == "未知") {
+        return true;
+    }
+
+    if (trimmed.size() <= 4 || trimmed.rfind("NAUO", 0) != 0) {
+        return false;
+    }
+
+    return std::all_of(trimmed.begin() + 4, trimmed.end(), [](unsigned char c) {
+        return std::isdigit(c) != 0;
+    });
+}
+
+std::string extractLabelName(const TDF_Label& label) {
+    Handle(TDataStd_Name) nameAttr;
+    if (!label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+        return "";
+    }
+
+    return trimAsciiWhitespace(extendedStringToUtf8(nameAttr->Get()));
+}
+
+std::string resolveNodeName(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TDF_Label& label) {
+    const std::string labelName = extractLabelName(label);
+    const bool labelNameUsable = isValidPartName(labelName) && !isPlaceholderOccurrenceName(labelName);
+
+    if (shapeTool->IsReference(label)) {
+        TDF_Label referred;
+        if (shapeTool->GetReferredShape(label, referred)) {
+            const std::string referredName = extractLabelName(referred);
+            const bool referredNameUsable = isValidPartName(referredName) && !isPlaceholderOccurrenceName(referredName);
+
+            if (referredNameUsable) {
+                return referredName;
+            }
+        }
+    }
+
+    if (labelNameUsable) {
+        return labelName;
+    }
+
+    if (isValidPartName(labelName)) {
+        return labelName;
+    }
+
+    return g_partNameCounter.getNextPartName();
+}
+
+bool resolveReferenceTarget(const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                            const TDF_Label& label,
+                            TDF_Label& resolvedLabel) {
+    if (shapeTool->IsReference(label) && shapeTool->GetReferredShape(label, resolvedLabel)) {
+        return true;
+    }
+
+    resolvedLabel = label;
+    return !resolvedLabel.IsNull();
+}
+
+bool isAssemblyNode(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TDF_Label& label) {
+    if (shapeTool->IsAssembly(label)) {
+        return true;
+    }
+
+    TDF_Label resolved;
+    if (resolveReferenceTarget(shapeTool, label, resolved) && resolved != label) {
+        return shapeTool->IsAssembly(resolved);
+    }
+
+    return false;
+}
+
+bool isSimpleShapeNode(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TDF_Label& label) {
+    if (shapeTool->IsSimpleShape(label)) {
+        return true;
+    }
+
+    TDF_Label resolved;
+    if (resolveReferenceTarget(shapeTool, label, resolved) && resolved != label) {
+        return shapeTool->IsSimpleShape(resolved);
+    }
+
+    return false;
+}
+
+std::vector<TDF_Label> collectChildShapeLabels(const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                                               const TDF_Label& label) {
+    std::vector<TDF_Label> children;
+    TDF_LabelSequence components;
+    shapeTool->GetComponents(label, components, Standard_False);
+
+    if (components.Length() == 0) {
+        TDF_Label resolved;
+        if (resolveReferenceTarget(shapeTool, label, resolved) && resolved != label) {
+            shapeTool->GetComponents(resolved, components, Standard_False);
+        }
+    }
+
+    for (int i = 1; i <= components.Length(); ++i) {
+        children.push_back(components.Value(i));
+    }
+
+    if (!children.empty()) {
+        return children;
+    }
+
+    TDF_ChildIterator it(label);
+    for (; it.More(); it.Next()) {
+        if (shapeTool->IsShape(it.Value())) {
+            children.push_back(it.Value());
+        }
+    }
+
+    return children;
+}
+
 // Helper function to check if a string is valid (not garbled)
 bool isValidPartName(const std::string& name) {
     if (name.empty() || name == "Unnamed") {
@@ -614,30 +750,11 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
                         int& counter,
                         std::stringstream& result,
                         geo::ShapeStore& store) {
-    // Get name with UTF-8 support and fallback to Part+number for invalid names
-    Handle(TDataStd_Name) nameAttr;
-    std::string name;
-    bool nameFound = false;
-
-    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-        TCollection_ExtendedString extName = nameAttr->Get();
-        std::string convertedName = extendedStringToUtf8(extName);
-
-        // Validate the converted name
-        if (isValidPartName(convertedName)) {
-            name = convertedName;
-            nameFound = true;
-        }
-    }
-
-    // Fallback to Part+number if no valid name found
-    if (!nameFound) {
-        name = g_partNameCounter.getNextPartName();
-    }
+    const std::string name = resolveNodeName(shapeTool, label);
 
     // Determine node type
-    bool isAssembly = shapeTool->IsAssembly(label);
-    bool isSimpleShape = shapeTool->IsSimpleShape(label);
+    const bool isAssembly = isAssemblyNode(shapeTool, label);
+    const bool isSimpleShape = isSimpleShapeNode(shapeTool, label);
 
     std::string nodeType = isAssembly ? "assembly" : (isSimpleShape ? "solid" : "part");
     std::string nodeId = baseId + "_node_" + std::to_string(++counter);
@@ -665,9 +782,13 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
         }
     }
 
-    // Store shape if it's a solid/part
+    // Store the underlying definition shape for renderable nodes.
+    // Instance/reference transforms are emitted separately in node.transform and
+    // composed on the webview side to preserve nested assembly placement.
     if (isSimpleShape || !isAssembly) {
-        TopoDS_Shape shape = shapeTool->GetShape(label);
+        TDF_Label shapeLabel = label;
+        resolveReferenceTarget(shapeTool, label, shapeLabel);
+        TopoDS_Shape shape = shapeTool->GetShape(shapeLabel);
         if (!shape.IsNull()) {
             std::string shapeId = nodeId + "_shape";
             store.addShape(shapeId, shape);
@@ -696,13 +817,7 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
     }
 
     // Process children recursively
-    TDF_ChildIterator it(label);
-    std::vector<TDF_Label> children;
-    for (; it.More(); it.Next()) {
-        if (shapeTool->IsShape(it.Value())) {
-            children.push_back(it.Value());
-        }
-    }
+    const std::vector<TDF_Label> children = collectChildShapeLabels(shapeTool, label);
 
     if (!children.empty()) {
         result << ",\"children\":[";

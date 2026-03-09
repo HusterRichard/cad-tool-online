@@ -8,7 +8,6 @@ import {
     buildModelBrowserTree,
     markerCreator,
     type BrowserNamedEntityInput,
-    type BrowserShapeInput,
     type MbsMarker,
     type ModelBrowserNode
 } from '@cadtool-online/core';
@@ -59,12 +58,25 @@ interface LoadedShape {
     edgeData?: EdgeData;
     color?: string;
     children?: LoadedShape[];
+    transform?: {
+        translation: Vec3;
+        rotation: number[];
+    };
     visible: boolean;
     parent?: LoadedShape;
 }
+
+type RigidTransform = {
+    translation: Vec3;
+    rotation: number[];
+};
+
 const loadedShapes: Map<string, LoadedShape> = new Map();
 const rootShapes: LoadedShape[] = [];
 let selectedShapeId: string | null = null;
+let selectedGroupId: string | null = null;
+let activeSelectionKey: string | null = null;
+const selectedNodeIds = new Set<string>();
 
 // Mesh ID to Shape ID mapping for selection synchronization
 const meshIdToShapeId: Map<string, string> = new Map();
@@ -109,6 +121,37 @@ interface MbsGroupEntity {
     parentGroupId?: string;
     memberShapeIds: string[];
     createdAt: string;
+    kind?: GroupKind;
+    order?: number;
+}
+
+type GroupKind = 'manual' | 'default' | 'imported';
+
+interface GroupNode {
+    id: string;
+    name: string;
+    parentGroupId: string | null;
+    childGroupIds: string[];
+    memberPartIds: string[];
+    kind: GroupKind;
+    order: number;
+    createdAt: string;
+    deletedAt?: string;
+}
+
+interface GroupDesignState {
+    groupsById: Record<string, GroupNode>;
+    rootGroupIds: string[];
+    ungroupedPartIds: string[];
+    selectedNodeIds: string[];
+    activeMode: 'idle' | 'group-create' | 'move' | 'delete';
+}
+
+interface ModelTreeNode extends Omit<ModelBrowserNode, 'children'> {
+    kind: ModelBrowserNode['kind'] | 'group';
+    groupId?: string;
+    selectionKey?: string;
+    children?: ModelTreeNode[];
 }
 
 interface MbsJointEntity {
@@ -144,7 +187,7 @@ interface FluidPortEntity {
     createdAt: string;
 }
 
-const mbsGroups = new Map<string, MbsGroupEntity>();
+let groupDesignState: GroupDesignState = createEmptyGroupDesignState();
 const mbsJoints = new Map<string, MbsJointEntity>();
 const mbsMotions = new Map<string, MbsMotionEntity>();
 const fluidSlices = new Map<string, FluidSliceEntity>();
@@ -166,6 +209,32 @@ let renderConfig: RenderConfigState = loadRenderConfigState();
 const massPropertiesWorkerClient = new MassPropertiesWorkerClient(window.WASM_BASE_URL ?? null);
 const massPropertiesCoordinator = new MassPropertiesCoordinator(massPropertiesWorkerClient);
 const selectedDensityByShapeId = new Map<string, number>();
+
+const mbsGroups = {
+    get size(): number {
+        return Object.keys(groupDesignState.groupsById).length;
+    },
+    clear(): void {
+        groupDesignState = createEmptyGroupDesignState(getAllLeafPartIds());
+    },
+    set(id: string, group: MbsGroupEntity): typeof mbsGroups {
+        upsertLegacyGroup(group);
+        return this;
+    },
+    get(id: string): MbsGroupEntity | undefined {
+        const group = groupDesignState.groupsById[id];
+        return group ? toLegacyGroupEntity(group) : undefined;
+    },
+    delete(id: string): boolean {
+        return removeGroupById(id);
+    },
+    has(id: string): boolean {
+        return Boolean(groupDesignState.groupsById[id]);
+    },
+    values(): IterableIterator<MbsGroupEntity> {
+        return listGroupsAsLegacy().values();
+    }
+};
 
 interface MaterialOption {
     id: string;
@@ -192,6 +261,357 @@ const MATERIAL_OPTIONS: MaterialOption[] = [
     { id: 'gold', name: '黄金', density: 19320 },
     { id: 'custom-default', name: '自定义', density: CUSTOM_MATERIAL_DENSITY }
 ];
+
+function createEmptyGroupDesignState(ungroupedPartIds: string[] = []): GroupDesignState {
+    return {
+        groupsById: {},
+        rootGroupIds: [],
+        ungroupedPartIds: [...ungroupedPartIds],
+        selectedNodeIds: [],
+        activeMode: 'idle'
+    };
+}
+
+function toShapeSelectionKey(shapeId: string): string {
+    return `shape:${shapeId}`;
+}
+
+function toGroupSelectionKey(groupId: string): string {
+    return `group:${groupId}`;
+}
+
+function parseSelectionKey(selectionKey: string | null): { kind: 'shape' | 'group'; id: string } | null {
+    if (!selectionKey) {
+        return null;
+    }
+    const [kind, ...rest] = selectionKey.split(':');
+    if ((kind !== 'shape' && kind !== 'group') || rest.length === 0) {
+        return null;
+    }
+    return {
+        kind,
+        id: rest.join(':')
+    };
+}
+
+function getAllLeafPartIds(): string[] {
+    if (rootShapes.length === 0) {
+        return [];
+    }
+    return Array.from(new Set(collectLeafShapeIds(rootShapes)));
+}
+
+function listGroups(): GroupNode[] {
+    return Object.values(groupDesignState.groupsById)
+        .filter((group) => !group.deletedAt)
+        .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name));
+}
+
+function listGroupsAsLegacy(): MbsGroupEntity[] {
+    return listGroups().map(toLegacyGroupEntity);
+}
+
+function toLegacyGroupEntity(group: GroupNode): MbsGroupEntity {
+    return {
+        id: group.id,
+        name: group.name,
+        parentGroupId: group.parentGroupId ?? undefined,
+        memberShapeIds: [...group.memberPartIds],
+        createdAt: group.createdAt,
+        kind: group.kind,
+        order: group.order
+    };
+}
+
+function buildPartOwnerGroupMap(): Map<string, string> {
+    const ownerMap = new Map<string, string>();
+    listGroups().forEach((group) => {
+        group.memberPartIds.forEach((partId) => ownerMap.set(partId, group.id));
+    });
+    return ownerMap;
+}
+
+function syncUngroupedPartIds(): void {
+    const groupedPartIds = new Set<string>();
+    listGroups().forEach((group) => {
+        group.memberPartIds.forEach((partId) => groupedPartIds.add(partId));
+    });
+    groupDesignState.ungroupedPartIds = getAllLeafPartIds().filter((partId) => !groupedPartIds.has(partId));
+}
+
+function getGroupNode(groupId: string | null | undefined): GroupNode | null {
+    if (!groupId) {
+        return null;
+    }
+    return groupDesignState.groupsById[groupId] ?? null;
+}
+
+function getOrderedChildGroupIds(parentGroupId: string | null): string[] {
+    const groupIds = parentGroupId
+        ? (getGroupNode(parentGroupId)?.childGroupIds ?? [])
+        : groupDesignState.rootGroupIds;
+    return [...groupIds].sort((leftId, rightId) => {
+        const left = getGroupNode(leftId);
+        const right = getGroupNode(rightId);
+        if (!left || !right) {
+            return leftId.localeCompare(rightId);
+        }
+        return left.order - right.order || left.name.localeCompare(right.name);
+    });
+}
+
+function rebuildGroupIndexes(): void {
+    const nextRootIds: string[] = [];
+    Object.values(groupDesignState.groupsById).forEach((group) => {
+        group.childGroupIds = [];
+    });
+
+    listGroups().forEach((group) => {
+        if (group.parentGroupId && groupDesignState.groupsById[group.parentGroupId]) {
+            groupDesignState.groupsById[group.parentGroupId].childGroupIds.push(group.id);
+            return;
+        }
+        group.parentGroupId = null;
+        nextRootIds.push(group.id);
+    });
+
+    groupDesignState.rootGroupIds = nextRootIds.sort((leftId, rightId) => {
+        const left = getGroupNode(leftId);
+        const right = getGroupNode(rightId);
+        if (!left || !right) {
+            return leftId.localeCompare(rightId);
+        }
+        return left.order - right.order || left.name.localeCompare(right.name);
+    });
+    syncUngroupedPartIds();
+}
+
+function upsertGroupNode(group: GroupNode): void {
+    groupDesignState.groupsById[group.id] = {
+        ...group,
+        childGroupIds: [...group.childGroupIds],
+        memberPartIds: [...group.memberPartIds]
+    };
+    rebuildGroupIndexes();
+}
+
+function upsertLegacyGroup(group: MbsGroupEntity): void {
+    const previous = getGroupNode(group.id);
+    upsertGroupNode({
+        id: group.id,
+        name: group.name,
+        parentGroupId: group.parentGroupId ?? previous?.parentGroupId ?? null,
+        childGroupIds: previous?.childGroupIds ?? [],
+        memberPartIds: Array.from(new Set(group.memberShapeIds)),
+        kind: group.kind ?? previous?.kind ?? 'manual',
+        order: group.order ?? previous?.order ?? listGroups().length + 1,
+        createdAt: group.createdAt ?? previous?.createdAt ?? new Date().toISOString(),
+        deletedAt: previous?.deletedAt
+    });
+}
+
+function removeGroupById(groupId: string): boolean {
+    if (!groupDesignState.groupsById[groupId]) {
+        return false;
+    }
+    delete groupDesignState.groupsById[groupId];
+    rebuildGroupIndexes();
+    if (selectedGroupId === groupId) {
+        selectSelection(null);
+    }
+    return true;
+}
+
+function resolveOwningGroupId(shapeId: string | undefined): string | undefined {
+    if (!shapeId) {
+        return undefined;
+    }
+    return buildPartOwnerGroupMap().get(shapeId);
+}
+
+function getSelectedShapeIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: 'shape' | 'group'; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'shape')
+        .map((entry) => entry.id);
+}
+
+function getActiveGroupId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'group' ? active.id : null;
+}
+
+function updateTreeSelectionClasses(): void {
+    document.querySelectorAll<HTMLElement>('.tree-node[data-selection-key]').forEach((node) => {
+        const selectionKey = node.dataset.selectionKey ?? '';
+        node.classList.toggle('selected', selectedNodeIds.has(selectionKey));
+    });
+}
+
+function syncViewerSelectionFromState(): void {
+    if (!viewer) {
+        return;
+    }
+    const targetMeshIds = new Set(
+        getSelectedShapeIds()
+            .map((shapeId) => loadedShapes.get(shapeId)?.meshId)
+            .filter((meshId): meshId is string => Boolean(meshId))
+    );
+    const currentMeshIds = new Set(viewer.getSelectedIds());
+    currentMeshIds.forEach((meshId) => {
+        if (!targetMeshIds.has(meshId)) {
+            viewer.deselect(meshId);
+        }
+    });
+    targetMeshIds.forEach((meshId) => {
+        if (!currentMeshIds.has(meshId)) {
+            viewer.select(meshId);
+        }
+    });
+}
+
+function renderSelectedGroupProperties(groupId: string): void {
+    const group = getGroupNode(groupId);
+    if (!group) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    renderCustomProperties('Group Properties', [
+        { label: 'ID', value: group.id },
+        { label: 'Name', value: group.name },
+        { label: 'Parent', value: group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : '(root)' },
+        { label: 'Children', value: group.childGroupIds.length.toString() },
+        { label: 'Members', value: group.memberPartIds.map(activeShapeName).join(', ') || '(empty)' },
+        { label: 'Type', value: group.kind },
+        { label: 'Created', value: group.createdAt }
+    ]);
+}
+
+function updateSelectionPropertiesPanel(): void {
+    const active = parseSelectionKey(activeSelectionKey);
+    if (!active) {
+        updatePropertiesPanel(null);
+        return;
+    }
+    if (active.kind === 'group') {
+        renderSelectedGroupProperties(active.id);
+        return;
+    }
+    updatePropertiesPanel(active.id);
+}
+
+function selectSelection(
+    nextSelection: { kind: 'shape' | 'group'; id: string } | null,
+    options?: { additive?: boolean; toggle?: boolean; fromViewer?: boolean }
+): void {
+    const selectionKey = nextSelection
+        ? (nextSelection.kind === 'shape'
+            ? toShapeSelectionKey(nextSelection.id)
+            : toGroupSelectionKey(nextSelection.id))
+        : null;
+
+    if (!options?.additive) {
+        selectedNodeIds.clear();
+    }
+
+    if (selectionKey && options?.toggle && selectedNodeIds.has(selectionKey)) {
+        selectedNodeIds.delete(selectionKey);
+        activeSelectionKey = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds).at(-1) ?? null : null;
+    } else if (selectionKey) {
+        selectedNodeIds.add(selectionKey);
+        activeSelectionKey = selectionKey;
+    } else {
+        activeSelectionKey = null;
+    }
+
+    const active = parseSelectionKey(activeSelectionKey);
+    selectedShapeId = active?.kind === 'shape' ? active.id : null;
+    selectedGroupId = active?.kind === 'group' ? active.id : null;
+    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+
+    updateTreeSelectionClasses();
+    if (!options?.fromViewer) {
+        syncViewerSelectionFromState();
+    }
+    updateSelectionPropertiesPanel();
+
+    if (selectedShapeId) {
+        rememberShapeSelection(selectedShapeId);
+        vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
+    }
+}
+
+function syncSelectionFromViewer(activeMeshId: string | null): void {
+    const shapeIds = viewer?.getSelectedIds()
+        .map((meshId) => meshIdToShapeId.get(meshId))
+        .filter((shapeId): shapeId is string => Boolean(shapeId)) ?? [];
+    selectedNodeIds.clear();
+    shapeIds.forEach((shapeId) => selectedNodeIds.add(toShapeSelectionKey(shapeId)));
+    const activeShapeId = activeMeshId ? (meshIdToShapeId.get(activeMeshId) ?? shapeIds.at(-1) ?? null) : (shapeIds.at(-1) ?? null);
+    activeSelectionKey = activeShapeId ? toShapeSelectionKey(activeShapeId) : null;
+    const active = parseSelectionKey(activeSelectionKey);
+    selectedShapeId = active?.kind === 'shape' ? active.id : null;
+    selectedGroupId = null;
+    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+    updateTreeSelectionClasses();
+    updateSelectionPropertiesPanel();
+    if (selectedShapeId) {
+        rememberShapeSelection(selectedShapeId);
+        vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
+    }
+}
+
+function getUniqueGroupName(baseName: string): string {
+    const trimmed = baseName.trim() || `Group${listGroups().length + 1}`;
+    const existingNames = new Set(listGroups().map((group) => group.name));
+    if (!existingNames.has(trimmed)) {
+        return trimmed;
+    }
+    let index = 1;
+    while (existingNames.has(`${trimmed}_${index}`)) {
+        index += 1;
+    }
+    return `${trimmed}_${index}`;
+}
+
+function createGroupFromParts(
+    name: string,
+    memberShapeIds: string[],
+    parentGroupId: string | null,
+    kind: GroupKind = 'manual'
+): GroupNode {
+    const uniquePartIds = Array.from(new Set(memberShapeIds));
+    const ownerMap = buildPartOwnerGroupMap();
+    uniquePartIds.forEach((partId) => {
+        const ownerGroup = getGroupNode(ownerMap.get(partId));
+        if (ownerGroup) {
+            ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter((memberId) => memberId !== partId);
+        }
+    });
+
+    const group: GroupNode = {
+        id: nextEntityId(kind === 'default' ? 'group_default' : 'group', listGroups().length),
+        name: getUniqueGroupName(name),
+        parentGroupId,
+        childGroupIds: [],
+        memberPartIds: uniquePartIds,
+        kind,
+        order: getOrderedChildGroupIds(parentGroupId).length + 1,
+        createdAt: new Date().toISOString()
+    };
+    upsertGroupNode(group);
+    uniquePartIds.forEach((partId) => selectedNodeIds.delete(toShapeSelectionKey(partId)));
+    selectSelection({ kind: 'group', id: group.id });
+    return group;
+}
+
+function isGroupReferenced(groupId: string): boolean {
+    return createdMarkers.some((marker) => marker.groupId === groupId)
+        || Array.from(createdRefFrames.values()).some((refFrame) => refFrame.groupId === groupId)
+        || Array.from(mbsDesignPoints.values()).some((point) => point.groupId === groupId);
+}
 
 function loadRenderConfigState(): RenderConfigState {
     try {
@@ -273,6 +693,142 @@ function setStatusInfo(text: string): void {
     if (infoEl) {
         infoEl.textContent = text;
     }
+}
+
+function identityRigidTransform(): RigidTransform {
+    return {
+        translation: { x: 0, y: 0, z: 0 },
+        rotation: [
+            1, 0, 0,
+            0, 1, 0,
+            0, 0, 1
+        ]
+    };
+}
+
+function isIdentityRigidTransform(transform: RigidTransform | undefined): boolean {
+    if (!transform) {
+        return true;
+    }
+    const { translation, rotation } = transform;
+    return translation.x === 0
+        && translation.y === 0
+        && translation.z === 0
+        && rotation.length === 9
+        && rotation[0] === 1
+        && rotation[1] === 0
+        && rotation[2] === 0
+        && rotation[3] === 0
+        && rotation[4] === 1
+        && rotation[5] === 0
+        && rotation[6] === 0
+        && rotation[7] === 0
+        && rotation[8] === 1;
+}
+
+function normalizeRigidTransform(transform: LoadedShape['transform'] | undefined): RigidTransform {
+    if (!transform || !Array.isArray(transform.rotation) || transform.rotation.length !== 9) {
+        return identityRigidTransform();
+    }
+
+    return {
+        translation: {
+            x: transform.translation?.x ?? 0,
+            y: transform.translation?.y ?? 0,
+            z: transform.translation?.z ?? 0
+        },
+        rotation: transform.rotation.map((value) => Number(value) || 0)
+    };
+}
+
+function composeRigidTransforms(parent: RigidTransform, local: RigidTransform): RigidTransform {
+    const pr = parent.rotation;
+    const lr = local.rotation;
+
+    const rotation = [
+        pr[0] * lr[0] + pr[1] * lr[3] + pr[2] * lr[6],
+        pr[0] * lr[1] + pr[1] * lr[4] + pr[2] * lr[7],
+        pr[0] * lr[2] + pr[1] * lr[5] + pr[2] * lr[8],
+        pr[3] * lr[0] + pr[4] * lr[3] + pr[5] * lr[6],
+        pr[3] * lr[1] + pr[4] * lr[4] + pr[5] * lr[7],
+        pr[3] * lr[2] + pr[4] * lr[5] + pr[5] * lr[8],
+        pr[6] * lr[0] + pr[7] * lr[3] + pr[8] * lr[6],
+        pr[6] * lr[1] + pr[7] * lr[4] + pr[8] * lr[7],
+        pr[6] * lr[2] + pr[7] * lr[5] + pr[8] * lr[8]
+    ];
+
+    const translation = {
+        x: pr[0] * local.translation.x + pr[1] * local.translation.y + pr[2] * local.translation.z + parent.translation.x,
+        y: pr[3] * local.translation.x + pr[4] * local.translation.y + pr[5] * local.translation.z + parent.translation.y,
+        z: pr[6] * local.translation.x + pr[7] * local.translation.y + pr[8] * local.translation.z + parent.translation.z
+    };
+
+    return { translation, rotation };
+}
+
+function transformPoint(transform: RigidTransform, x: number, y: number, z: number): [number, number, number] {
+    const r = transform.rotation;
+    return [
+        r[0] * x + r[1] * y + r[2] * z + transform.translation.x,
+        r[3] * x + r[4] * y + r[5] * z + transform.translation.y,
+        r[6] * x + r[7] * y + r[8] * z + transform.translation.z
+    ];
+}
+
+function transformDirection(transform: RigidTransform, x: number, y: number, z: number): [number, number, number] {
+    const r = transform.rotation;
+    return [
+        r[0] * x + r[1] * y + r[2] * z,
+        r[3] * x + r[4] * y + r[5] * z,
+        r[6] * x + r[7] * y + r[8] * z
+    ];
+}
+
+function applyRigidTransformToMeshData(meshData: MeshData, transform: RigidTransform): MeshData {
+    if (isIdentityRigidTransform(transform)) {
+        return meshData;
+    }
+
+    const vertices = new Float32Array(meshData.vertices.length);
+    for (let i = 0; i < meshData.vertices.length; i += 3) {
+        const [x, y, z] = transformPoint(transform, meshData.vertices[i], meshData.vertices[i + 1], meshData.vertices[i + 2]);
+        vertices[i] = x;
+        vertices[i + 1] = y;
+        vertices[i + 2] = z;
+    }
+
+    const normals = new Float32Array(meshData.normals.length);
+    for (let i = 0; i < meshData.normals.length; i += 3) {
+        const [nx, ny, nz] = transformDirection(transform, meshData.normals[i], meshData.normals[i + 1], meshData.normals[i + 2]);
+        normals[i] = nx;
+        normals[i + 1] = ny;
+        normals[i + 2] = nz;
+    }
+
+    return {
+        vertices,
+        normals,
+        indices: new Uint32Array(meshData.indices)
+    };
+}
+
+function applyRigidTransformToEdgeData(edgeData: EdgeData | undefined, transform: RigidTransform): EdgeData | undefined {
+    if (!edgeData) {
+        return undefined;
+    }
+    if (isIdentityRigidTransform(transform)) {
+        return edgeData;
+    }
+
+    const vertices = new Float32Array(edgeData.vertices.length);
+    for (let i = 0; i < edgeData.vertices.length; i += 3) {
+        const [x, y, z] = transformPoint(transform, edgeData.vertices[i], edgeData.vertices[i + 1], edgeData.vertices[i + 2]);
+        vertices[i] = x;
+        vertices[i + 1] = y;
+        vertices[i + 2] = z;
+    }
+
+    return { vertices };
 }
 
 let ribbonResizeObserver: ResizeObserver | null = null;
@@ -671,13 +1227,7 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
         }
 
         applyRenderConfigToViewer();
-        if (selectedShapeId) {
-            const selectedShape = loadedShapes.get(selectedShapeId);
-            if (selectedShape?.meshId) {
-                viewer.clearSelection();
-                viewer.select(selectedShape.meshId);
-            }
-        }
+        syncViewerSelectionFromState();
         showProgress(100, 'Complete');
         setStatus('Ready');
         setStatusInfo(`Precision updated: ${updatedCount}/${remeshTargets.length} parts`);
@@ -797,15 +1347,7 @@ function updateModelTree(): void {
         const nodeEl = createTreeNode(node, 0);
         treeEl.appendChild(nodeEl);
     });
-}
-
-function toBrowserShape(shape: LoadedShape): BrowserShapeInput {
-    return {
-        id: shape.id,
-        name: shape.name,
-        type: shape.type,
-        children: shape.children?.map(toBrowserShape)
-    };
+    updateTreeSelectionClasses();
 }
 
 function toNamedEntityList<T extends { id: string; name: string }>(items: Iterable<T>): BrowserNamedEntityInput[] {
@@ -813,23 +1355,6 @@ function toNamedEntityList<T extends { id: string; name: string }>(items: Iterab
         id: item.id,
         name: item.name
     }));
-}
-
-function flattenTopLevelAssemblies(shapeNodes: BrowserShapeInput[]): BrowserShapeInput[] {
-    if (shapeNodes.length === 0) {
-        return shapeNodes;
-    }
-
-    const flattened: BrowserShapeInput[] = [];
-    shapeNodes.forEach((node) => {
-        const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-        if (node.type === 'assembly' && hasChildren) {
-            flattened.push(...(node.children as BrowserShapeInput[]));
-        } else {
-            flattened.push(node);
-        }
-    });
-    return flattened;
 }
 
 let resolvedIcons32Base: string | null | undefined;
@@ -873,23 +1398,90 @@ function treeIconPath(fileName: string): string | null {
     return `${base}/${fileName}`;
 }
 
-function buildModelTreeNodes(): ModelBrowserNode[] {
+function toGroupTreeShapeNode(shapeId: string): ModelTreeNode | null {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) {
+        return null;
+    }
+    return {
+        id: `shape_${shape.id}`,
+        kind: shape.type,
+        label: shape.name,
+        shapeId: shape.id,
+        selectionKey: toShapeSelectionKey(shape.id)
+    };
+}
+
+function toFallbackTreeShapeNode(shape: LoadedShape): ModelTreeNode {
+    return {
+        id: `shape_${shape.id}`,
+        kind: shape.type,
+        label: shape.name,
+        shapeId: shape.id,
+        selectionKey: toShapeSelectionKey(shape.id),
+        children: shape.children?.map((child) => toFallbackTreeShapeNode(child))
+    };
+}
+
+function toGroupTreeNode(groupId: string): ModelTreeNode | null {
+    const group = getGroupNode(groupId);
+    if (!group) {
+        return null;
+    }
+
+    const children: ModelTreeNode[] = [
+        ...getOrderedChildGroupIds(group.id)
+            .map((childGroupId) => toGroupTreeNode(childGroupId))
+            .filter((node): node is ModelTreeNode => Boolean(node)),
+        ...group.memberPartIds
+            .map((shapeId) => toGroupTreeShapeNode(shapeId))
+            .filter((node): node is ModelTreeNode => Boolean(node))
+    ];
+
+    return {
+        id: `group_${group.id}`,
+        kind: 'group',
+        label: group.name,
+        groupId: group.id,
+        selectionKey: toGroupSelectionKey(group.id),
+        children
+    };
+}
+
+function buildObjectTreeNodes(): ModelTreeNode[] {
+    syncUngroupedPartIds();
+    const hasExplicitGroups = listGroups().length > 0;
+    const groupNodes = getOrderedChildGroupIds(null)
+        .map((groupId) => toGroupTreeNode(groupId))
+        .filter((node): node is ModelTreeNode => Boolean(node));
+    const ungroupedNodes = groupDesignState.ungroupedPartIds
+        .map((shapeId) => toGroupTreeShapeNode(shapeId))
+        .filter((node): node is ModelTreeNode => Boolean(node));
+
+    if (hasExplicitGroups) {
+        return groupNodes.concat(ungroupedNodes);
+    }
+
+    return rootShapes.length > 0
+        ? rootShapes.map((shape) => toFallbackTreeShapeNode(shape))
+        : externalModelTreeShapes.map((shape) => ({
+            id: `shape_${shape.id}`,
+            label: shape.name,
+            kind: 'part',
+            shapeId: shape.id,
+            selectionKey: toShapeSelectionKey(shape.id)
+        }));
+}
+
+function buildModelTreeNodes(): ModelTreeNode[] {
     const forceEntities: BrowserNamedEntityInput[] = [
         ...Array.from(fluidSlices.values(), (slice) => ({ id: `slice_${slice.id}`, name: slice.name })),
         ...Array.from(fluidPorts.values(), (port) => ({ id: `port_${port.id}`, name: port.name }))
     ];
 
-    const rootShapeNodes: BrowserShapeInput[] = rootShapes.length > 0
-        ? rootShapes.map(toBrowserShape)
-        : externalModelTreeShapes.map((shape) => ({
-            id: shape.id,
-            name: shape.name,
-            type: 'part' as const
-        }));
+    const objectNodes = buildObjectTreeNodes();
 
-    const visibleShapeNodes = flattenTopLevelAssemblies(rootShapeNodes);
-
-    const hasEntities = visibleShapeNodes.length > 0
+    const hasEntities = objectNodes.length > 0
         || mbsJoints.size > 0
         || mbsMotions.size > 0
         || forceEntities.length > 0;
@@ -897,17 +1489,25 @@ function buildModelTreeNodes(): ModelBrowserNode[] {
         return [];
     }
 
-    return buildModelBrowserTree({
-        shapes: visibleShapeNodes,
+    const nodes = buildModelBrowserTree({
+        shapes: [],
         includeGround: true,
         connections: toNamedEntityList(mbsJoints.values()),
         motions: toNamedEntityList(mbsMotions.values()),
         forces: forceEntities,
         materials: []
-    });
+    }) as unknown as ModelTreeNode[];
+
+    const objectsCategory = nodes.find((node) => node.id === 'category_objects');
+    if (objectsCategory) {
+        const groundNode = objectsCategory.children?.find((node) => node.kind === 'ground');
+        objectsCategory.children = groundNode ? [groundNode as ModelTreeNode, ...objectNodes] : objectNodes;
+    }
+
+    return nodes;
 }
 
-function iconForNode(node: ModelBrowserNode): string {
+function iconForNode(node: ModelTreeNode): string {
     switch (node.kind) {
         case 'category':
             switch (node.id) {
@@ -926,6 +1526,8 @@ function iconForNode(node: ModelBrowserNode): string {
             }
         case 'assembly':
             return 'A';
+        case 'group':
+            return 'G';
         case 'part':
             return 'P';
         case 'solid':
@@ -945,7 +1547,7 @@ function iconForNode(node: ModelBrowserNode): string {
     }
 }
 
-function iconAssetForNode(node: ModelBrowserNode): string | null {
+function iconAssetForNode(node: ModelTreeNode): string | null {
     switch (node.kind) {
         case 'category':
             switch (node.id) {
@@ -965,6 +1567,8 @@ function iconAssetForNode(node: ModelBrowserNode): string | null {
         case 'ground':
             return treeIconPath('model_tree_cad_ground.png');
         case 'assembly':
+            return treeIconPath('model_tree_group.png');
+        case 'group':
             return treeIconPath('model_tree_group.png');
         case 'part':
             return treeIconPath('model_tree_part.png');
@@ -1026,22 +1630,28 @@ function setVisibilityButtonState(visibilityBtn: HTMLElement, visible: boolean):
     visibilityBtn.textContent = visible ? 'ON' : 'OFF';
 }
 
-function createTreeNode(nodeData: ModelBrowserNode, level: number): HTMLElement {
+function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     const container = document.createElement('div');
     container.className = 'tree-node-container';
     container.style.marginLeft = `${level * 16}px`;
 
     const node = document.createElement('div');
     node.className = 'tree-node';
-    if (nodeData.shapeId === selectedShapeId) {
+    if (nodeData.selectionKey && selectedNodeIds.has(nodeData.selectionKey)) {
         node.classList.add('selected');
     }
     if (nodeData.shapeId) {
         node.dataset.shapeId = nodeData.shapeId;
     }
+    if (nodeData.groupId) {
+        node.dataset.groupId = nodeData.groupId;
+    }
+    if (nodeData.selectionKey) {
+        node.dataset.selectionKey = nodeData.selectionKey;
+    }
 
     if (nodeData.children && nodeData.children.length > 0) {
-        const expandedByDefault = nodeData.kind === 'category';
+        const expandedByDefault = nodeData.kind === 'category' || nodeData.kind === 'assembly' || nodeData.kind === 'group';
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
         const expandIcon = expandIconPath(expandedByDefault);
@@ -1102,9 +1712,18 @@ function createTreeNode(nodeData: ModelBrowserNode, level: number): HTMLElement 
     name.textContent = nodeData.label;
     node.appendChild(name);
 
-    if (nodeData.shapeId) {
-        const targetShapeId = nodeData.shapeId;
-        node.addEventListener('click', () => selectShape(targetShapeId));
+    if (nodeData.selectionKey) {
+        node.addEventListener('click', (event) => {
+            const additive = event.ctrlKey || event.metaKey;
+            const parsed = parseSelectionKey(nodeData.selectionKey ?? null);
+            if (!parsed) {
+                return;
+            }
+            selectSelection(parsed, {
+                additive,
+                toggle: additive
+            });
+        });
     }
 
     container.appendChild(node);
@@ -1112,7 +1731,7 @@ function createTreeNode(nodeData: ModelBrowserNode, level: number): HTMLElement 
     if (nodeData.children && nodeData.children.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'tree-children';
-        childrenContainer.style.display = nodeData.kind === 'category' ? 'block' : 'none';
+        childrenContainer.style.display = (nodeData.kind === 'category' || nodeData.kind === 'assembly' || nodeData.kind === 'group') ? 'block' : 'none';
 
         nodeData.children.forEach((child) => {
             const childNode = createTreeNode(child, level + 1);
@@ -1515,40 +2134,13 @@ function selectShape(shapeId: string, fromViewer: boolean = false): void {
         console.warn('[selectShape] Shape not found:', shapeId);
         return;
     }
-
-    selectedShapeId = shapeId;
-    rememberShapeSelection(shapeId);
-
-    // Update selection in tree
-    const prevSelected = document.querySelector('.tree-node.selected');
-    if (prevSelected) {
-        prevSelected.classList.remove('selected');
-    }
+    selectSelection({ kind: 'shape', id: shapeId }, { fromViewer });
 
     const newSelected = document.querySelector(`.tree-node[data-shape-id="${shapeId}"]`);
     if (newSelected) {
-        newSelected.classList.add('selected');
-
-        // Auto-expand parent nodes
         expandParentNodes(newSelected);
-
-        // Scroll into view
         newSelected.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-
-    // Update 3D selection (only if not triggered from viewer to avoid loop)
-    if (viewer && !fromViewer) {
-        viewer.clearSelection();
-        if (shape.meshId) {
-            viewer.select(shape.meshId);
-        }
-    }
-
-    // Update properties panel
-    updatePropertiesPanel(shapeId);
-
-    // Notify extension
-    vscode.postMessage({ command: 'selectShape', shapeId });
 }
 
 function rememberShapeSelection(shapeId: string): void {
@@ -1747,13 +2339,20 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             loadedShapes.clear();
             selectedDensityByShapeId.clear();
 
-            const buildShapeTree = (node: any, parent?: LoadedShape): LoadedShape => {
+            const buildShapeTree = (
+                node: any,
+                parent?: LoadedShape,
+                parentTransform: RigidTransform = identityRigidTransform()
+            ): LoadedShape => {
+                const localTransform = normalizeRigidTransform(node.transform);
+                const worldTransform = composeRigidTransforms(parentTransform, localTransform);
                 const shape: LoadedShape = {
                     id: node.id,
                     name: node.name,
                     type: node.type,
                     shapeId: node.shapeId,
                     color: node.color,
+                    transform: worldTransform,
                     visible: true,
                     parent
                 };
@@ -1761,8 +2360,10 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                 // Add mesh to viewer if available
                 if (node._meshData) {
                     const meshId = `mesh_${node.id}`;
+                    const meshData = applyRigidTransformToMeshData(node._meshData, worldTransform);
+                    const edgeData = applyRigidTransformToEdgeData(node._edgeData, worldTransform);
                     if (viewer) {
-                        viewer.addMeshFromData(meshId, node._meshData, undefined, node._edgeData);
+                        viewer.addMeshFromData(meshId, meshData, undefined, edgeData);
 
                         // Apply color if available
                         if (node.color) {
@@ -1771,8 +2372,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                         }
                     }
                     shape.meshId = meshId;
-                    shape.meshData = node._meshData;
-                    shape.edgeData = node._edgeData;
+                    shape.meshData = meshData;
+                    shape.edgeData = edgeData;
 
                     // Register mesh ID to shape ID mapping for selection sync
                     meshIdToShapeId.set(meshId, shape.id);
@@ -1782,7 +2383,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
 
                 // Process children
                 if (node.children && node.children.length > 0) {
-                    shape.children = node.children.map((child: any) => buildShapeTree(child, shape));
+                    shape.children = node.children.map((child: any) => buildShapeTree(child, shape, worldTransform));
                 }
 
                 loadedShapes.set(shape.id, shape);
@@ -2056,6 +2657,9 @@ interface CadtoolConfigExportData {
     group: Array<{
         name: string;
         parts: string[];
+        parentRef?: string | null;
+        kind?: GroupKind;
+        order?: number;
     }>;
     marker: Array<{
         name: string;
@@ -2329,7 +2933,11 @@ function clearCadtoolRuntimeEntities(): void {
     mbsDesignPoints.clear();
     frameCreationHistory.length = 0;
     resetCanvasInteraction();
-    mbsGroups.clear();
+    groupDesignState = createEmptyGroupDesignState(getAllLeafPartIds());
+    selectedNodeIds.clear();
+    activeSelectionKey = null;
+    selectedShapeId = null;
+    selectedGroupId = null;
     mbsJoints.clear();
     mbsMotions.clear();
     fluidSlices.clear();
@@ -2356,6 +2964,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
     clearCadtoolRuntimeEntities();
 
+    const importedGroups: GroupNode[] = [];
     const groups = getConfigArray(data, 'group', stats);
     groups.forEach((entry, index) => {
         if (!isJsonRecord(entry)) {
@@ -2393,20 +3002,33 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             }
         });
 
-        const groupId = nextEntityId('group', mbsGroups.size);
-        const group: MbsGroupEntity = {
+        const parentRef = toNonEmptyString(entry.parentRef);
+        const groupId = nextEntityId('group', importedGroups.length);
+        const group: GroupNode = {
             id: groupId,
-            name,
-            memberShapeIds,
+            name: getUniqueGroupName(name),
+            parentGroupId: parentRef ? (groupNameToId.get(parentRef) ?? parentRef) : null,
+            childGroupIds: [],
+            memberPartIds: memberShapeIds,
+            kind: entry.kind === 'default' ? 'default' : 'imported',
+            order: typeof entry.order === 'number' && Number.isFinite(entry.order) ? entry.order : importedGroups.length + 1,
             createdAt: new Date().toISOString()
         };
-        mbsGroups.set(groupId, group);
+        importedGroups.push(group);
 
         if (groupNameToId.has(name)) {
             addImportWarning(stats, `Duplicate group name "${name}" found; latest entry is used for references.`);
         }
         groupNameToId.set(name, groupId);
         stats.groups += 1;
+    });
+
+    importedGroups.forEach((group) => {
+        if (group.parentGroupId && !getGroupNode(group.parentGroupId) && !groupDesignState.groupsById[group.parentGroupId]) {
+            const mappedParentId = groupNameToId.get(group.parentGroupId);
+            group.parentGroupId = mappedParentId ?? null;
+        }
+        upsertGroupNode(group);
     });
 
     const markerNameToId = new Map<string, string>();
@@ -2439,14 +3061,15 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                 addImportWarning(stats, `marker "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`);
             }
         } else if (partRef) {
-            groupId = shapeNameToId.get(partRef) ?? partRef;
+            const partId = shapeNameToId.get(partRef) ?? partRef;
+            groupId = resolveOwningGroupId(partId) ?? partId;
             if (!shapeNameToId.has(partRef) && loadedShapes.size > 0) {
                 addImportWarning(stats, `marker "${name}" references unknown partRef "${partRef}", keeping raw reference.`);
             }
         }
 
         if (!groupId) {
-            groupId = selectedShapeId ?? '__unassigned__';
+            groupId = getActiveGroupId() ?? resolveOwningGroupId(selectedShapeId ?? undefined) ?? selectedShapeId ?? '__unassigned__';
             addImportWarning(stats, `marker "${name}" has no groupRef/partRef; assigned to "${groupId}".`);
         }
 
@@ -2555,7 +3178,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const groupRef = toNonEmptyString(entry.groupRef);
         const markerRef = toNonEmptyString(entry.markerRef);
-        let groupId = selectedShapeId ?? '__unassigned__';
+        let groupId = getActiveGroupId() ?? resolveOwningGroupId(selectedShapeId ?? undefined) ?? selectedShapeId ?? '__unassigned__';
 
         if (groupRef) {
             groupId = groupNameToId.get(groupRef) ?? shapeNameToId.get(groupRef) ?? groupRef;
@@ -2811,9 +3434,12 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
     }));
 
     return {
-        group: Array.from(mbsGroups.values()).map(group => ({
+        group: listGroups().map(group => ({
             name: group.name,
-            parts: group.memberShapeIds.map(resolvePartRefName)
+            parts: group.memberPartIds.map(resolvePartRefName),
+            parentRef: group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : null,
+            kind: group.kind,
+            order: group.order
         })),
         marker: [...markerEntries, ...refMarkerEntries],
         designPoint: Array.from(mbsDesignPoints.values()).map((point) => ({
@@ -3137,6 +3763,9 @@ function clearScene(): void {
     loadedShapes.clear();
     rootShapes.length = 0;
     selectedShapeId = null;
+    selectedGroupId = null;
+    activeSelectionKey = null;
+    selectedNodeIds.clear();
     selectedDensityByShapeId.clear();
     meshIdToShapeId.clear();
     shapeSelectionHistory.length = 0;
@@ -3319,14 +3948,7 @@ function buildSelectedList(items: Array<{ name: string }>): string {
 
 function closeOptionsPanel(): void {
     setPanelMode('properties', '属性');
-    if (selectedShapeId) {
-        updatePropertiesPanel(selectedShapeId);
-    } else {
-        const propsEl = document.getElementById('properties-panel');
-        if (propsEl) {
-            propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
-        }
-    }
+    updateSelectionPropertiesPanel();
 }
 
 function escapeAttr(str: string): string {
@@ -3344,16 +3966,19 @@ function readVec3FromInputs(prefix: string): Vec3 {
 // Options Panel Renderers
 // ============================================================================
 
-function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
+function renderGroupOptionsPanel(selectedParts: LoadedShape[], parentGroupId: string | null = null): void {
     setPanelMode('options', '选项-组合');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     const defaultName = `Group${mbsGroups.size + 1}`;
     const partItems = selectedParts.map(s => ({ name: s.name }));
+    const parentGroupName = parentGroupId ? (getGroupNode(parentGroupId)?.name ?? parentGroupId) : '(root)';
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-group-name', defaultName)}
+        ${buildSeparator()}
+        <div class="opt-label">目标父组：${parentGroupName}</div>
         ${buildSeparator()}
         <div class="opt-label">已选中零件：${selectedParts.length}</div>
         ${buildSelectedList(partItems)}
@@ -3365,22 +3990,14 @@ function renderGroupOptionsPanel(selectedParts: LoadedShape[]): void {
         const nameInput = document.getElementById('opt-group-name') as HTMLInputElement;
         const name = nameInput?.value?.trim() || defaultName;
         const memberShapeIds = selectedParts.map(s => s.id);
-
-        const id = nextEntityId('group', mbsGroups.size);
-        const group: MbsGroupEntity = {
-            id,
-            name,
-            parentGroupId: undefined,
-            memberShapeIds,
-            createdAt: new Date().toISOString()
-        };
-        mbsGroups.set(id, group);
+        const group = createGroupFromParts(name, memberShapeIds, parentGroupId, 'manual');
 
         setStatusInfo(`Group created: ${name}`);
+        updateModelTree();
         closeOptionsPanel();
         vscode.postMessage({
             command: 'alert',
-            text: `Created group "${name}" with ${memberShapeIds.length} member(s).`
+            text: `Created group "${group.name}" with ${memberShapeIds.length} member(s).`
         });
     });
 
@@ -3519,52 +4136,78 @@ function collectLeafShapeIds(shapes: LoadedShape[]): string[] {
     return result;
 }
 
+function handleCreateGroup(parentGroupId: string | null = null): void {
+    const selectedParts = getSelectedShapeIds()
+        .map((shapeId) => loadedShapes.get(shapeId))
+        .filter((shape): shape is LoadedShape => Boolean(shape));
+    if (selectedParts.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Select one or more parts first.'
+        });
+        return;
+    }
+    renderGroupOptionsPanel(selectedParts, parentGroupId);
+}
+
 function handleCreateDefaultGroup(): void {
-    const memberShapeIds = collectLeafShapeIds(rootShapes);
+    syncUngroupedPartIds();
+    const memberShapeIds = [...groupDesignState.ungroupedPartIds];
     if (memberShapeIds.length === 0) {
         vscode.postMessage({
             command: 'alert',
-            text: 'No model parts available for default grouping.'
+            text: 'No ungrouped parts available for default grouping.'
         });
         return;
     }
 
-    const id = nextEntityId('group_default', mbsGroups.size);
-    const group: MbsGroupEntity = {
-        id,
-        name: `DefaultGroup${mbsGroups.size + 1}`,
-        memberShapeIds: Array.from(new Set(memberShapeIds)),
-        createdAt: new Date().toISOString()
-    };
-    mbsGroups.set(id, group);
+    const group = createGroupFromParts(`DefaultGroup${mbsGroups.size + 1}`, memberShapeIds, null, 'default');
     updateModelTree();
-    setStatusInfo(`Default group created: ${group.memberShapeIds.length} parts`);
+    setStatusInfo(`Default group created: ${group.memberPartIds.length} parts`);
 }
 
 function handleCleanGroup(): void {
-    const count = mbsGroups.size;
-    mbsGroups.clear();
+    const blockedIds = new Set<string>();
+    let removedCount = 0;
+
+    while (true) {
+        const removable = listGroups().filter((group) => group.childGroupIds.length === 0 && group.memberPartIds.length === 0);
+        const nextRemovable = removable.filter((group) => {
+            if (isGroupReferenced(group.id)) {
+                blockedIds.add(group.id);
+                return false;
+            }
+            return true;
+        });
+        if (nextRemovable.length === 0) {
+            break;
+        }
+        nextRemovable.forEach((group) => {
+            if (removeGroupById(group.id)) {
+                removedCount += 1;
+            }
+        });
+    }
     updateModelTree();
-    setStatusInfo(`Groups cleared: ${count}`);
+    if (blockedIds.size > 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: `Skipped ${blockedIds.size} referenced empty group(s).`
+        });
+    }
+    setStatusInfo(`Empty groups cleaned: ${removedCount}`);
 }
 
 function handleGroupProperties(): void {
-    const target = Array.from(mbsGroups.values()).at(-1);
+    const target = getGroupNode(getActiveGroupId());
     if (!target) {
         vscode.postMessage({
             command: 'alert',
-            text: 'No group available. Please create a group first.'
+            text: 'Select a group first.'
         });
         return;
     }
-
-    renderCustomProperties('Group Properties', [
-        { label: 'ID', value: target.id },
-        { label: 'Name', value: target.name },
-        { label: 'Parent', value: target.parentGroupId ?? '(root)' },
-        { label: 'Members', value: target.memberShapeIds.map(activeShapeName).join(', ') || '(empty)' },
-        { label: 'Created', value: target.createdAt }
-    ]);
+    renderSelectedGroupProperties(target.id);
 }
 
 function handleCreateJoint(jointType: string): void {
@@ -3912,7 +4555,7 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
     const marker = markerCreator.createMarker({
         position,
         normal,
-        groupId: selectedShape.id,
+        groupId: resolveOwningGroupId(selectedShape.id) ?? selectedShape.id,
         name: `Marker${createdMarkers.length + 1}`
     });
 
@@ -3952,7 +4595,7 @@ function createRefFrameFromPlacement(selectedShape: LoadedShape, position: Vec3,
     const refFrame: MbsRefFrameEntity = {
         id: nextEntityId('refMarker', createdRefFrames.size),
         name: `RefMarker${createdRefFrames.size + 1}`,
-        groupId: selectedShape.id,
+        groupId: resolveOwningGroupId(selectedShape.id) ?? selectedShape.id,
         position: cloneVec3(position),
         orientation: createOrientationFromNormal(normal),
         relatedMarkerId: relatedMarker.id,
@@ -3988,7 +4631,7 @@ function createDesignPointFromPlacement(selectedShape: LoadedShape, position: Ve
     const designPoint: MbsDesignPointEntity = {
         id: nextEntityId('designPoint', mbsDesignPoints.size),
         name: `DesignPoint${mbsDesignPoints.size + 1}`,
-        groupId: selectedShape.id,
+        groupId: resolveOwningGroupId(selectedShape.id) ?? selectedShape.id,
         position: cloneVec3(position),
         direction: normalizeVector(cloneVec3(normal)) ?? { x: 0, y: 0, z: 1 },
         markerRefId: latestFrame?.id,
@@ -4123,7 +4766,14 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             break;
         }
         case 'createChildGroup': {
-            const parentGroupId = Array.from(mbsGroups.keys()).at(-1);
+            const parentGroupId = getActiveGroupId();
+            if (!parentGroupId) {
+                vscode.postMessage({
+                    command: 'alert',
+                    text: 'Select a parent group first.'
+                });
+                return;
+            }
             handleCreateGroup(parentGroupId);
             break;
         }
@@ -4337,21 +4987,9 @@ async function initViewer(): Promise<void> {
         // Listen for selection changes from 3D viewer
         viewer.onSelectionChange((event) => {
             if (event.type === 'select' && event.objectId) {
-                // Map mesh ID to shape ID
-                const shapeId = meshIdToShapeId.get(event.objectId);
-                if (shapeId) {
-                    selectShape(shapeId, true); // fromViewer = true to avoid selection loop
-                } else {
-                    console.warn('[Viewer Selection] No shape ID found for mesh:', event.objectId);
-                }
+                syncSelectionFromViewer(event.objectId);
             } else if (event.type === 'deselect') {
-                // Clear selection in tree
-                const prevSelected = document.querySelector('.tree-node.selected');
-                if (prevSelected) {
-                    prevSelected.classList.remove('selected');
-                }
-                selectedShapeId = null;
-                updatePropertiesPanel(null);
+                syncSelectionFromViewer(null);
             }
         });
 

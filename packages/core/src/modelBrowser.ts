@@ -7,6 +7,15 @@ export interface BrowserShapeInput {
     children?: BrowserShapeInput[];
 }
 
+export interface BrowserGroupInput {
+    id: string;
+    name: string;
+    type: 'group';
+    children?: BrowserObjectInput[];
+}
+
+export type BrowserObjectInput = BrowserShapeInput | BrowserGroupInput;
+
 export interface BrowserNamedEntityInput {
     id: string;
     name: string;
@@ -15,6 +24,7 @@ export interface BrowserNamedEntityInput {
 export type ModelBrowserNodeKind =
     | 'category'
     | 'ground'
+    | 'group'
     | 'assembly'
     | 'part'
     | 'solid'
@@ -28,11 +38,13 @@ export interface ModelBrowserNode {
     label: string;
     kind: ModelBrowserNodeKind;
     shapeId?: string;
+    groupId?: string;
     children?: ModelBrowserNode[];
 }
 
 export interface BuildModelBrowserTreeInput {
-    shapes: BrowserShapeInput[];
+    shapes?: BrowserShapeInput[];
+    objects?: BrowserObjectInput[];
     includeGround?: boolean;
     connections?: BrowserNamedEntityInput[];
     motions?: BrowserNamedEntityInput[];
@@ -66,6 +78,20 @@ function mapShapeNode(shape: BrowserShapeInput): ModelBrowserNode {
     };
 }
 
+function mapObjectNode(node: BrowserObjectInput): ModelBrowserNode {
+    if (node.type === 'group') {
+        return {
+            id: `group_${node.id}`,
+            kind: 'group',
+            label: normalizeLabel(node.name),
+            groupId: node.id,
+            children: node.children?.map(mapObjectNode)
+        };
+    }
+
+    return mapShapeNode(node);
+}
+
 function mapNamedEntities(
     items: BrowserNamedEntityInput[] | undefined,
     kind: Extract<ModelBrowserNodeKind, 'connection' | 'motion' | 'force' | 'material'>,
@@ -83,6 +109,7 @@ function mapNamedEntities(
 
 export function buildModelBrowserTree(input: BuildModelBrowserTreeInput): ModelBrowserNode[] {
     const includeGround = input.includeGround ?? true;
+    const objectInputs = input.objects ?? input.shapes ?? [];
 
     const objectChildren: ModelBrowserNode[] = [];
     if (includeGround) {
@@ -92,7 +119,7 @@ export function buildModelBrowserTree(input: BuildModelBrowserTreeInput): ModelB
             label: 'Ground'
         });
     }
-    objectChildren.push(...input.shapes.map(mapShapeNode));
+    objectChildren.push(...objectInputs.map(mapObjectNode));
 
     return [
         {

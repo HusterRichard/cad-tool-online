@@ -70,4 +70,49 @@ describe('buildModelBrowserTree', () => {
         ]);
     });
 
+    it('supports hierarchical group nodes as first-class object nodes', () => {
+        const tree = buildModelBrowserTree({
+            includeGround: false,
+            objects: [
+                {
+                    id: 'g-root',
+                    name: 'Base_Assembly',
+                    type: 'group',
+                    children: [
+                        {
+                            id: 'g-child',
+                            name: 'Motor_Group',
+                            type: 'group',
+                            children: [
+                                { id: 'p-1', name: 'motor_shell', type: 'part' }
+                            ]
+                        },
+                        { id: 'p-2', name: 'base_plate', type: 'part' }
+                    ]
+                }
+            ]
+        });
+
+        const objects = tree[0];
+        expect(objects.children).toEqual([
+            expect.objectContaining({
+                kind: 'group',
+                groupId: 'g-root',
+                label: 'Base Assembly',
+                children: [
+                    expect.objectContaining({
+                        kind: 'group',
+                        groupId: 'g-child',
+                        label: 'Motor Group'
+                    }),
+                    expect.objectContaining({
+                        kind: 'part',
+                        shapeId: 'p-2',
+                        label: 'base plate'
+                    })
+                ]
+            })
+        ]);
+    });
+
 });

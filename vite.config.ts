@@ -6,12 +6,12 @@ const wasmDir = resolve(__dirname, 'packages/geo/wasm');
 const distWasmDir = resolve(__dirname, 'dist/wasm');
 
 export default defineConfig({
+    base: './',
     build: {
         outDir: 'dist/webview',
         lib: {
             entry: resolve(__dirname, 'src/webview/main.ts'),
-            name: 'CadToolWebview',
-            formats: ['iife'],
+            formats: ['es'],
             fileName: () => 'webview.js'
         },
         rollupOptions: {
@@ -23,6 +23,9 @@ export default defineConfig({
         sourcemap: true,
         minify: 'esbuild',
         emptyOutDir: false
+    },
+    worker: {
+        format: 'es'
     },
     resolve: {
         alias: {
