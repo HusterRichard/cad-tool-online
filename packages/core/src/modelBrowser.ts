@@ -52,6 +52,29 @@ export interface BuildModelBrowserTreeInput {
     materials?: BrowserNamedEntityInput[];
 }
 
+export function flattenTopLevelAssemblyShapes<T extends { type: string; children?: T[] }>(shapes: T[]): T[] {
+    return shapes.flatMap((shape) => (
+        shape.type === 'assembly' && shape.children && shape.children.length > 0
+            ? shape.children
+            : [shape]
+    ));
+}
+
+export function collectLeafShapeIds<T extends { id: string; children?: T[] }>(shapeOrShapes: T | T[]): string[] {
+    const shapes = Array.isArray(shapeOrShapes) ? shapeOrShapes : [shapeOrShapes];
+    const leafIds: string[] = [];
+    const visit = (shape: T): void => {
+        if (shape.children && shape.children.length > 0) {
+            shape.children.forEach(visit);
+            return;
+        }
+        leafIds.push(shape.id);
+    };
+
+    shapes.forEach(visit);
+    return leafIds;
+}
+
 const CATEGORY_LABELS = {
     objects: '\u7269\u4f53',
     connections: '\u8fde\u63a5',

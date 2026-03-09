@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildModelBrowserTree } from '../src/modelBrowser';
+import {
+    buildModelBrowserTree,
+    collectLeafShapeIds,
+    flattenTopLevelAssemblyShapes
+} from '../src/modelBrowser';
 
 describe('buildModelBrowserTree', () => {
     it('builds fixed categories and puts Ground + shape hierarchy under objects', () => {
@@ -113,6 +117,53 @@ describe('buildModelBrowserTree', () => {
                 ]
             })
         ]);
+    });
+
+    it('flattens only top-level assembly nodes for tree entry display', () => {
+        const flattened = flattenTopLevelAssemblyShapes([
+            {
+                id: 'root-asm',
+                name: 'root',
+                type: 'assembly' as const,
+                children: [
+                    {
+                        id: 'sub-asm',
+                        name: 'sub',
+                        type: 'assembly' as const,
+                        children: [
+                            { id: 'part-1', name: 'part_1', type: 'part' as const }
+                        ]
+                    },
+                    { id: 'part-2', name: 'part_2', type: 'part' as const }
+                ]
+            },
+            { id: 'loose-part', name: 'loose', type: 'part' as const }
+        ]);
+
+        expect(flattened.map((node) => node.id)).toEqual(['sub-asm', 'part-2', 'loose-part']);
+        expect(flattened[0].children?.map((node) => node.id)).toEqual(['part-1']);
+    });
+
+    it('collects all leaf part ids for nested assembly selection', () => {
+        const leafIds = collectLeafShapeIds({
+            id: 'root-asm',
+            name: 'root',
+            type: 'assembly' as const,
+            children: [
+                {
+                    id: 'sub-asm',
+                    name: 'sub',
+                    type: 'assembly' as const,
+                    children: [
+                        { id: 'part-1', name: 'part_1', type: 'part' as const },
+                        { id: 'part-2', name: 'part_2', type: 'part' as const }
+                    ]
+                },
+                { id: 'part-3', name: 'part_3', type: 'part' as const }
+            ]
+        });
+
+        expect(leafIds).toEqual(['part-1', 'part-2', 'part-3']);
     });
 
 });

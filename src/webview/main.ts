@@ -7,6 +7,8 @@ import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
     aggregateMassProperties,
     buildModelBrowserTree,
+    collectLeafShapeIds,
+    flattenTopLevelAssemblyShapes,
     getUniqueGroupName as getUniqueGroupNameFromState,
     markerCreator,
     renameGroupNode as renameGroupNodeInState,
@@ -468,8 +470,15 @@ function syncViewerSelectionFromState(): void {
     if (!viewer) {
         return;
     }
+
     const targetMeshIds = new Set(
-        getSelectedShapeIds()
+        Array.from(new Set(
+            getSelectedShapeIds()
+                .flatMap((shapeId) => {
+                    const shape = loadedShapes.get(shapeId);
+                    return shape ? collectLeafShapeIds(shape) : [shapeId];
+                })
+        ))
             .map((shapeId) => loadedShapes.get(shapeId)?.meshId)
             .filter((meshId): meshId is string => Boolean(meshId))
     );
@@ -2072,7 +2081,7 @@ function buildObjectTreeNodes(): ModelTreeNode[] {
     }
 
     return rootShapes.length > 0
-        ? rootShapes.map((shape) => toFallbackTreeShapeNode(shape))
+        ? flattenTopLevelAssemblyShapes(rootShapes).map((shape) => toFallbackTreeShapeNode(shape))
         : externalModelTreeShapes.map((shape) => ({
             id: `shape_${shape.id}`,
             label: shape.name,
