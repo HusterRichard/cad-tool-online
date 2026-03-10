@@ -8,12 +8,18 @@ import {
     aggregateMassProperties,
     buildModelBrowserTree,
     collectLeafShapeIds,
+    createCadtoolErrorNotification,
     flattenTopLevelAssemblyShapes,
     getUniqueGroupName as getUniqueGroupNameFromState,
     markerCreator,
+    resolveMarkerOwnerRef,
     renameGroupNode as renameGroupNodeInState,
     sanitizeGroupName,
+    validateReferenceMarkerCreation,
+    type CadtoolErrorCode,
+    type CadtoolRuntimeNotification,
     type BrowserNamedEntityInput,
+    type MarkerOwnerRef,
     type MbsMarker,
     type ModelBrowserNode
 } from '@cadtool-online/core';
@@ -81,6 +87,8 @@ const loadedShapes: Map<string, LoadedShape> = new Map();
 const rootShapes: LoadedShape[] = [];
 let selectedShapeId: string | null = null;
 let selectedGroupId: string | null = null;
+let selectedMarkerId: string | null = null;
+let selectedRefFrameId: string | null = null;
 let activeSelectionKey: string | null = null;
 const selectedNodeIds = new Set<string>();
 let treeContextMenuEl: HTMLDivElement | null = null;
@@ -95,10 +103,23 @@ const createdRefFrames = new Map<string, MbsRefFrameEntity>();
 const mbsDesignPoints = new Map<string, MbsDesignPointEntity>();
 const frameCreationHistory: Array<{ id: string; kind: FrameEntityKind }> = [];
 let editingFrameTarget: { id: string; kind: FrameEntityKind } | null = null;
+let markerCreationMode: 'fast' | 'standard' = 'fast';
+let refFrameCreationMode: 'fast' | 'standard' = 'fast';
+let markerFeatureInferenceEnabled = true;
+let pendingMarkerSize = 20;
+let pendingRefFrameBaseId: string | null = null;
+let pendingRefFrameTargetShapeId: string | null = null;
+let frameEditPickIntent: 'placement' | 'position' | 'direction' = 'placement';
+let markerDraftPickIntent: 'placement' | 'position' | 'direction' = 'placement';
+let markerDraft: MarkerDraft | null = null;
+let markerCreationPanelActive = false;
+let refFrameCreationPanelActive = false;
 
 type FrameEntityKind = 'marker' | 'refFrame';
-type CanvasInteractionMode = 'none' | 'createMarker' | 'createRefFrame' | 'createDesignPoint' | 'editFrame';
+type CanvasInteractionMode = 'none' | 'createMarker' | 'createDesignPoint' | 'editFrame';
 let canvasInteractionMode: CanvasInteractionMode = 'none';
+
+const DRAFT_MARKER_ID = '__draft_marker__';
 
 interface MbsRefFrameEntity {
     id: string;
@@ -106,8 +127,18 @@ interface MbsRefFrameEntity {
     groupId: string;
     position: Vec3;
     orientation: Mat3;
+    size: number;
+    visible: boolean;
     relatedMarkerId?: string;
     createdAt: string;
+}
+
+interface MarkerDraft {
+    name: string;
+    owner: MarkerOwnerRef;
+    position: Vec3;
+    orientation: Mat3;
+    size: number;
 }
 
 interface MbsDesignPointEntity {
@@ -156,8 +187,9 @@ interface GroupDesignState {
 }
 
 interface ModelTreeNode extends Omit<ModelBrowserNode, 'children'> {
-    kind: ModelBrowserNode['kind'] | 'group';
+    kind: ModelBrowserNode['kind'] | 'group' | 'marker' | 'refFrame';
     groupId?: string;
+    frameId?: string;
     selectionKey?: string;
     children?: ModelTreeNode[];
 }
@@ -288,16 +320,24 @@ function toGroupSelectionKey(groupId: string): string {
     return `group:${groupId}`;
 }
 
-function parseSelectionKey(selectionKey: string | null): { kind: 'shape' | 'group'; id: string } | null {
+function toMarkerSelectionKey(markerId: string): string {
+    return `marker:${markerId}`;
+}
+
+function toRefFrameSelectionKey(refFrameId: string): string {
+    return `refFrame:${refFrameId}`;
+}
+
+function parseSelectionKey(selectionKey: string | null): { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } | null {
     if (!selectionKey) {
         return null;
     }
     const [kind, ...rest] = selectionKey.split(':');
-    if ((kind !== 'shape' && kind !== 'group') || rest.length === 0) {
+    if ((kind !== 'shape' && kind !== 'group' && kind !== 'marker' && kind !== 'refFrame') || rest.length === 0) {
         return null;
     }
     return {
-        kind,
+        kind: kind as 'shape' | 'group' | 'marker' | 'refFrame',
         id: rest.join(':')
     };
 }
@@ -439,10 +479,50 @@ function resolveOwningGroupId(shapeId: string | undefined): string | undefined {
     return buildPartOwnerGroupMap().get(shapeId);
 }
 
+function resolveFrameOwnerForShape(shapeId: string): MarkerOwnerRef {
+    return resolveMarkerOwnerRef(shapeId, resolveOwningGroupId(shapeId) ?? null);
+}
+
+function buildMarkerDesignGroupMap(): Record<string, { id: string; parentGroupId: string | null }> {
+    return Object.fromEntries(
+        listGroups().map((group) => [
+            group.id,
+            {
+                id: group.id,
+                parentGroupId: group.parentGroupId
+            }
+        ])
+    );
+}
+
+function findOwningShapeForFrame(frameId: string, kind: FrameEntityKind): LoadedShape | null {
+    const ownerId = kind === 'marker'
+        ? createdMarkers.find((marker) => marker.id === frameId)?.groupId
+        : createdRefFrames.get(frameId)?.groupId;
+    if (!ownerId) {
+        return null;
+    }
+    if (loadedShapes.has(ownerId)) {
+        return loadedShapes.get(ownerId) ?? null;
+    }
+
+    const group = getGroupNode(ownerId);
+    if (!group) {
+        return null;
+    }
+
+    const candidatePartId = group.memberPartIds[0] ?? Array.from(collectGroupPartIdsRecursive(group.id))[0];
+    return candidatePartId ? (loadedShapes.get(candidatePartId) ?? null) : null;
+}
+
+function frameOwnerDisplayName(ownerId: string): string {
+    return getGroupNode(ownerId)?.name ?? loadedShapes.get(ownerId)?.name ?? ownerId;
+}
+
 function getSelectedShapeIds(): string[] {
     return Array.from(selectedNodeIds)
         .map((selectionKey) => parseSelectionKey(selectionKey))
-        .filter((entry): entry is { kind: 'shape' | 'group'; id: string } => Boolean(entry))
+        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'shape')
         .map((entry) => entry.id);
 }
@@ -450,8 +530,24 @@ function getSelectedShapeIds(): string[] {
 function getSelectedGroupIds(): string[] {
     return Array.from(selectedNodeIds)
         .map((selectionKey) => parseSelectionKey(selectionKey))
-        .filter((entry): entry is { kind: 'shape' | 'group'; id: string } => Boolean(entry))
+        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'group')
+        .map((entry) => entry.id);
+}
+
+function getSelectedMarkerIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'marker')
+        .map((entry) => entry.id);
+}
+
+function getSelectedRefFrameIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'refFrame')
         .map((entry) => entry.id);
 }
 
@@ -460,11 +556,29 @@ function getActiveGroupId(): string | null {
     return active?.kind === 'group' ? active.id : null;
 }
 
+function getActiveMarkerId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'marker' ? active.id : null;
+}
+
+function getActiveRefFrameId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'refFrame' ? active.id : null;
+}
+
 function updateTreeSelectionClasses(): void {
     document.querySelectorAll<HTMLElement>('.tree-node[data-selection-key]').forEach((node) => {
         const selectionKey = node.dataset.selectionKey ?? '';
         node.classList.toggle('selected', selectedNodeIds.has(selectionKey));
     });
+}
+
+function isMarkerId(id: string): boolean {
+    return createdMarkers.some((marker) => marker.id === id);
+}
+
+function isRefFrameId(id: string): boolean {
+    return createdRefFrames.has(id);
 }
 
 function collectMeshBackedShapeIds(shape: LoadedShape): string[] {
@@ -482,28 +596,32 @@ function syncViewerSelectionFromState(): void {
         return;
     }
 
-    const targetMeshIds = new Set(
-        Array.from(new Set(
-            getSelectedShapeIds()
-                .flatMap((shapeId) => {
-                    const shape = loadedShapes.get(shapeId);
-                    return shape ? collectMeshBackedShapeIds(shape) : [shapeId];
-                })
-        ))
-            .map((shapeId) => loadedShapes.get(shapeId)?.meshId)
-            .filter((meshId): meshId is string => Boolean(meshId))
-    );
-    const currentMeshIds = new Set(viewer.getSelectedIds());
+    const targetIds = new Set<string>();
+    Array.from(new Set(
+        getSelectedShapeIds()
+            .flatMap((shapeId) => {
+                const shape = loadedShapes.get(shapeId);
+                return shape ? collectMeshBackedShapeIds(shape) : [shapeId];
+            })
+    ))
+        .map((shapeId) => loadedShapes.get(shapeId)?.meshId)
+        .filter((meshId): meshId is string => Boolean(meshId))
+        .forEach((meshId) => targetIds.add(meshId));
+
+    getSelectedMarkerIds().forEach((markerId) => targetIds.add(markerId));
+    getSelectedRefFrameIds().forEach((refFrameId) => targetIds.add(refFrameId));
+
+    const currentIds = new Set(viewer.getSelectedIds());
     isSyncingViewerSelection = true;
     try {
-        currentMeshIds.forEach((meshId) => {
-            if (!targetMeshIds.has(meshId)) {
-                viewer.deselect(meshId);
+        currentIds.forEach((id) => {
+            if (!targetIds.has(id)) {
+                viewer.deselect(id);
             }
         });
-        targetMeshIds.forEach((meshId) => {
-            if (!currentMeshIds.has(meshId)) {
-                viewer.select(meshId);
+        targetIds.forEach((id) => {
+            if (!currentIds.has(id)) {
+                viewer.select(id);
             }
         });
     } finally {
@@ -678,17 +796,31 @@ function updateSelectionPropertiesPanel(): void {
         renderSelectedGroupProperties(active.id);
         return;
     }
+    if (active.kind === 'marker') {
+        renderMarkerPropertiesPanel(active.id);
+        return;
+    }
+    if (active.kind === 'refFrame') {
+        renderRefFramePropertiesPanel(active.id);
+        return;
+    }
     updatePropertiesPanel(active.id);
 }
 
 function selectSelection(
-    nextSelection: { kind: 'shape' | 'group'; id: string } | null,
+    nextSelection: { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } | null,
     options?: { additive?: boolean; toggle?: boolean; fromViewer?: boolean }
 ): void {
     const selectionKey = nextSelection
-        ? (nextSelection.kind === 'shape'
-            ? toShapeSelectionKey(nextSelection.id)
-            : toGroupSelectionKey(nextSelection.id))
+        ? (
+            nextSelection.kind === 'shape'
+                ? toShapeSelectionKey(nextSelection.id)
+                : nextSelection.kind === 'group'
+                    ? toGroupSelectionKey(nextSelection.id)
+                    : nextSelection.kind === 'marker'
+                        ? toMarkerSelectionKey(nextSelection.id)
+                        : toRefFrameSelectionKey(nextSelection.id)
+        )
         : null;
 
     if (!options?.additive) {
@@ -708,6 +840,8 @@ function selectSelection(
     const active = parseSelectionKey(activeSelectionKey);
     selectedShapeId = active?.kind === 'shape' ? active.id : null;
     selectedGroupId = active?.kind === 'group' ? active.id : null;
+    selectedMarkerId = active?.kind === 'marker' ? active.id : null;
+    selectedRefFrameId = active?.kind === 'refFrame' ? active.id : null;
     groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
 
     updateTreeSelectionClasses();
@@ -720,25 +854,79 @@ function selectSelection(
         rememberShapeSelection(selectedShapeId);
         vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
     }
+
+    if (refFrameCreationPanelActive) {
+        if (selectedMarkerId) {
+            pendingRefFrameBaseId = selectedMarkerId;
+            renderRefFrameCreationPanel();
+        } else if (selectedShapeId) {
+            pendingRefFrameTargetShapeId = selectedShapeId;
+            if (refFrameCreationMode === 'fast' && pendingRefFrameBaseId) {
+                createReferenceFrameFromSelection(pendingRefFrameBaseId, selectedShapeId);
+            } else {
+                renderRefFrameCreationPanel();
+            }
+        }
+    }
 }
 
-function syncSelectionFromViewer(activeMeshId: string | null): void {
-    const shapeIds = viewer?.getSelectedIds()
-        .map((meshId) => meshIdToShapeId.get(meshId))
-        .filter((shapeId): shapeId is string => Boolean(shapeId)) ?? [];
+function syncSelectionFromViewer(activeObjectId: string | null): void {
+    const selectedIds = viewer?.getSelectedIds() ?? [];
     selectedNodeIds.clear();
-    shapeIds.forEach((shapeId) => selectedNodeIds.add(toShapeSelectionKey(shapeId)));
-    const activeShapeId = activeMeshId ? (meshIdToShapeId.get(activeMeshId) ?? shapeIds.at(-1) ?? null) : (shapeIds.at(-1) ?? null);
-    activeSelectionKey = activeShapeId ? toShapeSelectionKey(activeShapeId) : null;
+    const selectionKeys = selectedIds.flatMap((id) => {
+        const shapeId = meshIdToShapeId.get(id);
+        if (shapeId) {
+            return [toShapeSelectionKey(shapeId)];
+        }
+        if (isMarkerId(id)) {
+            return [toMarkerSelectionKey(id)];
+        }
+        if (isRefFrameId(id)) {
+            return [toRefFrameSelectionKey(id)];
+        }
+        return [];
+    });
+    selectionKeys.forEach((selectionKey) => selectedNodeIds.add(selectionKey));
+
+    if (activeObjectId) {
+        const activeShapeId = meshIdToShapeId.get(activeObjectId);
+        if (activeShapeId) {
+            activeSelectionKey = toShapeSelectionKey(activeShapeId);
+        } else if (isMarkerId(activeObjectId)) {
+            activeSelectionKey = toMarkerSelectionKey(activeObjectId);
+        } else if (isRefFrameId(activeObjectId)) {
+            activeSelectionKey = toRefFrameSelectionKey(activeObjectId);
+        } else {
+            activeSelectionKey = selectionKeys.at(-1) ?? null;
+        }
+    } else {
+        activeSelectionKey = selectionKeys.at(-1) ?? null;
+    }
     const active = parseSelectionKey(activeSelectionKey);
     selectedShapeId = active?.kind === 'shape' ? active.id : null;
-    selectedGroupId = null;
+    selectedGroupId = active?.kind === 'group' ? active.id : null;
+    selectedMarkerId = active?.kind === 'marker' ? active.id : null;
+    selectedRefFrameId = active?.kind === 'refFrame' ? active.id : null;
     groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
     updateTreeSelectionClasses();
     updateSelectionPropertiesPanel();
     if (selectedShapeId) {
         rememberShapeSelection(selectedShapeId);
         vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
+    }
+
+    if (refFrameCreationPanelActive) {
+        if (selectedMarkerId) {
+            pendingRefFrameBaseId = selectedMarkerId;
+            renderRefFrameCreationPanel();
+        } else if (selectedShapeId) {
+            pendingRefFrameTargetShapeId = selectedShapeId;
+            if (refFrameCreationMode === 'fast' && pendingRefFrameBaseId) {
+                createReferenceFrameFromSelection(pendingRefFrameBaseId, selectedShapeId);
+            } else {
+                renderRefFrameCreationPanel();
+            }
+        }
     }
 }
 
@@ -1326,6 +1514,62 @@ function setStatusInfo(text: string): void {
     if (infoEl) {
         infoEl.textContent = text;
     }
+}
+
+function postNotification(notification: CadtoolRuntimeNotification): void {
+    vscode.postMessage({
+        command: 'notify',
+        ...notification
+    });
+}
+
+function notifyInfo(text: string, options: { detail?: string; statusText?: string; statusInfo?: string } = {}): void {
+    if (options.statusText) {
+        setStatus(options.statusText);
+    }
+    if (typeof options.statusInfo === 'string') {
+        setStatusInfo(options.statusInfo);
+    }
+    postNotification({
+        level: 'info',
+        text,
+        detail: options.detail
+    });
+}
+
+function notifyWarning(text: string, options: { detail?: string; statusText?: string; statusInfo?: string } = {}): void {
+    if (options.statusText) {
+        setStatus(options.statusText);
+    }
+    if (typeof options.statusInfo === 'string') {
+        setStatusInfo(options.statusInfo);
+    }
+    postNotification({
+        level: 'warning',
+        text,
+        detail: options.detail
+    });
+}
+
+function notifyError(
+    code: CadtoolErrorCode,
+    detail: string,
+    options: {
+        text?: string;
+        statusText?: string;
+        statusInfo?: string;
+    } = {}
+): void {
+    if (options.statusText) {
+        setStatus(options.statusText);
+    }
+    if (typeof options.statusInfo === 'string') {
+        setStatusInfo(options.statusInfo);
+    }
+    postNotification(createCadtoolErrorNotification(code, {
+        detail,
+        text: options.text
+    }));
 }
 
 function identityRigidTransform(): RigidTransform {
@@ -2032,6 +2276,28 @@ function treeIconPath(fileName: string): string | null {
     return `${base}/${fileName}`;
 }
 
+function buildOwnedFrameNodes(ownerId: string): ModelTreeNode[] {
+    const markerNodes = createdMarkers
+        .filter((marker) => marker.groupId === ownerId)
+        .map((marker) => ({
+            id: `marker_${marker.id}`,
+            kind: 'marker' as const,
+            label: marker.name,
+            frameId: marker.id,
+            selectionKey: toMarkerSelectionKey(marker.id)
+        }));
+    const refFrameNodes = Array.from(createdRefFrames.values())
+        .filter((refFrame) => refFrame.groupId === ownerId)
+        .map((refFrame) => ({
+            id: `refFrame_${refFrame.id}`,
+            kind: 'refFrame' as const,
+            label: refFrame.name,
+            frameId: refFrame.id,
+            selectionKey: toRefFrameSelectionKey(refFrame.id)
+        }));
+    return [...markerNodes, ...refFrameNodes];
+}
+
 function toGroupTreeShapeNode(shapeId: string): ModelTreeNode | null {
     const shape = loadedShapes.get(shapeId);
     if (!shape) {
@@ -2042,7 +2308,8 @@ function toGroupTreeShapeNode(shapeId: string): ModelTreeNode | null {
         kind: shape.type,
         label: shape.name,
         shapeId: shape.id,
-        selectionKey: toShapeSelectionKey(shape.id)
+        selectionKey: toShapeSelectionKey(shape.id),
+        children: buildOwnedFrameNodes(shape.id)
     };
 }
 
@@ -2053,7 +2320,10 @@ function toFallbackTreeShapeNode(shape: LoadedShape): ModelTreeNode {
         label: shape.name,
         shapeId: shape.id,
         selectionKey: toShapeSelectionKey(shape.id),
-        children: shape.children?.map((child) => toFallbackTreeShapeNode(child))
+        children: [
+            ...(shape.children?.map((child) => toFallbackTreeShapeNode(child)) ?? []),
+            ...buildOwnedFrameNodes(shape.id)
+        ]
     };
 }
 
@@ -2069,7 +2339,8 @@ function toGroupTreeNode(groupId: string): ModelTreeNode | null {
             .filter((node): node is ModelTreeNode => Boolean(node)),
         ...group.memberPartIds
             .map((shapeId) => toGroupTreeShapeNode(shapeId))
-            .filter((node): node is ModelTreeNode => Boolean(node))
+            .filter((node): node is ModelTreeNode => Boolean(node)),
+        ...buildOwnedFrameNodes(group.id)
     ];
 
     return {
@@ -2166,6 +2437,10 @@ function iconForNode(node: ModelTreeNode): string {
             return 'P';
         case 'solid':
             return 'S';
+        case 'marker':
+            return 'M';
+        case 'refFrame':
+            return 'R';
         case 'ground':
             return 'G';
         case 'connection':
@@ -2208,6 +2483,10 @@ function iconAssetForNode(node: ModelTreeNode): string | null {
             return treeIconPath('model_tree_part.png');
         case 'solid':
             return treeIconPath('model_tree_subbody.png');
+        case 'marker':
+            return treeIconPath('cad_place_marker.png');
+        case 'refFrame':
+            return treeIconPath('cad_place_refmarker.png');
         case 'connection':
             return treeIconPath('model_tree_cad_unknown_cnt.png');
         case 'motion':
@@ -2316,6 +2595,12 @@ function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: st
         ];
     }
 
+    if (nodeData.frameId) {
+        return [
+            { label: '删除', action: 'deleteFrame' }
+        ];
+    }
+
     return [];
 }
 
@@ -2377,6 +2662,9 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
     if (nodeData.groupId) {
         node.dataset.groupId = nodeData.groupId;
+    }
+    if (nodeData.frameId) {
+        node.dataset.frameId = nodeData.frameId;
     }
     if (nodeData.selectionKey) {
         node.dataset.selectionKey = nodeData.selectionKey;
@@ -2864,6 +3152,143 @@ function renderPropertiesPanel(shape: LoadedShape, massState: MassPropertiesView
     bindMaterialSelect(propsEl);
 }
 
+function syncFrameEntityToViewer(kind: FrameEntityKind, id: string): void {
+    if (!viewer) {
+        return;
+    }
+
+    if (kind === 'marker') {
+        const marker = createdMarkers.find((item) => item.id === id);
+        if (!marker) {
+            return;
+        }
+        viewer.updateFrame({
+            id: marker.id,
+            name: marker.name,
+            position: marker.position,
+            orientation: marker.orientation,
+            size: marker.size,
+            visible: marker.visible,
+            isPrimary: true
+        });
+        return;
+    }
+
+    const refFrame = createdRefFrames.get(id);
+    if (!refFrame) {
+        return;
+    }
+    viewer.updateFrame({
+        id: refFrame.id,
+        name: refFrame.name,
+        position: refFrame.position,
+        orientation: refFrame.orientation,
+        size: refFrame.size,
+        visible: refFrame.visible,
+        isPrimary: false
+    });
+}
+
+function renderMarkerPropertiesPanel(markerId: string): void {
+    const marker = createdMarkers.find((item) => item.id === markerId);
+    const propsEl = document.getElementById('properties-panel');
+    if (!marker || !propsEl) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    setPanelMode('properties', '属性-标架');
+    const direction = orientationToDirection(marker.orientation);
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('prop-marker-name', marker.name)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-marker-visible">可见性</label>
+            <input id="prop-marker-visible" type="checkbox"${marker.visible ? ' checked' : ''} />
+        </div>
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-marker-size">图标大小</label>
+            <input id="prop-marker-size" class="opt-input" type="number" min="1" step="1" value="${Math.max(1, marker.size > 0 ? marker.size : pendingMarkerSize)}" />
+        </div>
+        ${buildSeparator()}
+        ${buildVec3Input('prop-marker-pos', '位置（全局坐标）', marker.position.x, marker.position.y, marker.position.z)}
+        ${buildSeparator()}
+        ${buildVec3Input('prop-marker-dir', '方向（单位向量）', direction.x, direction.y, direction.z)}
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="prop-marker-pick-position" class="opt-btn-secondary">拾取位置</button>
+            <button id="prop-marker-pick-direction" class="opt-btn-secondary">拾取方向</button>
+        </div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="prop-marker-save" class="opt-btn-primary">保存修改</button>
+        </div>
+    </div>`;
+
+    document.getElementById('prop-marker-visible')?.addEventListener('change', (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        marker.setVisible(target.checked);
+        viewer?.setFrameVisible(marker.id, marker.visible);
+    });
+
+    document.getElementById('prop-marker-save')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('prop-marker-name') as HTMLInputElement | null;
+        const sizeInput = document.getElementById('prop-marker-size') as HTMLInputElement | null;
+        const directionInput = normalizeVector(readVec3FromInputs('prop-marker-dir')) ?? { x: 0, y: 0, z: 1 };
+        marker.name = nameInput?.value?.trim() || marker.name;
+        marker.setSize(Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize));
+        const nextPosition = readVec3FromInputs('prop-marker-pos');
+        marker.setPosition(nextPosition.x, nextPosition.y, nextPosition.z);
+        marker.setOrientation(createOrientationFromNormal(directionInput));
+        syncFrameEntityToViewer('marker', marker.id);
+        updateModelTree();
+        renderMarkerPropertiesPanel(marker.id);
+    });
+
+    document.getElementById('prop-marker-pick-position')?.addEventListener('click', () => {
+        startFrameEditModeForTarget(marker.id, 'marker', 'position');
+    });
+    document.getElementById('prop-marker-pick-direction')?.addEventListener('click', () => {
+        startFrameEditModeForTarget(marker.id, 'marker', 'direction');
+    });
+}
+
+function renderRefFramePropertiesPanel(refFrameId: string): void {
+    const refFrame = createdRefFrames.get(refFrameId);
+    const propsEl = document.getElementById('properties-panel');
+    if (!refFrame || !propsEl) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    const direction = orientationToDirection(refFrame.orientation);
+    const relatedMarker = refFrame.relatedMarkerId
+        ? createdMarkers.find((marker) => marker.id === refFrame.relatedMarkerId)
+        : null;
+
+    setPanelMode('properties', '属性-参考标架');
+    propsEl.innerHTML = `<div class="opt-section">
+        <div class="property-section-header">基本属性</div>
+        ${createPropertyRow('名称', refFrame.name, { boxed: true })}
+        ${createPropertyRow('基本标架', relatedMarker?.name ?? '(none)', { boxed: true })}
+        ${createPropertyRow('宿主对象', frameOwnerDisplayName(refFrame.groupId), { boxed: true })}
+        ${createPropertyRow('位置', formatVec3(refFrame.position))}
+        ${createPropertyRow('方向', formatVec3(direction))}
+        <div class="property-separator"></div>
+        <div class="opt-row">
+            <label for="prop-ref-frame-visible">可见性</label>
+            <input id="prop-ref-frame-visible" type="checkbox"${refFrame.visible ? ' checked' : ''} />
+        </div>
+    </div>`;
+
+    document.getElementById('prop-ref-frame-visible')?.addEventListener('change', (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        refFrame.visible = target.checked;
+        viewer?.setFrameVisible(refFrame.id, refFrame.visible);
+    });
+}
+
 function updatePropertiesPanel(shapeId: string | null): void {
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
@@ -3313,10 +3738,11 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
 
     } catch (error) {
         console.error('Failed to load STEP file:', error);
-        setStatus('Error loading file');
-        vscode.postMessage({
-            command: 'alert',
-            text: `Failed to load STEP file: ${error}`
+        const detail = error instanceof Error ? error.message : String(error);
+        notifyError('PARSE_FILE_FAILED', detail, {
+            text: 'Failed to load STEP file.',
+            statusText: 'Error loading file',
+            statusInfo: 'STEP import failed.'
         });
     } finally {
         hideLoading();
@@ -3457,10 +3883,11 @@ function exportModel(): void {
 
     } catch (error) {
         console.error('Failed to export model:', error);
-        setStatus('Export failed');
-        vscode.postMessage({
-            command: 'alert',
-            text: `Failed to export model: ${error}`
+        const detail = error instanceof Error ? error.message : String(error);
+        notifyError('ERR_GENERATE_FILE_FAILED', detail, {
+            text: 'Failed to export model.',
+            statusText: 'Export failed',
+            statusInfo: 'Model export failed.'
         });
     }
 }
@@ -3478,6 +3905,8 @@ interface CadtoolConfigExportData {
         groupRef: string;
         position?: Vec3;
         direction?: Vec3;
+        size?: number;
+        visible?: boolean;
         refMarker?: boolean;
         relatedMarkerRef?: string;
     }>;
@@ -3689,9 +4118,37 @@ function setCanvasCursor(cursor: string): void {
     }
 }
 
+function clearMarkerDraftPreview(): void {
+    markerDraft = null;
+    if (viewer) {
+        viewer.removeFrame(DRAFT_MARKER_ID);
+    }
+}
+
+function syncMarkerDraftPreview(): void {
+    if (!viewer || !markerDraft) {
+        return;
+    }
+
+    viewer.addFrame({
+        id: DRAFT_MARKER_ID,
+        name: markerDraft.name,
+        position: markerDraft.position,
+        orientation: markerDraft.orientation,
+        size: markerDraft.size,
+        visible: true,
+        isPrimary: true
+    });
+}
+
 function resetCanvasInteraction(): void {
     editingFrameTarget = null;
+    frameEditPickIntent = 'placement';
+    markerDraftPickIntent = 'placement';
     canvasInteractionMode = 'none';
+    markerCreationPanelActive = false;
+    refFrameCreationPanelActive = false;
+    clearMarkerDraftPreview();
     setCanvasCursor('default');
 }
 
@@ -3887,6 +4344,8 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const parsedPosition = parseVector3(entry.position);
         const parsedDirection = normalizeVector(parseVector3(entry.direction));
+        const parsedSize = typeof entry.size === 'number' && Number.isFinite(entry.size) ? entry.size : -1;
+        const parsedVisible = typeof entry.visible === 'boolean' ? entry.visible : true;
 
         if (entry.position !== undefined && !parsedPosition) {
             addImportWarning(stats, `marker "${name}" has invalid position; defaulting to (0,0,0).`);
@@ -3916,9 +4375,11 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             const refFrame: MbsRefFrameEntity = {
                 id: nextEntityId('refMarker', createdRefFrames.size),
                 name,
-                groupId: relatedMarker?.groupId ?? groupId,
+                groupId,
                 position: resolvedPosition,
                 orientation: resolvedOrientation,
+                size: parsedSize > 0 ? parsedSize : (relatedMarker?.size ?? pendingMarkerSize),
+                visible: parsedVisible,
                 relatedMarkerId: relatedMarker?.id ?? relatedMarkerId,
                 createdAt: new Date().toISOString()
             };
@@ -3934,6 +4395,8 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                     name: refFrame.name,
                     position: refFrame.position,
                     orientation: refFrame.orientation,
+                    size: refFrame.size,
+                    visible: refFrame.visible,
                     isPrimary: false
                 });
             }
@@ -3947,6 +4410,8 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                 groupId,
                 name
             });
+            marker.setSize(parsedSize);
+            marker.setVisible(parsedVisible);
 
             createdMarkers.push(marker);
             markerNameToId.set(marker.name, marker.id);
@@ -3956,6 +4421,8 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                     name: marker.name,
                     position: marker.position,
                     orientation: marker.orientation,
+                    size: marker.size,
+                    visible: marker.visible,
                     isPrimary: true
                 });
             }
@@ -4187,19 +4654,16 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
     );
 
     const summary = `CADTool config import complete${sourceLabel}: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}, ribSlices=${stats.ribSlices}, fluidPorts=${stats.fluidPorts}, skipped=${stats.skipped}.`;
-    vscode.postMessage({
-        command: 'alert',
-        text: summary
-    });
+    notifyInfo(summary);
 
     if (stats.warningCount > 0) {
         const hiddenWarnings = stats.warningCount - stats.warnings.length;
         const warningText = hiddenWarnings > 0
             ? `${stats.warnings.join(' | ')} | ... and ${hiddenWarnings} more warning(s).`
             : stats.warnings.join(' | ');
-        vscode.postMessage({
-            command: 'alert',
-            text: `CADTool config import warnings (${stats.warningCount}): ${warningText}`
+        notifyWarning(`CADTool config import warnings (${stats.warningCount}).`, {
+            detail: warningText,
+            statusInfo: `CADTool config import completed with ${stats.warningCount} warning(s).`
         });
     }
 }
@@ -4231,7 +4695,9 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
         name: marker.name,
         groupRef: resolveGroupRefName(marker.groupId),
         position: cloneVec3(marker.position),
-        direction: orientationToDirection(marker.orientation)
+        direction: orientationToDirection(marker.orientation),
+        size: marker.size,
+        visible: marker.visible
     }));
 
     const refMarkerEntries = Array.from(createdRefFrames.values()).map((refFrame) => ({
@@ -4239,6 +4705,8 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
         groupRef: resolveGroupRefName(refFrame.groupId),
         position: cloneVec3(refFrame.position),
         direction: orientationToDirection(refFrame.orientation),
+        size: refFrame.size,
+        visible: refFrame.visible,
         refMarker: true,
         relatedMarkerRef: refFrame.relatedMarkerId
             ? (frameIdToName.get(refFrame.relatedMarkerId) ?? refFrame.relatedMarkerId)
@@ -4308,10 +4776,11 @@ function exportCadtoolConfig(): void {
         );
     } catch (error) {
         console.error('Failed to export CADTool config:', error);
-        setStatus('CADTool config export failed');
-        vscode.postMessage({
-            command: 'alert',
-            text: `Failed to export CADTool config: ${error}`
+        const detail = error instanceof Error ? error.message : String(error);
+        notifyError('ERR_GENERATE_FILE_FAILED', detail, {
+            text: 'Failed to export CADTool config.',
+            statusText: 'CADTool config export failed',
+            statusInfo: 'CADTool config export failed.'
         });
     }
 }
@@ -4737,6 +5206,17 @@ function buildModeSwitch(): string {
     </div>`;
 }
 
+function bindModeSwitchEvents(container: HTMLElement): void {
+    container.querySelectorAll<HTMLElement>('[data-mode]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const mode = button.dataset.mode;
+            container.querySelectorAll<HTMLElement>('[data-mode]').forEach((item) => {
+                item.className = item.dataset.mode === mode ? 'opt-mode-btn-active' : 'opt-mode-btn';
+            });
+        });
+    });
+}
+
 function buildSectionHeader(text: string): string {
     return `<div class="opt-section-header">${text}</div>`;
 }
@@ -4746,6 +5226,17 @@ function buildTabBar(tabs: Array<{ id: string; text: string; active: boolean }>)
         `<button class="${tab.active ? 'opt-tab-active' : 'opt-tab'}" data-tab="${tab.id}">${tab.text}</button>`
     ).join('');
     return `<div class="opt-tab-bar">${tabsHtml}</div>`;
+}
+
+function bindTabBarEvents(container: HTMLElement): void {
+    container.querySelectorAll<HTMLElement>('[data-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const tabId = button.dataset.tab;
+            container.querySelectorAll<HTMLElement>('[data-tab]').forEach((item) => {
+                item.className = item.dataset.tab === tabId ? 'opt-tab-active' : 'opt-tab';
+            });
+        });
+    });
 }
 
 function buildSelectedList(items: Array<{ name: string }>): string {
@@ -4759,6 +5250,9 @@ function buildSelectedList(items: Array<{ name: string }>): string {
 }
 
 function closeOptionsPanel(): void {
+    if (canvasInteractionMode !== 'none' || markerCreationPanelActive || refFrameCreationPanelActive) {
+        resetCanvasInteraction();
+    }
     setPanelMode('properties', '属性');
     updateSelectionPropertiesPanel();
 }
@@ -4933,6 +5427,245 @@ function renderFrameOptionsPanel(title: string, name: string, position: Vec3, di
     </div>`;
 
     bindModeSwitchEvents(propsEl);
+}
+
+function finalizeMarkerDraft(): void {
+    if (!markerDraft) {
+        vscode.postMessage({
+            command: 'alert',
+            text: '请先在三维视图中拾取标架位置。'
+        });
+        return;
+    }
+
+    const nameInput = document.getElementById('opt-marker-name') as HTMLInputElement | null;
+    const sizeInput = document.getElementById('opt-marker-size') as HTMLInputElement | null;
+    const direction = normalizeVector(readVec3FromInputs('opt-marker-dir')) ?? orientationToDirection(markerDraft.orientation);
+    const position = readVec3FromInputs('opt-marker-pos');
+    const size = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${markerDraft.size}`) || markerDraft.size);
+    const marker = markerCreator.createMarker({
+        position,
+        normal: direction,
+        groupId: markerDraft.owner.id,
+        name: nameInput?.value?.trim() || markerDraft.name
+    });
+    marker.setSize(size);
+    marker.setVisible(true);
+
+    createdMarkers.push(marker);
+    pendingMarkerSize = size;
+    clearMarkerDraftPreview();
+    recordFrameCreation(marker.id, 'marker');
+    viewer?.addFrame({
+        id: marker.id,
+        name: marker.name,
+        position: marker.position,
+        orientation: marker.orientation,
+        size: marker.size,
+        visible: marker.visible,
+        isPrimary: true
+    });
+    updateModelTree();
+    selectSelection({ kind: 'marker', id: marker.id });
+    renderMarkerCreationPanel();
+}
+
+function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: string): boolean {
+    const relatedMarker = createdMarkers.find((marker) => marker.id === baseMarkerId);
+    const targetShape = loadedShapes.get(targetShapeId);
+    if (!relatedMarker || !targetShape) {
+        return false;
+    }
+
+    const targetOwner = resolveFrameOwnerForShape(targetShape.id);
+    const validation = validateReferenceMarkerCreation(
+        relatedMarker.groupId,
+        targetOwner.id,
+        buildMarkerDesignGroupMap()
+    );
+    if (!validation.valid) {
+        vscode.postMessage({
+            command: 'alert',
+            text: validation.reason ?? '参考标架创建失败。'
+        });
+        return false;
+    }
+
+    const refFrame: MbsRefFrameEntity = {
+        id: nextEntityId('refMarker', createdRefFrames.size),
+        name: `RefMarker${createdRefFrames.size + 1}`,
+        groupId: targetOwner.id,
+        position: cloneVec3(relatedMarker.position),
+        orientation: cloneMat3(relatedMarker.orientation),
+        size: relatedMarker.size,
+        visible: true,
+        relatedMarkerId: relatedMarker.id,
+        createdAt: new Date().toISOString()
+    };
+    createdRefFrames.set(refFrame.id, refFrame);
+    relatedMarker.appendRefMarker(refFrame.id);
+    recordFrameCreation(refFrame.id, 'refFrame');
+    viewer?.addFrame({
+        id: refFrame.id,
+        name: refFrame.name,
+        position: refFrame.position,
+        orientation: refFrame.orientation,
+        size: refFrame.size,
+        visible: refFrame.visible,
+        isPrimary: false
+    });
+    updateModelTree();
+    selectSelection({ kind: 'refFrame', id: refFrame.id });
+    renderRefFrameCreationPanel();
+    return true;
+}
+
+function renderMarkerCreationPanel(): void {
+    markerCreationPanelActive = true;
+    setPanelMode('options', '选项-标架');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) {
+        return;
+    }
+
+    const draftPosition = markerDraft?.position ?? { x: 0, y: 0, z: 0 };
+    const draftDirection = markerDraft ? orientationToDirection(markerDraft.orientation) : { x: 0, y: 0, z: 1 };
+    const modeRow = `<div class="opt-mode-row">
+        <button id="opt-marker-mode-fast" class="${markerCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">闪电模式</button>
+        <button id="opt-marker-mode-standard" class="${markerCreationMode === 'standard' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">标准模式</button>
+    </div>`;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-marker-name', markerDraft?.name ?? `Marker${createdMarkers.length + 1}`)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-marker-size">图标大小</label>
+            <input id="opt-marker-size" class="opt-input" type="number" min="1" step="1" value="${Math.max(1, markerDraft?.size ?? pendingMarkerSize)}" />
+        </div>
+        ${buildSeparator()}
+        ${modeRow}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-marker-inference">智能推断</label>
+            <input id="opt-marker-inference" type="checkbox"${markerFeatureInferenceEnabled ? ' checked' : ''} />
+        </div>
+        ${markerCreationMode === 'standard' ? `${buildSeparator()}
+        ${buildVec3Input('opt-marker-pos', '位置（全局坐标）', draftPosition.x, draftPosition.y, draftPosition.z)}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-marker-dir', '方向（单位向量）', draftDirection.x, draftDirection.y, draftDirection.z)}
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-marker-pick-placement" class="opt-btn-secondary">拾取放置</button>
+            <button id="opt-marker-pick-position" class="opt-btn-secondary">拾取位置</button>
+            <button id="opt-marker-pick-direction" class="opt-btn-secondary">拾取方向</button>
+        </div>
+        ${buildSeparator()}
+        ${buildActionButtons('opt-marker-confirm', '添加', 'opt-marker-cancel')}` : `${buildSeparator()}
+        <div class="opt-hint">当前为闪电模式，拾取面后立即创建标架。</div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-marker-cancel" class="opt-btn-secondary">取消</button>
+        </div>`}
+    </div>`;
+
+    document.getElementById('opt-marker-mode-fast')?.addEventListener('click', () => {
+        markerCreationMode = 'fast';
+        renderMarkerCreationPanel();
+    });
+    document.getElementById('opt-marker-mode-standard')?.addEventListener('click', () => {
+        markerCreationMode = 'standard';
+        renderMarkerCreationPanel();
+    });
+    document.getElementById('opt-marker-inference')?.addEventListener('change', (event) => {
+        markerFeatureInferenceEnabled = (event.currentTarget as HTMLInputElement).checked;
+    });
+    document.getElementById('opt-marker-cancel')?.addEventListener('click', () => {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+    });
+    document.getElementById('opt-marker-confirm')?.addEventListener('click', () => {
+        finalizeMarkerDraft();
+    });
+    document.getElementById('opt-marker-pick-placement')?.addEventListener('click', () => {
+        markerDraftPickIntent = 'placement';
+        canvasInteractionMode = 'createMarker';
+        setCanvasCursor('crosshair');
+    });
+    document.getElementById('opt-marker-pick-position')?.addEventListener('click', () => {
+        markerDraftPickIntent = 'position';
+        canvasInteractionMode = 'createMarker';
+        setCanvasCursor('crosshair');
+    });
+    document.getElementById('opt-marker-pick-direction')?.addEventListener('click', () => {
+        markerDraftPickIntent = 'direction';
+        canvasInteractionMode = 'createMarker';
+        setCanvasCursor('crosshair');
+    });
+}
+
+function renderRefFrameCreationPanel(): void {
+    refFrameCreationPanelActive = true;
+    setPanelMode('options', '选项-参考标架');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) {
+        return;
+    }
+
+    const markerOptions = createdMarkers.map((marker) =>
+        `<option value="${escapeAttr(marker.id)}"${marker.id === pendingRefFrameBaseId ? ' selected' : ''}>${marker.name}</option>`
+    ).join('');
+    const selectedTargetShape = pendingRefFrameTargetShapeId ? loadedShapes.get(pendingRefFrameTargetShapeId) ?? null : null;
+    const targetOwnerName = selectedTargetShape
+        ? frameOwnerDisplayName(resolveFrameOwnerForShape(selectedTargetShape.id).id)
+        : '(未选择)';
+    const modeRow = `<div class="opt-mode-row">
+        <button id="opt-ref-mode-fast" class="${refFrameCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">闪电模式</button>
+        <button id="opt-ref-mode-standard" class="${refFrameCreationMode === 'standard' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">标准模式</button>
+    </div>`;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        <div class="opt-row">
+            <label for="opt-ref-base">基本标架</label>
+            <select id="opt-ref-base" class="opt-dropdown">${markerOptions}</select>
+        </div>
+        ${buildSeparator()}
+        ${modeRow}
+        ${buildSeparator()}
+        <div class="opt-label">目标零件：${selectedTargetShape?.name ?? '(未选择)'}</div>
+        <div class="opt-label">目标零件所属组：${targetOwnerName}</div>
+        ${buildSeparator()}
+        <div class="opt-hint">${refFrameCreationMode === 'fast' ? '闪电模式下，选择目标零件后会立即创建参考标架。' : '标准模式下，选择目标零件后点击“添加”完成创建。'}</div>
+        ${buildSeparator()}
+        ${refFrameCreationMode === 'standard'
+            ? buildActionButtons('opt-ref-confirm', '添加', 'opt-ref-cancel')
+            : '<div class="opt-btn-row"><button id="opt-ref-cancel" class="opt-btn-secondary">取消</button></div>'}
+    </div>`;
+
+    document.getElementById('opt-ref-base')?.addEventListener('change', (event) => {
+        pendingRefFrameBaseId = (event.currentTarget as HTMLSelectElement).value || null;
+    });
+    document.getElementById('opt-ref-mode-fast')?.addEventListener('click', () => {
+        refFrameCreationMode = 'fast';
+        renderRefFrameCreationPanel();
+    });
+    document.getElementById('opt-ref-mode-standard')?.addEventListener('click', () => {
+        refFrameCreationMode = 'standard';
+        renderRefFrameCreationPanel();
+    });
+    document.getElementById('opt-ref-cancel')?.addEventListener('click', () => {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+    });
+    document.getElementById('opt-ref-confirm')?.addEventListener('click', () => {
+        if (!pendingRefFrameBaseId || !pendingRefFrameTargetShapeId) {
+            vscode.postMessage({
+                command: 'alert',
+                text: '请选择基本标架和目标零件。'
+            });
+            return;
+        }
+        createReferenceFrameFromSelection(pendingRefFrameBaseId, pendingRefFrameTargetShapeId);
+    });
 }
 
 function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
@@ -5353,28 +6086,19 @@ function startMarkerCreation(): void {
     }
 
     resetCanvasInteraction();
+    markerCreationPanelActive = true;
     canvasInteractionMode = 'createMarker';
+    markerDraftPickIntent = 'placement';
+    renderMarkerCreationPanel();
     setStatus('Click on a face to create marker');
     setStatusInfo('Marker creation mode active');
     setCanvasCursor('crosshair');
-
-    vscode.postMessage({
-        command: 'alert',
-        text: 'Click on a face to place the marker. The Z-axis will point outward along the face normal.'
-    });
 }
 
 /**
  * Start reference marker creation mode
  */
 function startRefFrameCreation(): void {
-    if (!selectedShapeId) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'Please select a part first to create a reference marker.'
-        });
-        return;
-    }
     if (createdMarkers.length === 0) {
         vscode.postMessage({
             command: 'alert',
@@ -5384,15 +6108,11 @@ function startRefFrameCreation(): void {
     }
 
     resetCanvasInteraction();
-    canvasInteractionMode = 'createRefFrame';
-    setStatus('Click on a face to create reference marker');
+    pendingRefFrameBaseId = getActiveMarkerId() ?? createdMarkers.at(-1)?.id ?? null;
+    pendingRefFrameTargetShapeId = selectedShapeId;
+    renderRefFrameCreationPanel();
+    setStatus('Select a basic marker and target part to create reference marker');
     setStatusInfo('Reference marker creation mode active');
-    setCanvasCursor('crosshair');
-
-    vscode.postMessage({
-        command: 'alert',
-        text: 'Click on a face to place the reference marker. It will be linked to the latest basic marker.'
-    });
 }
 
 /**
@@ -5423,14 +6143,6 @@ function startDesignPointCreation(): void {
  * Start frame editing mode
  */
 function startFrameEditMode(): void {
-    if (!selectedShapeId) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'Please select a part first to edit a frame.'
-        });
-        return;
-    }
-
     const target = resolveLatestExistingFrameFromHistory();
     if (!target) {
         vscode.postMessage({
@@ -5440,20 +6152,45 @@ function startFrameEditMode(): void {
         return;
     }
 
+    startFrameEditModeForTarget(target.id, target.kind, 'placement');
+}
+
+function startFrameEditModeForTarget(
+    id: string,
+    kind: FrameEntityKind,
+    pickIntent: 'placement' | 'position' | 'direction'
+): void {
+    const targetShape = findOwningShapeForFrame(id, kind) ?? (shapeSelectionHistory.at(-1) ? loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null : null);
+    if (!targetShape) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No target part available for frame editing. Please select a related part first.'
+        });
+        return;
+    }
+
+    selectedShapeId = targetShape.id;
+    rememberShapeSelection(targetShape.id);
     resetCanvasInteraction();
     canvasInteractionMode = 'editFrame';
-    editingFrameTarget = { id: target.id, kind: target.kind };
-    setStatus('Click on a face to reposition the frame');
-    setStatusInfo(`Editing ${target.kind === 'marker' ? 'marker' : 'reference marker'}: ${target.id}`);
+    editingFrameTarget = { id, kind };
+    frameEditPickIntent = pickIntent;
+    setStatus(pickIntent === 'position'
+        ? 'Click on a face to update frame position'
+        : pickIntent === 'direction'
+            ? 'Click on a face to update frame direction'
+            : 'Click on a face to reposition the frame');
+    setStatusInfo(`Editing ${kind === 'marker' ? 'marker' : 'reference marker'}: ${id}`);
     setCanvasCursor('crosshair');
 }
 
 function resolveFacePlacement(event: MouseEvent): { selectedShape: LoadedShape; position: Vec3; normal: Vec3 } | null {
-    if (!viewer || !occt || !selectedShapeId) {
+    const targetShapeId = selectedShapeId ?? shapeSelectionHistory.at(-1) ?? null;
+    if (!viewer || !occt || !targetShapeId) {
         return null;
     }
 
-    const selectedShape = loadedShapes.get(selectedShapeId);
+    const selectedShape = loadedShapes.get(targetShapeId);
     if (!selectedShape || !selectedShape.shapeId) {
         vscode.postMessage({
             command: 'alert',
@@ -5499,78 +6236,69 @@ function resolveFacePlacement(event: MouseEvent): { selectedShape: LoadedShape; 
 }
 
 function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
+    if (markerCreationMode === 'standard') {
+        const nameInput = document.getElementById('opt-marker-name') as HTMLInputElement | null;
+        const sizeInput = document.getElementById('opt-marker-size') as HTMLInputElement | null;
+        const owner = resolveFrameOwnerForShape(selectedShape.id);
+        const nextOrientation = createOrientationFromNormal(normal);
+        const nextPosition = cloneVec3(position);
+        const nextSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize);
+
+        if (!markerDraft) {
+            markerDraft = {
+                name: nameInput?.value?.trim() || `Marker${createdMarkers.length + 1}`,
+                owner,
+                position: nextPosition,
+                orientation: nextOrientation,
+                size: nextSize
+            };
+        } else {
+            markerDraft.name = nameInput?.value?.trim() || markerDraft.name;
+            markerDraft.size = nextSize;
+            markerDraft.owner = owner;
+            if (markerDraftPickIntent === 'placement' || markerDraftPickIntent === 'position') {
+                markerDraft.position = nextPosition;
+            }
+            if (markerDraftPickIntent === 'placement' || markerDraftPickIntent === 'direction') {
+                markerDraft.orientation = nextOrientation;
+            }
+        }
+
+        syncMarkerDraftPreview();
+        renderMarkerCreationPanel();
+        setStatusInfo(`Marker draft updated: ${markerDraft.name}`);
+        return;
+    }
+
+    const nameInput = document.getElementById('opt-marker-name') as HTMLInputElement | null;
+    const sizeInput = document.getElementById('opt-marker-size') as HTMLInputElement | null;
     const marker = markerCreator.createMarker({
         position,
         normal,
-        groupId: resolveOwningGroupId(selectedShape.id) ?? selectedShape.id,
-        name: `Marker${createdMarkers.length + 1}`
+        groupId: resolveFrameOwnerForShape(selectedShape.id).id,
+        name: nameInput?.value?.trim() || `Marker${createdMarkers.length + 1}`
     });
+    marker.setSize(Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize));
+    marker.setVisible(true);
 
     createdMarkers.push(marker);
+    pendingMarkerSize = marker.size;
     recordFrameCreation(marker.id, 'marker');
 
-    if (viewer) {
-        viewer.addFrame({
-            id: marker.id,
-            name: marker.name,
-            position: marker.position,
-            orientation: marker.orientation,
-            isPrimary: true
-        });
-    }
+    viewer?.addFrame({
+        id: marker.id,
+        name: marker.name,
+        position: marker.position,
+        orientation: marker.orientation,
+        size: marker.size,
+        visible: marker.visible,
+        isPrimary: true
+    });
 
-    renderFrameOptionsPanel('Edit Frame', marker.name,
-        marker.position,
-        orientationToDirection(marker.orientation));
+    updateModelTree();
+    selectSelection({ kind: 'marker', id: marker.id });
+    renderMarkerCreationPanel();
     setStatusInfo(`Marker created: ${marker.name}`);
-    vscode.postMessage({
-        command: 'alert',
-        text: `Marker "${marker.name}" created successfully at position (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`
-    });
-}
-
-function createRefFrameFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): boolean {
-    const relatedMarker = createdMarkers.at(-1);
-    if (!relatedMarker) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'No basic marker found. Please create a basic marker first.'
-        });
-        return false;
-    }
-
-    const refFrame: MbsRefFrameEntity = {
-        id: nextEntityId('refMarker', createdRefFrames.size),
-        name: `RefMarker${createdRefFrames.size + 1}`,
-        groupId: resolveOwningGroupId(selectedShape.id) ?? selectedShape.id,
-        position: cloneVec3(position),
-        orientation: createOrientationFromNormal(normal),
-        relatedMarkerId: relatedMarker.id,
-        createdAt: new Date().toISOString()
-    };
-    createdRefFrames.set(refFrame.id, refFrame);
-    relatedMarker.appendRefMarker(refFrame.id);
-    recordFrameCreation(refFrame.id, 'refFrame');
-
-    if (viewer) {
-        viewer.addFrame({
-            id: refFrame.id,
-            name: refFrame.name,
-            position: refFrame.position,
-            orientation: refFrame.orientation,
-            isPrimary: false
-        });
-    }
-
-    renderFrameOptionsPanel('Edit Frame', refFrame.name,
-        refFrame.position,
-        orientationToDirection(refFrame.orientation));
-    setStatusInfo(`Reference marker created: ${refFrame.name}`);
-    vscode.postMessage({
-        command: 'alert',
-        text: `Reference marker "${refFrame.name}" created and linked to "${relatedMarker.name}".`
-    });
-    return true;
 }
 
 function createDesignPointFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
@@ -5618,24 +6346,16 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
             return false;
         }
 
-        marker.setPosition(position.x, position.y, position.z);
-        marker.setOrientation(orientation);
-        viewer.updateFrame({
-            id: marker.id,
-            name: marker.name,
-            position: marker.position,
-            orientation: marker.orientation,
-            isPrimary: true
-        });
+        if (frameEditPickIntent === 'placement' || frameEditPickIntent === 'position') {
+            marker.setPosition(position.x, position.y, position.z);
+        }
+        if (frameEditPickIntent === 'placement' || frameEditPickIntent === 'direction') {
+            marker.setOrientation(orientation);
+        }
+        syncFrameEntityToViewer('marker', marker.id);
 
         setStatusInfo(`Marker edited: ${marker.name}`);
-        renderFrameOptionsPanel('Edit Frame', marker.name,
-            marker.position,
-            orientationToDirection(marker.orientation));
-        vscode.postMessage({
-            command: 'alert',
-            text: `Marker "${marker.name}" updated.`
-        });
+        renderMarkerPropertiesPanel(marker.id);
         return true;
     }
 
@@ -5648,24 +6368,16 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
         return false;
     }
 
-    refFrame.position = cloneVec3(position);
-    refFrame.orientation = orientation;
-    viewer.updateFrame({
-        id: refFrame.id,
-        name: refFrame.name,
-        position: refFrame.position,
-        orientation: refFrame.orientation,
-        isPrimary: false
-    });
+    if (frameEditPickIntent === 'placement' || frameEditPickIntent === 'position') {
+        refFrame.position = cloneVec3(position);
+    }
+    if (frameEditPickIntent === 'placement' || frameEditPickIntent === 'direction') {
+        refFrame.orientation = orientation;
+    }
+    syncFrameEntityToViewer('refFrame', refFrame.id);
 
     setStatusInfo(`Reference marker edited: ${refFrame.name}`);
-    renderFrameOptionsPanel('Edit Frame', refFrame.name,
-        refFrame.position,
-        orientationToDirection(refFrame.orientation));
-    vscode.postMessage({
-        command: 'alert',
-        text: `Reference marker "${refFrame.name}" updated.`
-    });
+    renderRefFramePropertiesPanel(refFrame.id);
     return true;
 }
 
@@ -5682,10 +6394,7 @@ function handleCanvasClick(event: MouseEvent): void {
     switch (canvasInteractionMode) {
         case 'createMarker':
             createMarkerFromPlacement(placement.selectedShape, placement.position, placement.normal);
-            completed = true;
-            break;
-        case 'createRefFrame':
-            completed = createRefFrameFromPlacement(placement.selectedShape, placement.position, placement.normal);
+            completed = markerCreationMode === 'fast';
             break;
         case 'createDesignPoint':
             createDesignPointFromPlacement(placement.selectedShape, placement.position, placement.normal);
@@ -5769,7 +6478,13 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             break;
         }
         case 'deleteFrame': {
-            const target = resolveLatestExistingFrameFromHistory();
+            const activeMarkerId = getActiveMarkerId();
+            const activeRefFrameId = getActiveRefFrameId();
+            const target = activeMarkerId
+                ? { index: -1, id: activeMarkerId, kind: 'marker' as const }
+                : activeRefFrameId
+                    ? { index: -1, id: activeRefFrameId, kind: 'refFrame' as const }
+                    : resolveLatestExistingFrameFromHistory();
             if (!target) {
                 vscode.postMessage({
                     command: 'alert',
@@ -5781,7 +6496,9 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             if (target.kind === 'marker') {
                 const markerIndex = createdMarkers.findIndex((marker) => marker.id === target.id);
                 if (markerIndex < 0) {
-                    frameCreationHistory.splice(target.index, 1);
+                    if (target.index >= 0) {
+                        frameCreationHistory.splice(target.index, 1);
+                    }
                     return;
                 }
 
@@ -5804,7 +6521,11 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
                 if (viewer) {
                     viewer.removeFrame(marker.id);
                 }
-                frameCreationHistory.splice(target.index, 1);
+                if (target.index >= 0) {
+                    frameCreationHistory.splice(target.index, 1);
+                }
+                updateModelTree();
+                selectSelection(null);
                 setStatusInfo(`Marker deleted: ${marker.name}`);
                 vscode.postMessage({
                     command: 'alert',
@@ -5815,7 +6536,9 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
 
             const refFrame = createdRefFrames.get(target.id);
             if (!refFrame) {
-                frameCreationHistory.splice(target.index, 1);
+                if (target.index >= 0) {
+                    frameCreationHistory.splice(target.index, 1);
+                }
                 return;
             }
 
@@ -5832,7 +6555,11 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             if (viewer) {
                 viewer.removeFrame(refFrame.id);
             }
-            frameCreationHistory.splice(target.index, 1);
+            if (target.index >= 0) {
+                frameCreationHistory.splice(target.index, 1);
+            }
+            updateModelTree();
+            selectSelection(null);
             setStatusInfo(`Reference marker deleted: ${refFrame.name}`);
             vscode.postMessage({
                 command: 'alert',

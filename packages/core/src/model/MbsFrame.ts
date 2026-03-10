@@ -36,6 +36,7 @@ export class MbsFrame implements IMbsFrame {
 export interface IMbsMarkerBase extends IMbsFrame {
     groupId: string;
     size: number;
+    visible: boolean;
     relatedConnectorIds: string[];
     isManual: boolean;
 }
@@ -43,6 +44,7 @@ export interface IMbsMarkerBase extends IMbsFrame {
 export class MbsMarkerBase extends MbsFrame implements IMbsMarkerBase {
     groupId: string;
     size = -1;
+    visible = true;
     relatedConnectorIds: string[] = [];
     isManual = false;
 
@@ -53,6 +55,10 @@ export class MbsMarkerBase extends MbsFrame implements IMbsMarkerBase {
 
     setSize(size: number): void {
         this.size = size;
+    }
+
+    setVisible(visible: boolean): void {
+        this.visible = visible;
     }
 
     setManual(isManual: boolean): void {

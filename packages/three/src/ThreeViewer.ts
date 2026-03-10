@@ -886,20 +886,34 @@ export class ThreeViewer {
      * 添加标架
      */
     addFrame(data: FrameData): THREE.Group {
-        return this.frameVisualizer.addFrame(data);
+        const group = this.frameVisualizer.addFrame(data);
+        if (!data.id.startsWith('__draft_')) {
+            this.selectionManager?.registerObject(data.id, group);
+        }
+        return group;
     }
 
     /**
      * 更新标架
      */
     updateFrame(data: FrameData): void {
+        if (!data.id.startsWith('__draft_')) {
+            this.selectionManager?.unregisterObject(data.id);
+        }
         this.frameVisualizer.updateFrame(data);
+        const group = this.frameVisualizer.getFrame(data.id);
+        if (group && !data.id.startsWith('__draft_')) {
+            this.selectionManager?.registerObject(data.id, group);
+        }
     }
 
     /**
      * 移除标架
      */
     removeFrame(id: string): void {
+        if (!id.startsWith('__draft_')) {
+            this.selectionManager?.unregisterObject(id);
+        }
         this.frameVisualizer.removeFrame(id);
     }
 
