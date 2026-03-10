@@ -392,7 +392,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.FrontSide
+                    side: THREE.DoubleSide
                 });
             case 'pbr':
                 return new THREE.MeshPhysicalMaterial({
@@ -405,7 +405,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.FrontSide
+                    side: THREE.DoubleSide
                 });
             case 'flat':
                 return new THREE.MeshStandardMaterial({
@@ -416,7 +416,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.FrontSide
+                    side: THREE.DoubleSide
                 });
             case 'phong':
                 return new THREE.MeshPhongMaterial({
@@ -426,7 +426,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.FrontSide
+                    side: THREE.DoubleSide
                 });
             default:
                 return new THREE.MeshMatcapMaterial({
@@ -435,7 +435,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.FrontSide
+                    side: THREE.DoubleSide
                 });
         }
     }
@@ -869,6 +869,14 @@ export class ThreeViewer {
      */
     getSelectedIds(): string[] {
         return this.selectionManager?.getSelectedIds() ?? [];
+    }
+
+    setSelectionEnabled(enabled: boolean): void {
+        this.selectionManager?.setEnabled(enabled);
+    }
+
+    pickSelectableIdAtScreenPoint(x: number, y: number): string | null {
+        return this.selectionManager?.pickObjectIdAtScreenPoint(x, y) ?? null;
     }
 
     /**

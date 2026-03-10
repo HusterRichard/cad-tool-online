@@ -109,6 +109,12 @@ export class SelectionManager {
         this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
 
+    private updateMouseFromScreenPoint(x: number, y: number): void {
+        const rect = this.domElement.getBoundingClientRect();
+        this.mouse.x = ((x - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((y - rect.top) / rect.height) * 2 + 1;
+    }
+
     private raycast(): THREE.Intersection[] {
         this.raycaster.setFromCamera(this.mouse, this.camera);
         const objects = Array.from(this.selectableObjects.values());
@@ -306,6 +312,16 @@ export class SelectionManager {
 
     getSelectedIds(): string[] {
         return Array.from(this.selectedIds);
+    }
+
+    pickObjectIdAtScreenPoint(x: number, y: number): string | null {
+        this.updateMouseFromScreenPoint(x, y);
+        const intersects = this.raycast();
+        if (intersects.length === 0) {
+            return null;
+        }
+
+        return this.findObjectId(intersects[0].object);
     }
 
     isSelected(id: string): boolean {

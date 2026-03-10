@@ -56,6 +56,18 @@ export class FrameVisualizer {
         );
     }
 
+    private createMarkerRing(color: number, length: number): THREE.Mesh {
+        const ringGeometry = new THREE.TorusGeometry(length * 0.22, Math.max(length * 0.014, 0.35), 12, 48);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.85
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.rotation.x = Math.PI / 2;
+        return ring;
+    }
+
     private createFrameGroup(data: FrameData): THREE.Group {
         const group = new THREE.Group();
         group.name = `frame_${data.id}`;
@@ -79,7 +91,11 @@ export class FrameVisualizer {
                 ? FrameVisualizer.COLORS.primary
                 : FrameVisualizer.COLORS.secondary
         });
+        const accentColor = data.isPrimary
+            ? FrameVisualizer.COLORS.primary
+            : FrameVisualizer.COLORS.secondary;
         group.add(new THREE.Mesh(sphereGeometry, sphereMaterial));
+        group.add(this.createMarkerRing(accentColor, length));
 
         group.position.set(data.position.x, data.position.y, data.position.z);
         group.visible = data.visible ?? true;
@@ -119,11 +135,17 @@ export class FrameVisualizer {
 
         this.scene.remove(group);
         group.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                child.geometry.dispose();
-                if (child.material instanceof THREE.Material) {
-                    child.material.dispose();
-                }
+            const disposable = child as THREE.Object3D & {
+                geometry?: THREE.BufferGeometry;
+                material?: THREE.Material | THREE.Material[];
+            };
+            if (disposable.geometry) {
+                disposable.geometry.dispose();
+            }
+            if (Array.isArray(disposable.material)) {
+                disposable.material.forEach((material) => material.dispose());
+            } else if (disposable.material instanceof THREE.Material) {
+                disposable.material.dispose();
             }
         });
         this.frames.delete(id);

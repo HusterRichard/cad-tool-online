@@ -125,6 +125,7 @@ interface MbsRefFrameEntity {
     id: string;
     name: string;
     groupId: string;
+    parentId?: string;
     position: Vec3;
     orientation: Mat3;
     size: number;
@@ -136,6 +137,7 @@ interface MbsRefFrameEntity {
 interface MarkerDraft {
     name: string;
     owner: MarkerOwnerRef;
+    hostShapeId: string;
     position: Vec3;
     orientation: Mat3;
     size: number;
@@ -497,8 +499,10 @@ function buildMarkerDesignGroupMap(): Record<string, { id: string; parentGroupId
 
 function findOwningShapeForFrame(frameId: string, kind: FrameEntityKind): LoadedShape | null {
     const ownerId = kind === 'marker'
-        ? createdMarkers.find((marker) => marker.id === frameId)?.groupId
-        : createdRefFrames.get(frameId)?.groupId;
+        ? createdMarkers.find((marker) => marker.id === frameId)?.parentId
+            ?? createdMarkers.find((marker) => marker.id === frameId)?.groupId
+        : createdRefFrames.get(frameId)?.parentId
+            ?? createdRefFrames.get(frameId)?.groupId;
     if (!ownerId) {
         return null;
     }
@@ -1661,6 +1665,27 @@ function transformDirection(transform: RigidTransform, x: number, y: number, z: 
     ];
 }
 
+function invertRigidTransform(transform: RigidTransform): RigidTransform {
+    const r = transform.rotation;
+    const rotation = [
+        r[0], r[3], r[6],
+        r[1], r[4], r[7],
+        r[2], r[5], r[8]
+    ];
+    const tx = transform.translation.x;
+    const ty = transform.translation.y;
+    const tz = transform.translation.z;
+
+    return {
+        translation: {
+            x: -(rotation[0] * tx + rotation[1] * ty + rotation[2] * tz),
+            y: -(rotation[3] * tx + rotation[4] * ty + rotation[5] * tz),
+            z: -(rotation[6] * tx + rotation[7] * ty + rotation[8] * tz)
+        },
+        rotation
+    };
+}
+
 function applyRigidTransformToMeshData(meshData: MeshData, transform: RigidTransform): MeshData {
     if (isIdentityRigidTransform(transform)) {
         return meshData;
@@ -2278,7 +2303,7 @@ function treeIconPath(fileName: string): string | null {
 
 function buildOwnedFrameNodes(ownerId: string): ModelTreeNode[] {
     const markerNodes = createdMarkers
-        .filter((marker) => marker.groupId === ownerId)
+        .filter((marker) => (marker.parentId ?? marker.groupId) === ownerId)
         .map((marker) => ({
             id: `marker_${marker.id}`,
             kind: 'marker' as const,
@@ -2287,7 +2312,7 @@ function buildOwnedFrameNodes(ownerId: string): ModelTreeNode[] {
             selectionKey: toMarkerSelectionKey(marker.id)
         }));
     const refFrameNodes = Array.from(createdRefFrames.values())
-        .filter((refFrame) => refFrame.groupId === ownerId)
+        .filter((refFrame) => (refFrame.parentId ?? refFrame.groupId) === ownerId)
         .map((refFrame) => ({
             id: `refFrame_${refFrame.id}`,
             kind: 'refFrame' as const,
@@ -3645,10 +3670,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             setStatus('Ready');
             setStatusInfo(`${meshCount} parts loaded (${result.rootNodes.length} assemblies)`);
 
-            // Select first shape
-            if (rootShapes.length > 0) {
-                selectShape(rootShapes[0].id);
-            }
+            // Keep the initial state unselected so downstream tools operate on
+            // an explicit user-picked part instead of an implicit assembly-wide selection.
 
             vscode.postMessage({
                 command: 'alert',
@@ -3725,10 +3748,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             setStatus('Ready');
             setStatusInfo(`${addedCount} shapes loaded`);
 
-            // Select first shape
-            if (result.shapes.length > 0) {
-                selectShape(result.shapes[0]);
-            }
+            // Keep the initial state unselected so downstream tools operate on
+            // an explicit user-picked part instead of an implicit selection.
 
             vscode.postMessage({
                 command: 'alert',
@@ -4061,6 +4082,21 @@ function cloneMat3(mat: Mat3): Mat3 {
     return { m: [...mat.m] };
 }
 
+function subtractVec3(a: Vec3, b: Vec3): Vec3 {
+    return {
+        x: a.x - b.x,
+        y: a.y - b.y,
+        z: a.z - b.z
+    };
+}
+
+function distanceSquaredBetweenPoints(a: Vec3, b: Vec3): number {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dz = a.z - b.z;
+    return dx * dx + dy * dy + dz * dz;
+}
+
 function createOrientationFromNormal(normal: Vec3): Mat3 {
     const normalized = normalizeVector(normal) ?? { x: 0, y: 0, z: 1 };
     let tempX: Vec3;
@@ -4118,6 +4154,198 @@ function setCanvasCursor(cursor: string): void {
     }
 }
 
+function showMarkerPreview(draft: MarkerDraft): void {
+    if (!viewer) {
+        return;
+    }
+
+    viewer.addFrame({
+        id: DRAFT_MARKER_ID,
+        name: draft.name,
+        position: draft.position,
+        orientation: draft.orientation,
+        size: draft.size,
+        visible: true,
+        isPrimary: true
+    });
+}
+
+function buildMarkerPreviewDraft(selectedShape: LoadedShape, position: Vec3, normal: Vec3): MarkerDraft {
+    const nameInput = document.getElementById('opt-marker-name') as HTMLInputElement | null;
+    const sizeInput = document.getElementById('opt-marker-size') as HTMLInputElement | null;
+    const owner = resolveFrameOwnerForShape(selectedShape.id);
+    const fallbackSize = markerDraft?.size ?? pendingMarkerSize;
+
+    return {
+        name: nameInput?.value?.trim() || markerDraft?.name || `Marker${createdMarkers.length + 1}`,
+        owner,
+        hostShapeId: selectedShape.id,
+        position: cloneVec3(position),
+        orientation: createOrientationFromNormal(normal),
+        size: Math.max(1, Number.parseFloat(sizeInput?.value ?? `${fallbackSize}`) || fallbackSize)
+    };
+}
+
+function estimateShapeInferenceTolerance(shape: LoadedShape): number {
+    const vertices = shape.meshData?.vertices;
+    if (!vertices || vertices.length < 6) {
+        return 1;
+    }
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    for (let index = 0; index < vertices.length; index += 3) {
+        minX = Math.min(minX, vertices[index]);
+        minY = Math.min(minY, vertices[index + 1]);
+        minZ = Math.min(minZ, vertices[index + 2]);
+        maxX = Math.max(maxX, vertices[index]);
+        maxY = Math.max(maxY, vertices[index + 1]);
+        maxZ = Math.max(maxZ, vertices[index + 2]);
+    }
+
+    const diagonal = Math.sqrt(
+        (maxX - minX) * (maxX - minX)
+        + (maxY - minY) * (maxY - minY)
+        + (maxZ - minZ) * (maxZ - minZ)
+    );
+    return Math.max(diagonal * 0.02, 0.5);
+}
+
+function inferPlacementFromEdgeEndpoints(shape: LoadedShape, hitPosition: Vec3, fallbackNormal: Vec3): { position: Vec3; normal: Vec3 } | null {
+    const edgeVertices = shape.edgeData?.vertices;
+    if (!edgeVertices || edgeVertices.length < 6) {
+        return null;
+    }
+
+    const tolerance = estimateShapeInferenceTolerance(shape);
+    const toleranceSq = tolerance * tolerance;
+    let bestCandidate: { position: Vec3; normal: Vec3; endpointDistanceSq: number; segmentDistanceSq: number } | null = null;
+
+    for (let index = 0; index + 5 < edgeVertices.length; index += 6) {
+        const start: Vec3 = {
+            x: edgeVertices[index],
+            y: edgeVertices[index + 1],
+            z: edgeVertices[index + 2]
+        };
+        const end: Vec3 = {
+            x: edgeVertices[index + 3],
+            y: edgeVertices[index + 4],
+            z: edgeVertices[index + 5]
+        };
+        const segment = subtractVec3(end, start);
+        const length = Math.sqrt(segment.x * segment.x + segment.y * segment.y + segment.z * segment.z);
+        if (length <= 1e-9) {
+            continue;
+        }
+
+        const toHit = subtractVec3(hitPosition, start);
+        const t = Math.max(0, Math.min(1, ((toHit.x * segment.x) + (toHit.y * segment.y) + (toHit.z * segment.z)) / (length * length)));
+        const closestPoint: Vec3 = {
+            x: start.x + segment.x * t,
+            y: start.y + segment.y * t,
+            z: start.z + segment.z * t
+        };
+        const segmentDistanceSq = distanceSquaredBetweenPoints(hitPosition, closestPoint);
+        if (segmentDistanceSq > toleranceSq) {
+            continue;
+        }
+
+        const startDistanceSq = distanceSquaredBetweenPoints(hitPosition, start);
+        const endDistanceSq = distanceSquaredBetweenPoints(hitPosition, end);
+        const position = startDistanceSq <= endDistanceSq ? start : end;
+        const direction = normalizeVector(segment) ?? fallbackNormal;
+        const endpointDistanceSq = Math.min(startDistanceSq, endDistanceSq);
+
+        if (!bestCandidate
+            || segmentDistanceSq < bestCandidate.segmentDistanceSq
+            || (segmentDistanceSq === bestCandidate.segmentDistanceSq && endpointDistanceSq < bestCandidate.endpointDistanceSq)) {
+            bestCandidate = {
+                position: cloneVec3(position),
+                normal: direction,
+                endpointDistanceSq,
+                segmentDistanceSq
+            };
+        }
+    }
+
+    if (!bestCandidate || bestCandidate.endpointDistanceSq > toleranceSq * 4) {
+        return null;
+    }
+
+    return {
+        position: bestCandidate.position,
+        normal: bestCandidate.normal
+    };
+}
+
+function pickShapeAtScreenPoint(screenX: number, screenY: number): LoadedShape | null {
+    const objectId = viewer?.pickSelectableIdAtScreenPoint(screenX, screenY) ?? null;
+    if (!objectId) {
+        return null;
+    }
+
+    const shapeId = meshIdToShapeId.get(objectId);
+    if (!shapeId) {
+        return null;
+    }
+
+    return loadedShapes.get(shapeId) ?? null;
+}
+
+function pickShapeAtPointerEvent(event: MouseEvent): LoadedShape | null {
+    return pickShapeAtScreenPoint(event.clientX, event.clientY);
+}
+
+function inferMarkerPlacement(
+    selectedShape: LoadedShape,
+    hitPosition: Vec3,
+    fallbackNormal: Vec3,
+    geometryHint: {
+        inferredPosition?: Vec3;
+        inferredDirection?: Vec3;
+        inferredFeature?: string;
+    } | null
+): { position: Vec3; normal: Vec3 } {
+    if (!markerFeatureInferenceEnabled) {
+        return {
+            position: cloneVec3(hitPosition),
+            normal: cloneVec3(fallbackNormal)
+        };
+    }
+
+    const inferredPosition = geometryHint?.inferredPosition ? cloneVec3(geometryHint.inferredPosition) : null;
+    const inferredDirection = geometryHint?.inferredDirection
+        ? normalizeVector(geometryHint.inferredDirection) ?? null
+        : null;
+    if (geometryHint?.inferredFeature === 'sphereCenter' && inferredPosition && inferredDirection) {
+        return {
+            position: inferredPosition,
+            normal: inferredDirection
+        };
+    }
+    if (geometryHint?.inferredFeature === 'cylinderAxis' && inferredPosition && inferredDirection) {
+        return {
+            position: inferredPosition,
+            normal: inferredDirection
+        };
+    }
+
+    const edgePlacement = inferPlacementFromEdgeEndpoints(selectedShape, hitPosition, fallbackNormal);
+    if (edgePlacement) {
+        return edgePlacement;
+    }
+
+    return {
+        position: cloneVec3(hitPosition),
+        normal: cloneVec3(fallbackNormal)
+    };
+}
+
 function clearMarkerDraftPreview(): void {
     markerDraft = null;
     if (viewer) {
@@ -4129,16 +4357,7 @@ function syncMarkerDraftPreview(): void {
     if (!viewer || !markerDraft) {
         return;
     }
-
-    viewer.addFrame({
-        id: DRAFT_MARKER_ID,
-        name: markerDraft.name,
-        position: markerDraft.position,
-        orientation: markerDraft.orientation,
-        size: markerDraft.size,
-        visible: true,
-        isPrimary: true
-    });
+    showMarkerPreview(markerDraft);
 }
 
 function resetCanvasInteraction(): void {
@@ -4149,6 +4368,7 @@ function resetCanvasInteraction(): void {
     markerCreationPanelActive = false;
     refFrameCreationPanelActive = false;
     clearMarkerDraftPreview();
+    viewer?.setSelectionEnabled(true);
     setCanvasCursor('default');
 }
 
@@ -4324,6 +4544,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         const refMarkerFlag = entry.refMarker === true || entry.refMarker === 'true' || Boolean(relatedMarkerRef);
 
         let groupId: string | undefined;
+        let hostPartId: string | undefined;
         if (groupRef) {
             groupId = groupNameToId.get(groupRef) ?? shapeNameToId.get(groupRef) ?? groupRef;
             if (!groupNameToId.has(groupRef) && !shapeNameToId.has(groupRef)) {
@@ -4331,6 +4552,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             }
         } else if (partRef) {
             const partId = shapeNameToId.get(partRef) ?? partRef;
+            hostPartId = partId;
             groupId = resolveOwningGroupId(partId) ?? partId;
             if (!shapeNameToId.has(partRef) && loadedShapes.size > 0) {
                 addImportWarning(stats, `marker "${name}" references unknown partRef "${partRef}", keeping raw reference.`);
@@ -4340,6 +4562,9 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         if (!groupId) {
             groupId = getActiveGroupId() ?? resolveOwningGroupId(selectedShapeId ?? undefined) ?? selectedShapeId ?? '__unassigned__';
             addImportWarning(stats, `marker "${name}" has no groupRef/partRef; assigned to "${groupId}".`);
+        }
+        if (!hostPartId && groupId && loadedShapes.has(groupId)) {
+            hostPartId = groupId;
         }
 
         const parsedPosition = parseVector3(entry.position);
@@ -4376,6 +4601,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                 id: nextEntityId('refMarker', createdRefFrames.size),
                 name,
                 groupId,
+                parentId: hostPartId,
                 position: resolvedPosition,
                 orientation: resolvedOrientation,
                 size: parsedSize > 0 ? parsedSize : (relatedMarker?.size ?? pendingMarkerSize),
@@ -4410,6 +4636,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                 groupId,
                 name
             });
+            marker.setParentId(hostPartId);
             marker.setSize(parsedSize);
             marker.setVisible(parsedVisible);
 
@@ -4694,6 +4921,7 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
     const markerEntries = createdMarkers.map((marker) => ({
         name: marker.name,
         groupRef: resolveGroupRefName(marker.groupId),
+        partRef: marker.parentId ? resolvePartRefName(marker.parentId) : undefined,
         position: cloneVec3(marker.position),
         direction: orientationToDirection(marker.orientation),
         size: marker.size,
@@ -4703,6 +4931,7 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
     const refMarkerEntries = Array.from(createdRefFrames.values()).map((refFrame) => ({
         name: refFrame.name,
         groupRef: resolveGroupRefName(refFrame.groupId),
+        partRef: refFrame.parentId ? resolvePartRefName(refFrame.parentId) : undefined,
         position: cloneVec3(refFrame.position),
         direction: orientationToDirection(refFrame.orientation),
         size: refFrame.size,
@@ -5449,6 +5678,7 @@ function finalizeMarkerDraft(): void {
         groupId: markerDraft.owner.id,
         name: nameInput?.value?.trim() || markerDraft.name
     });
+    marker.setParentId(markerDraft.hostShapeId);
     marker.setSize(size);
     marker.setVisible(true);
 
@@ -5467,7 +5697,10 @@ function finalizeMarkerDraft(): void {
     });
     updateModelTree();
     selectSelection({ kind: 'marker', id: marker.id });
+    viewer?.setSelectionEnabled(false);
     renderMarkerCreationPanel();
+    setStatus('Click on a face to create marker');
+    setStatusInfo(`Marker created: ${marker.name}`);
 }
 
 function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: string): boolean {
@@ -5495,6 +5728,7 @@ function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: 
         id: nextEntityId('refMarker', createdRefFrames.size),
         name: `RefMarker${createdRefFrames.size + 1}`,
         groupId: targetOwner.id,
+        parentId: targetShape.id,
         position: cloneVec3(relatedMarker.position),
         orientation: cloneMat3(relatedMarker.orientation),
         size: relatedMarker.size,
@@ -6077,18 +6311,12 @@ function computeBoundingBox(vertices: Float32Array): {
  * Start marker creation mode
  */
 function startMarkerCreation(): void {
-    if (!selectedShapeId) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'Please select a part first to create a marker'
-        });
-        return;
-    }
-
     resetCanvasInteraction();
     markerCreationPanelActive = true;
     canvasInteractionMode = 'createMarker';
     markerDraftPickIntent = 'placement';
+    selectSelection(null);
+    viewer?.setSelectionEnabled(false);
     renderMarkerCreationPanel();
     setStatus('Click on a face to create marker');
     setStatusInfo('Marker creation mode active');
@@ -6184,18 +6412,24 @@ function startFrameEditModeForTarget(
     setCanvasCursor('crosshair');
 }
 
-function resolveFacePlacement(event: MouseEvent): { selectedShape: LoadedShape; position: Vec3; normal: Vec3 } | null {
-    const targetShapeId = selectedShapeId ?? shapeSelectionHistory.at(-1) ?? null;
-    if (!viewer || !occt || !targetShapeId) {
+function resolveFacePlacement(
+    event: MouseEvent,
+    options?: { silent?: boolean; enableInference?: boolean }
+): { selectedShape: LoadedShape; position: Vec3; normal: Vec3 } | null {
+    if (!viewer || !occt) {
         return null;
     }
 
-    const selectedShape = loadedShapes.get(targetShapeId);
+    const selectedShape = pickShapeAtPointerEvent(event)
+        ?? (selectedShapeId ? loadedShapes.get(selectedShapeId) ?? null : null)
+        ?? (shapeSelectionHistory.at(-1) ? loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null : null);
     if (!selectedShape || !selectedShape.shapeId) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'Selected part has no geometry to place marker/design point.'
-        });
+        if (!options?.silent) {
+            vscode.postMessage({
+                command: 'alert',
+                text: 'Selected part has no geometry to place marker/design point.'
+            });
+        }
         return null;
     }
 
@@ -6214,25 +6448,142 @@ function resolveFacePlacement(event: MouseEvent): { selectedShape: LoadedShape; 
         return null;
     }
 
+    const shapeTransform = normalizeRigidTransform(selectedShape.transform);
+    const inverseShapeTransform = invertRigidTransform(shapeTransform);
+    const [localOriginX, localOriginY, localOriginZ] = transformPoint(
+        inverseShapeTransform,
+        ray.origin.x,
+        ray.origin.y,
+        ray.origin.z
+    );
+    const [localDirX, localDirY, localDirZ] = transformDirection(
+        inverseShapeTransform,
+        ray.direction.x,
+        ray.direction.y,
+        ray.direction.z
+    );
+    const localDirection = normalizeVector({ x: localDirX, y: localDirY, z: localDirZ }) ?? {
+        x: localDirX,
+        y: localDirY,
+        z: localDirZ
+    };
+
     const result = occt.getFaceNormalAtPoint(
         selectedShape.shapeId,
-        ray.origin,
-        ray.direction
+        {
+            x: localOriginX,
+            y: localOriginY,
+            z: localOriginZ
+        },
+        localDirection
     );
 
     if (!result) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'No face found at click position. Please click on a face.'
-        });
+        if (!options?.silent) {
+            vscode.postMessage({
+                command: 'alert',
+                text: 'No face found at click position. Please click on a face.'
+            });
+        }
         return null;
     }
 
+    const [worldPositionX, worldPositionY, worldPositionZ] = transformPoint(
+        shapeTransform,
+        result.position.x,
+        result.position.y,
+        result.position.z
+    );
+    const [worldNormalX, worldNormalY, worldNormalZ] = transformDirection(
+        shapeTransform,
+        result.normal.x,
+        result.normal.y,
+        result.normal.z
+    );
+    const worldNormal = normalizeVector({
+        x: worldNormalX,
+        y: worldNormalY,
+        z: worldNormalZ
+    }) ?? {
+        x: worldNormalX,
+        y: worldNormalY,
+        z: worldNormalZ
+    };
+    const worldInferencePosition = result.inferredPosition
+        ? (() => {
+            const [x, y, z] = transformPoint(
+                shapeTransform,
+                result.inferredPosition.x,
+                result.inferredPosition.y,
+                result.inferredPosition.z
+            );
+            return { x, y, z };
+        })()
+        : undefined;
+    const worldInferenceDirection = result.inferredDirection
+        ? (() => {
+            const [x, y, z] = transformDirection(
+                shapeTransform,
+                result.inferredDirection.x,
+                result.inferredDirection.y,
+                result.inferredDirection.z
+            );
+            return normalizeVector({ x, y, z }) ?? { x, y, z };
+        })()
+        : undefined;
+
+    const inferEnabled = options?.enableInference ?? (canvasInteractionMode === 'createMarker' || canvasInteractionMode === 'editFrame');
+    const inferredPlacement = inferEnabled
+        ? inferMarkerPlacement(
+            selectedShape,
+            {
+                x: worldPositionX,
+                y: worldPositionY,
+                z: worldPositionZ
+            },
+            worldNormal,
+            {
+                ...(result as {
+                    inferredFeature?: string;
+                }),
+                inferredPosition: worldInferencePosition,
+                inferredDirection: worldInferenceDirection
+            } as {
+                inferredPosition?: Vec3;
+                inferredDirection?: Vec3;
+                inferredFeature?: string;
+            }
+        )
+        : {
+            position: {
+                x: worldPositionX,
+                y: worldPositionY,
+                z: worldPositionZ
+            },
+            normal: worldNormal
+        };
+
     return {
         selectedShape,
-        position: cloneVec3(result.position),
-        normal: cloneVec3(result.normal)
+        position: inferredPlacement.position,
+        normal: inferredPlacement.normal
     };
+}
+
+function handleCanvasPointerMove(event: MouseEvent): void {
+    if (canvasInteractionMode !== 'createMarker' || !markerCreationPanelActive) {
+        return;
+    }
+
+    const placement = resolveFacePlacement(event, { silent: true, enableInference: true });
+    if (!placement) {
+        if (!markerDraft) {
+            clearMarkerDraftPreview();
+        }
+        return;
+    }
+
+    showMarkerPreview(buildMarkerPreviewDraft(placement.selectedShape, placement.position, placement.normal));
 }
 
 function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
@@ -6248,6 +6599,7 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
             markerDraft = {
                 name: nameInput?.value?.trim() || `Marker${createdMarkers.length + 1}`,
                 owner,
+                hostShapeId: selectedShape.id,
                 position: nextPosition,
                 orientation: nextOrientation,
                 size: nextSize
@@ -6256,6 +6608,7 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
             markerDraft.name = nameInput?.value?.trim() || markerDraft.name;
             markerDraft.size = nextSize;
             markerDraft.owner = owner;
+            markerDraft.hostShapeId = selectedShape.id;
             if (markerDraftPickIntent === 'placement' || markerDraftPickIntent === 'position') {
                 markerDraft.position = nextPosition;
             }
@@ -6278,6 +6631,7 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
         groupId: resolveFrameOwnerForShape(selectedShape.id).id,
         name: nameInput?.value?.trim() || `Marker${createdMarkers.length + 1}`
     });
+    marker.setParentId(selectedShape.id);
     marker.setSize(Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize));
     marker.setVisible(true);
 
@@ -6297,7 +6651,9 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
 
     updateModelTree();
     selectSelection({ kind: 'marker', id: marker.id });
+    viewer?.setSelectionEnabled(false);
     renderMarkerCreationPanel();
+    setStatus('Click on a face to create marker');
     setStatusInfo(`Marker created: ${marker.name}`);
 }
 
@@ -6394,7 +6750,6 @@ function handleCanvasClick(event: MouseEvent): void {
     switch (canvasInteractionMode) {
         case 'createMarker':
             createMarkerFromPlacement(placement.selectedShape, placement.position, placement.normal);
-            completed = markerCreationMode === 'fast';
             break;
         case 'createDesignPoint':
             createDesignPointFromPlacement(placement.selectedShape, placement.position, placement.normal);
@@ -6686,7 +7041,8 @@ async function initViewer(): Promise<void> {
             }
         });
 
-        // Add click listener for marker creation
+        // Add pointer listeners for marker creation/editing
+        container.addEventListener('mousemove', handleCanvasPointerMove);
         container.addEventListener('click', handleCanvasClick);
 
         applyRenderConfigToViewer();
