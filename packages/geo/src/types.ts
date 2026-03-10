@@ -82,5 +82,9 @@ export interface FaceNormalResult {
     position: Vec3;
     normal: Vec3;
     distance: number;
+    surfaceType?: string;
+    inferredFeature?: 'cylinderAxis' | 'sphereCenter';
+    inferredPosition?: Vec3;
+    inferredDirection?: Vec3;
     error?: string;
 }

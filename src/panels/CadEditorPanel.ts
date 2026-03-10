@@ -2,6 +2,13 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { generateCssVariables } from '@cadtool-online/ui';
+import {
+    createCadtoolErrorNotification,
+    formatCadtoolNotificationMessage,
+    isCadtoolErrorCode,
+    type CadtoolNotificationLevel,
+    type CadtoolRuntimeNotification
+} from '@cadtool-online/core';
 
 export class CadEditorPanel {
     public static currentPanel: CadEditorPanel | undefined;
@@ -67,7 +74,13 @@ export class CadEditorPanel {
             async message => {
                 switch (message.command) {
                     case 'alert':
-                        vscode.window.showInformationMessage(message.text);
+                        this._showNotification({
+                            level: 'info',
+                            text: typeof message.text === 'string' ? message.text : String(message.text ?? '')
+                        });
+                        return;
+                    case 'notify':
+                        this._showNotification(message);
                         return;
                     case 'importStep':
                         await this._handleImportStep();
@@ -134,7 +147,10 @@ export class CadEditorPanel {
             });
 
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load STEP file: ${error}`);
+            this._showNotification(createCadtoolErrorNotification('ERR_OPEN_CAD_FILE_FAILED', {
+                detail: error instanceof Error ? error.message : String(error),
+                text: 'Failed to load STEP file.'
+            }));
             this._setStatus('Ready');
         }
     }
@@ -161,7 +177,10 @@ export class CadEditorPanel {
             vscode.window.showInformationMessage(`Model exported successfully to ${fileName}`);
             this._setStatus('Ready');
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to export model: ${error}`);
+            this._showNotification(createCadtoolErrorNotification('ERR_GENERATE_FILE_FAILED', {
+                detail: error instanceof Error ? error.message : String(error),
+                text: 'Failed to export model.'
+            }));
             this._setStatus('Ready');
         }
     }
@@ -194,7 +213,10 @@ export class CadEditorPanel {
             const parsed = JSON.parse(fileContent) as unknown;
 
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                vscode.window.showErrorMessage('CADTool config must be a JSON object.');
+                this._showNotification(createCadtoolErrorNotification('PARSE_FILE_FAILED', {
+                    detail: 'CADTool config must be a JSON object.',
+                    text: 'Failed to import CADTool config.'
+                }));
                 this._setStatus('Ready');
                 return;
             }
@@ -206,7 +228,10 @@ export class CadEditorPanel {
             });
         } catch (error) {
             const detail = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(`Failed to import CADTool config: ${detail}`);
+            this._showNotification(createCadtoolErrorNotification('PARSE_FILE_FAILED', {
+                detail,
+                text: 'Failed to import CADTool config.'
+            }));
             this._setStatus('Ready');
         }
     }
@@ -236,7 +261,10 @@ export class CadEditorPanel {
             vscode.window.showInformationMessage(`CADTool config exported successfully to ${fileName}`);
             this._setStatus('Ready');
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to export CADTool config: ${error}`);
+            this._showNotification(createCadtoolErrorNotification('ERR_GENERATE_FILE_FAILED', {
+                detail: error instanceof Error ? error.message : String(error),
+                text: 'Failed to export CADTool config.'
+            }));
             this._setStatus('Ready');
         }
     }
@@ -255,6 +283,39 @@ export class CadEditorPanel {
 
     private _onWebviewReady(): void {
         this._setStatus('Ready');
+    }
+
+    private _showNotification(message: Partial<CadtoolRuntimeNotification>): void {
+        const level: CadtoolNotificationLevel = message.level === 'warning' || message.level === 'error'
+            ? message.level
+            : 'info';
+        const code = typeof message.code === 'string' && isCadtoolErrorCode(message.code)
+            ? message.code
+            : undefined;
+        const notification: CadtoolRuntimeNotification = {
+            level,
+            code,
+            text: typeof message.text === 'string' ? message.text : String(message.text ?? ''),
+            title: typeof message.title === 'string' ? message.title : undefined,
+            detail: typeof message.detail === 'string' ? message.detail : undefined,
+            recoveryHint: typeof message.recoveryHint === 'string' ? message.recoveryHint : undefined,
+            docPath: typeof message.docPath === 'string' ? message.docPath : undefined
+        };
+        const uiMessage = formatCadtoolNotificationMessage(notification, {
+            includeDetail: level !== 'info',
+            includeRecoveryHint: level === 'error'
+        });
+
+        switch (level) {
+            case 'error':
+                vscode.window.showErrorMessage(uiMessage);
+                return;
+            case 'warning':
+                vscode.window.showWarningMessage(uiMessage);
+                return;
+            default:
+                vscode.window.showInformationMessage(uiMessage);
+        }
     }
 
     private _handleRibbonAction(action: string, params?: Record<string, unknown>): void {

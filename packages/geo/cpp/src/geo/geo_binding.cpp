@@ -69,7 +69,11 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepLProp_SLProps.hxx>
 #include <IntCurveSurface_IntersectionPoint.hxx>
+#include <ElCLib.hxx>
 #include <gp_Lin.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Sphere.hxx>
+#include <Precision.hxx>
 
 // For random color generation
 #include <cmath>
@@ -1492,6 +1496,7 @@ std::string getFaceNormalAtPoint(const std::string& id,
 
         // Calculate normal at the intersection point
         BRepAdaptor_Surface surface(closestFace);
+        const GeomAbs_SurfaceType surfaceType = surface.GetType();
         BRepLProp_SLProps props(surface, 1, 1e-6);
         props.SetParameters(closestU, closestV);
 
@@ -1507,6 +1512,58 @@ std::string getFaceNormalAtPoint(const std::string& id,
             normal.Reverse();
         }
 
+        const char* surfaceTypeName = "unknown";
+        switch (surfaceType) {
+            case GeomAbs_Plane:
+                surfaceTypeName = "plane";
+                break;
+            case GeomAbs_Cylinder:
+                surfaceTypeName = "cylinder";
+                break;
+            case GeomAbs_Sphere:
+                surfaceTypeName = "sphere";
+                break;
+            case GeomAbs_Cone:
+                surfaceTypeName = "cone";
+                break;
+            case GeomAbs_Torus:
+                surfaceTypeName = "torus";
+                break;
+            default:
+                break;
+        }
+
+        bool hasInferredPlacement = false;
+        const char* inferredFeatureName = nullptr;
+        gp_Pnt inferredPosition;
+        gp_Dir inferredDirection = normal;
+
+        if (surfaceType == GeomAbs_Cylinder) {
+            const gp_Cylinder cylinder = surface.Cylinder();
+            const gp_Ax1 axis = cylinder.Axis();
+            const gp_Lin axisLine(axis);
+            const Standard_Real axisParameter = ElCLib::Parameter(axisLine, closestPoint);
+            inferredPosition = ElCLib::Value(axisParameter, axisLine);
+            inferredDirection = axis.Direction();
+            if (inferredDirection.Dot(normal) < 0.0) {
+                inferredDirection.Reverse();
+            }
+            inferredFeatureName = "cylinderAxis";
+            hasInferredPlacement = true;
+        } else if (surfaceType == GeomAbs_Sphere) {
+            const gp_Sphere sphere = surface.Sphere();
+            inferredPosition = sphere.Location();
+            gp_Vec radial(inferredPosition, closestPoint);
+            if (radial.Magnitude() > Precision::Confusion()) {
+                inferredDirection = gp_Dir(radial);
+            }
+            if (inferredDirection.Dot(normal) < 0.0) {
+                inferredDirection.Reverse();
+            }
+            inferredFeatureName = "sphereCenter";
+            hasInferredPlacement = true;
+        }
+
         // Build JSON result
         std::stringstream result;
         result << std::fixed;
@@ -1519,6 +1576,18 @@ std::string getFaceNormalAtPoint(const std::string& id,
         result << "\"x\":" << normal.X();
         result << ",\"y\":" << normal.Y();
         result << ",\"z\":" << normal.Z() << "}";
+        result << ",\"surfaceType\":\"" << surfaceTypeName << "\"";
+        if (hasInferredPlacement && inferredFeatureName != nullptr) {
+            result << ",\"inferredFeature\":\"" << inferredFeatureName << "\"";
+            result << ",\"inferredPosition\":{";
+            result << "\"x\":" << inferredPosition.X();
+            result << ",\"y\":" << inferredPosition.Y();
+            result << ",\"z\":" << inferredPosition.Z() << "}";
+            result << ",\"inferredDirection\":{";
+            result << "\"x\":" << inferredDirection.X();
+            result << ",\"y\":" << inferredDirection.Y();
+            result << ",\"z\":" << inferredDirection.Z() << "}";
+        }
         result << ",\"distance\":" << minDistance;
         result << "}";
 
