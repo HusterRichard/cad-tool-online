@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import { GammaCorrectionShader } from 'three/examples/jsm/shaders/GammaCorrectionShader.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import type { EdgeData, MeshData } from '@cadtool-online/core';
 import { SelectionManager, type SelectionCallback, type SelectionOptions } from './SelectionManager';
@@ -34,6 +37,8 @@ interface ViewerManagedMaterialState {
     baseMaterial: THREE.Material;
 }
 
+type EdgeOverlay = LineSegments2;
+
 export class ThreeViewer {
     private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
@@ -41,7 +46,7 @@ export class ThreeViewer {
     private controls: OrbitControls;
     private container: HTMLElement;
     private meshes: Map<string, THREE.Mesh> = new Map();
-    private meshEdges: Map<string, THREE.LineSegments> = new Map();
+    private meshEdges: Map<string, EdgeOverlay> = new Map();
 
     private materialMode: MaterialMode;
     private visualPreset: VisualPreset;
@@ -64,6 +69,7 @@ export class ThreeViewer {
     private fillLight: THREE.DirectionalLight | null = null;
     private rimLight: THREE.DirectionalLight | null = null;
     private topLight: THREE.DirectionalLight | null = null;
+    private edgeMaterial: LineMaterial | null = null;
 
     private readonly onResizeHandler: () => void;
     private readonly onControlStartHandler: () => void;
@@ -87,27 +93,26 @@ export class ThreeViewer {
 
         // Scene
         this.scene = new THREE.Scene();
-        // Remove solid background to allow CSS gradient to show through
-        this.scene.background = null;
+        const backgroundColor = new THREE.Color(options.backgroundColor ?? 0xe4e8ed);
+        this.scene.background = backgroundColor;
 
         // Camera
         const aspect = container.clientWidth / container.clientHeight;
         this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 10000);
         this.camera.position.set(100, 100, 100);
 
-        // Renderer with alpha enabled for transparent background
+        // Renderer
         this.renderer = new THREE.WebGLRenderer({
             antialias: options.antialias ?? true,
-            alpha: true, // Enable transparency
+            alpha: false,
             logarithmicDepthBuffer: true
         });
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.08;
-        // Set clear color with alpha = 0 for full transparency
-        this.renderer.setClearColor(0x000000, 0);
+        this.renderer.toneMappingExposure = 1.16;
+        this.renderer.setClearColor(backgroundColor, 1);
         container.appendChild(this.renderer.domElement);
 
         // Controls
@@ -154,67 +159,67 @@ export class ThreeViewer {
 
     private setupLights(): void {
         // 环境光 - 提供基础照明，确保所有面都能被照亮
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
         this.scene.add(this.ambientLight);
 
         // 半球光 - 模拟天空和地面的反射光，提供更自然的照明
-        this.hemisphereLight = new THREE.HemisphereLight(0xe6edf7, 0x5d4b35, 0.55);
+        this.hemisphereLight = new THREE.HemisphereLight(0xf7fbff, 0xb0b6bd, 0.92);
         this.hemisphereLight.position.set(0, 0, 1); // Z-up
         this.scene.add(this.hemisphereLight);
 
         // 主方向光 - 从右上方照射
-        this.keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
-        this.keyLight.position.set(180, 120, 200);
+        this.keyLight = new THREE.DirectionalLight(0xffffff, 1.55);
+        this.keyLight.position.set(190, 135, 250);
         this.scene.add(this.keyLight);
 
         // 辅助方向光 - 从左下方照射，填补阴影
-        this.fillLight = new THREE.DirectionalLight(0xbfd8ff, 0.42);
-        this.fillLight.position.set(-160, -90, 70);
+        this.fillLight = new THREE.DirectionalLight(0xf4f7fc, 0.98);
+        this.fillLight.position.set(-185, -105, 145);
         this.scene.add(this.fillLight);
 
         // 侧面补光 - 增强侧面细节
-        this.rimLight = new THREE.DirectionalLight(0xfff4dc, 0.6);
-        this.rimLight.position.set(-90, 170, -120);
+        this.rimLight = new THREE.DirectionalLight(0xfcf7eb, 0.72);
+        this.rimLight.position.set(-130, 200, -70);
         this.scene.add(this.rimLight);
 
-        this.topLight = new THREE.DirectionalLight(0xffffff, 0.35);
-        this.topLight.position.set(0, 0, 260);
+        this.topLight = new THREE.DirectionalLight(0xffffff, 0.72);
+        this.topLight.position.set(0, 0, 360);
         this.scene.add(this.topLight);
     }
 
     private applyVisualPreset(): void {
         if (this.visualPreset === 'cad') {
-            this.renderer.toneMapping = THREE.NoToneMapping;
-            this.renderer.toneMappingExposure = 1.0;
+            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            this.renderer.toneMappingExposure = 1.34;
 
             if (this.ambientLight) {
                 this.ambientLight.color.setHex(0xffffff);
-                this.ambientLight.intensity = 0.62;
+                this.ambientLight.intensity = 1.08;
             }
             if (this.hemisphereLight) {
-                this.hemisphereLight.color.setHex(0xffffff);
-                this.hemisphereLight.groundColor.setHex(0x8a8a8a);
-                this.hemisphereLight.intensity = 0.35;
+                this.hemisphereLight.color.setHex(0xfbfdff);
+                this.hemisphereLight.groundColor.setHex(0xc0c5cb);
+                this.hemisphereLight.intensity = 0.86;
             }
             if (this.keyLight) {
                 this.keyLight.color.setHex(0xffffff);
-                this.keyLight.intensity = 0.9;
-                this.keyLight.position.set(160, 140, 190);
+                this.keyLight.intensity = 1.48;
+                this.keyLight.position.set(190, 145, 245);
             }
             if (this.fillLight) {
-                this.fillLight.color.setHex(0xffffff);
-                this.fillLight.intensity = 0.36;
-                this.fillLight.position.set(-150, -100, 95);
+                this.fillLight.color.setHex(0xf8fbff);
+                this.fillLight.intensity = 1.02;
+                this.fillLight.position.set(-185, -110, 150);
             }
             if (this.rimLight) {
-                this.rimLight.color.setHex(0xffffff);
-                this.rimLight.intensity = 0.22;
-                this.rimLight.position.set(-80, 180, -80);
+                this.rimLight.color.setHex(0xfff7e9);
+                this.rimLight.intensity = 0.62;
+                this.rimLight.position.set(-125, 205, -65);
             }
             if (this.topLight) {
                 this.topLight.color.setHex(0xffffff);
-                this.topLight.intensity = 0.2;
-                this.topLight.position.set(0, 0, 260);
+                this.topLight.intensity = 0.58;
+                this.topLight.position.set(0, 0, 360);
             }
 
             if (this.outlinePass) {
@@ -224,12 +229,20 @@ export class ThreeViewer {
                 this.outlinePass.edgeThickness = 1.0;
                 this.outlinePass.pulsePeriod = 0;
             }
+            if (this.fxaaPass) {
+                this.fxaaPass.enabled = false;
+            }
+            if (this.edgeMaterial) {
+                this.edgeMaterial.color.set(0x262626);
+                this.edgeMaterial.opacity = 0.98;
+                this.edgeMaterial.linewidth = 1.35;
+            }
             return;
         }
 
         // cinematic preset
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.08;
+        this.renderer.toneMappingExposure = 1.12;
 
         if (this.ambientLight) {
             this.ambientLight.color.setHex(0xffffff);
@@ -267,6 +280,14 @@ export class ThreeViewer {
             this.outlinePass.edgeStrength = 4.5;
             this.outlinePass.edgeThickness = 1.2;
             this.outlinePass.pulsePeriod = 0;
+        }
+        if (this.fxaaPass) {
+            this.fxaaPass.enabled = true;
+        }
+        if (this.edgeMaterial) {
+            this.edgeMaterial.color.set(0x2d2d2d);
+            this.edgeMaterial.opacity = 0.9;
+            this.edgeMaterial.linewidth = 1.15;
         }
     }
 
@@ -315,12 +336,34 @@ export class ThreeViewer {
             this.composer.addPass(this.outlinePass);
         }
 
-        const gammaPass = new ShaderPass(GammaCorrectionShader);
-        this.composer.addPass(gammaPass);
-
         this.fxaaPass = new ShaderPass(FXAAShader);
         this.updateFxaaResolution();
         this.composer.addPass(this.fxaaPass);
+
+        const outputPass = new OutputPass();
+        this.composer.addPass(outputPass);
+    }
+
+    private createEdgeMaterial(): LineMaterial {
+        const material = new LineMaterial({
+            color: 0x262626,
+            linewidth: 1.35,
+            transparent: true,
+            opacity: 0.98,
+            depthTest: true,
+            depthWrite: false,
+            toneMapped: false,
+            worldUnits: false
+        });
+        this.updateLineMaterialResolution(material);
+        return material;
+    }
+
+    private updateLineMaterialResolution(material: LineMaterial): void {
+        material.resolution.set(
+            Math.max(this.container.clientWidth, 1),
+            Math.max(this.container.clientHeight, 1)
+        );
     }
 
     private createDefaultMatcapTexture(size: number = 128): THREE.DataTexture {
@@ -393,7 +436,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
             case 'pbr':
                 return new THREE.MeshPhysicalMaterial({
@@ -406,7 +449,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
             case 'flat':
                 return new THREE.MeshStandardMaterial({
@@ -417,7 +460,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
             case 'phong':
                 return new THREE.MeshPhongMaterial({
@@ -427,7 +470,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
             default:
                 return new THREE.MeshMatcapMaterial({
@@ -436,7 +479,7 @@ export class ThreeViewer {
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
-                    side: THREE.DoubleSide
+                    side: THREE.FrontSide
                 });
         }
     }
@@ -502,8 +545,7 @@ export class ThreeViewer {
             return false;
         }
 
-        // Keep CAD preset crisp by default; cinematic can use full post stack.
-        return this.visualPreset === 'cinematic';
+        return true;
     }
 
     private animate(): void {
@@ -529,6 +571,10 @@ export class ThreeViewer {
         this.composer?.setSize(width, height);
         this.outlinePass?.setSize(width, height);
         this.updateFxaaResolution();
+        if (this.edgeMaterial) {
+            this.updateLineMaterialResolution(this.edgeMaterial);
+        }
+        this.selectionManager?.setViewportSize(width, height);
     }
 
     private updateFxaaResolution(): void {
@@ -559,25 +605,23 @@ export class ThreeViewer {
             baseMaterial
         } as ViewerManagedMaterialState;
 
-        const edgesGeometry = edgeData && edgeData.vertices.length >= 6
-            ? (() => {
-                const g = new THREE.BufferGeometry();
-                g.setAttribute('position', new THREE.BufferAttribute(edgeData.vertices, 3));
-                return g;
-            })()
-            : new THREE.EdgesGeometry(geometry, 3);
-        const edgeMaterial = new THREE.LineBasicMaterial({
-            color: 0x2b2b2b,
-            transparent: false,
-            opacity: 1.0,
-            depthTest: true,
-            depthWrite: false,
-            toneMapped: false
-        });
-        const edgeOverlay = new THREE.LineSegments(edgesGeometry, edgeMaterial);
+        const edgePositions = edgeData && edgeData.vertices.length >= 6
+            ? edgeData.vertices
+            : (() => {
+                const fallbackEdges = new THREE.EdgesGeometry(geometry, 3);
+                const fallbackPositions = fallbackEdges.getAttribute('position');
+                const positions = new Float32Array(fallbackPositions.array as ArrayLike<number>);
+                fallbackEdges.dispose();
+                return positions;
+            })();
+        const edgesGeometry = new LineSegmentsGeometry();
+        edgesGeometry.setPositions(edgePositions);
+        const edgeMaterial = this.edgeMaterial ?? (this.edgeMaterial = this.createEdgeMaterial());
+        const edgeOverlay = new LineSegments2(edgesGeometry, edgeMaterial);
         edgeOverlay.visible = this.edgeLayerVisible;
         edgeOverlay.renderOrder = 4;
         edgeOverlay.raycast = () => undefined;
+        edgeOverlay.userData.viewerEdgeOverlay = true;
         mesh.add(edgeOverlay);
         this.meshEdges.set(id, edgeOverlay);
 
@@ -607,9 +651,6 @@ export class ThreeViewer {
             if (edgeOverlay) {
                 mesh.remove(edgeOverlay);
                 edgeOverlay.geometry.dispose();
-                if (edgeOverlay.material instanceof THREE.Material) {
-                    edgeOverlay.material.dispose();
-                }
                 this.meshEdges.delete(id);
             }
 
@@ -749,11 +790,14 @@ export class ThreeViewer {
         this.postProcessingEnabled = enabled;
 
         if (!enabled) {
+            this.composer?.dispose();
             this.composer = null;
             this.outlinePass = null;
+            this.fxaaPass = null;
             return;
         }
 
+        this.composer?.dispose();
         this.setupPostProcessing();
         this.applyVisualPreset();
         this.updateOutlineTargets();
@@ -770,6 +814,7 @@ export class ThreeViewer {
             return;
         }
 
+        this.composer?.dispose();
         this.setupPostProcessing();
         this.applyVisualPreset();
         this.updateOutlineTargets();

@@ -7127,7 +7127,7 @@ async function initViewer(): Promise<void> {
         renderConfig = config;
 
         viewer = new ThreeViewer(container, {
-            backgroundColor: 0x2a2a2a,
+            backgroundColor: 0xe9edf2,
             enableSelection: true,
             selectionOptions: {
                 highlightColor: 0x58a6ff,

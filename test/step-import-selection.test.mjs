@@ -186,16 +186,23 @@ test('reference marker deletion detaches from base marker and clears entity map'
   assert.match(source, /createdRefFrames\.delete\(refFrame\.id\);/);
 });
 
-test('mesh picking uses double sided surfaces for marker hover coverage', async () => {
+test('mesh shading prefers front sided surfaces for stronger solid depth cues', async () => {
   const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
 
-  assert.match(viewerSource, /side: THREE\.DoubleSide/);
+  assert.match(viewerSource, /side: THREE\.FrontSide/);
 });
 
 test('frame visualizer adds a circular ring around the marker triad', async () => {
   const frameVisualizerSource = await readFile(new URL('../packages/three/src/FrameVisualizer.ts', import.meta.url), 'utf8');
 
   assert.match(frameVisualizerSource, /new THREE\.TorusGeometry\(/);
+});
+
+test('frame visualizer aligns the marker ring with the frame orientation', async () => {
+  const frameVisualizerSource = await readFile(new URL('../packages/three/src/FrameVisualizer.ts', import.meta.url), 'utf8');
+
+  assert.match(frameVisualizerSource, /ring\.quaternion\.setFromUnitVectors\(new THREE\.Vector3\(0, 0, 1\), direction\.clone\(\)\.normalize\(\)\);/);
+  assert.doesNotMatch(frameVisualizerSource, /ring\.rotation\.x = Math\.PI \/ 2;/);
 });
 
 test('frame selection uses dedicated accent colors instead of the generic pale highlight overlay', async () => {
@@ -268,6 +275,15 @@ test('step reader enables color transfer and resolves colors through referenced 
   assert.match(geoBindingSource, /reader\.SetColorMode\(Standard_True\);/);
   assert.match(geoBindingSource, /resolveReferenceTarget\(shapeTool, label, resolvedLabel\)/);
   assert.match(geoBindingSource, /TopoDS_Shape resolvedShape = shapeTool->GetShape\(resolvedLabel\);/);
+});
+
+test('cylindrical marker hover inference projects the hover point onto the cylinder axis instead of forcing the face midpoint', async () => {
+  const geoBindingSource = await readFile(new URL('../packages/geo/cpp/src/geo/geo_binding.cpp', import.meta.url), 'utf8');
+
+  assert.match(geoBindingSource, /BRepAdaptor_Surface surface\(closestFace,\s*Standard_True\);/);
+  assert.match(geoBindingSource, /const Standard_Real axisParameter = ElCLib::Parameter\(axisLine, closestPoint\);/);
+  assert.match(geoBindingSource, /inferredPosition = ElCLib::Value\(axisParameter, axisLine\);/);
+  assert.doesNotMatch(geoBindingSource, /axisCenterParameter = 0\.5 \* \(surface\.FirstVParameter\(\) \+ surface\.LastVParameter\(\)\);/);
 });
 
 test('step import normalizes low-information solid colors for clearer CAD presentation', async () => {

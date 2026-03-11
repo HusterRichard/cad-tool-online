@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 
 export interface SelectionOptions {
     highlightColor?: number;
@@ -13,6 +15,10 @@ export interface SelectionEvent {
 }
 
 export type SelectionCallback = (event: SelectionEvent) => void;
+
+type MaterialObject3D = THREE.Object3D & {
+    material: THREE.Material | THREE.Material[];
+};
 
 /**
  * 选择管理器 - 处理 3D 对象的选择和高亮
@@ -30,8 +36,8 @@ export class SelectionManager {
     private originalMaterials: Map<string, Map<string, THREE.Material | THREE.Material[]>> = new Map();
     private highlightMaterial: THREE.MeshPhongMaterial;
     private hoverMaterial: THREE.MeshPhongMaterial;
-    private highlightLineMaterial: THREE.LineBasicMaterial;
-    private hoverLineMaterial: THREE.LineBasicMaterial;
+    private highlightLineMaterial: LineMaterial;
+    private hoverLineMaterial: LineMaterial;
 
     private callbacks: SelectionCallback[] = [];
     private enabled: boolean = true;
@@ -75,23 +81,12 @@ export class SelectionManager {
             side: THREE.DoubleSide
         });
 
-        this.highlightLineMaterial = new THREE.LineBasicMaterial({
-            color: options.highlightColor ?? 0x58a6ff,
-            transparent: true,
-            opacity: 0.95,
-            depthWrite: false,
-            depthTest: false,
-            toneMapped: false
-        });
+        this.highlightLineMaterial = this.createOverlayLineMaterial(
+            options.highlightColor ?? 0x58a6ff,
+            0.95
+        );
 
-        this.hoverLineMaterial = new THREE.LineBasicMaterial({
-            color: 0x87c8ff,
-            transparent: true,
-            opacity: 0.75,
-            depthWrite: false,
-            depthTest: false,
-            toneMapped: false
-        });
+        this.hoverLineMaterial = this.createOverlayLineMaterial(0x87c8ff, 0.75);
 
         this.onClickHandler = this.onClick.bind(this);
         this.onMouseMoveHandler = this.onMouseMove.bind(this);
@@ -101,6 +96,32 @@ export class SelectionManager {
     private setupEventListeners(): void {
         this.domElement.addEventListener('click', this.onClickHandler);
         this.domElement.addEventListener('mousemove', this.onMouseMoveHandler);
+    }
+
+    private createOverlayLineMaterial(color: number, opacity: number): LineMaterial {
+        const material = new LineMaterial({
+            color,
+            linewidth: 2,
+            transparent: true,
+            opacity,
+            depthWrite: false,
+            depthTest: false,
+            toneMapped: false,
+            worldUnits: false
+        });
+        this.setLineMaterialResolution(material);
+        return material;
+    }
+
+    private setLineMaterialResolution(material: LineMaterial): void {
+        material.resolution.set(
+            Math.max(this.domElement.clientWidth, 1),
+            Math.max(this.domElement.clientHeight, 1)
+        );
+    }
+
+    private isMaterialObject(child: THREE.Object3D): child is MaterialObject3D {
+        return 'material' in child;
     }
 
     private updateMouse(event: MouseEvent): void {
@@ -205,6 +226,14 @@ export class SelectionManager {
         }
 
         object.traverse((child) => {
+            if ((child instanceof LineSegments2 || child.userData.viewerEdgeOverlay) && this.isMaterialObject(child)) {
+                if (!cachedMaterials.has(child.uuid)) {
+                    cachedMaterials.set(child.uuid, child.material);
+                }
+                child.material = this.highlightLineMaterial;
+                return;
+            }
+
             if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
                 if (!cachedMaterials.has(child.uuid)) {
                     cachedMaterials.set(child.uuid, child.material);
@@ -232,6 +261,14 @@ export class SelectionManager {
         }
 
         object.traverse((child) => {
+            if ((child instanceof LineSegments2 || child.userData.viewerEdgeOverlay) && this.isMaterialObject(child)) {
+                if (!cachedMaterials.has(child.uuid)) {
+                    cachedMaterials.set(child.uuid, child.material);
+                }
+                child.material = this.hoverLineMaterial;
+                return;
+            }
+
             if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
                 if (!cachedMaterials.has(child.uuid)) {
                     cachedMaterials.set(child.uuid, child.material);
@@ -257,7 +294,7 @@ export class SelectionManager {
         if (!originalMaterials) return;
 
         object.traverse((child) => {
-            if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+            if ((child instanceof LineSegments2 || child.userData.viewerEdgeOverlay || child instanceof THREE.Mesh || child instanceof THREE.LineSegments) && this.isMaterialObject(child)) {
                 const originalMaterial = originalMaterials.get(child.uuid);
                 if (originalMaterial) {
                     child.material = originalMaterial;
@@ -366,6 +403,11 @@ export class SelectionManager {
             }
             this.hoveredId = null;
         }
+    }
+
+    setViewportSize(width: number, height: number): void {
+        this.highlightLineMaterial.resolution.set(Math.max(width, 1), Math.max(height, 1));
+        this.hoverLineMaterial.resolution.set(Math.max(width, 1), Math.max(height, 1));
     }
 
     dispose(): void {

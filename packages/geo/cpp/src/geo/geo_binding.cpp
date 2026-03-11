@@ -1551,7 +1551,7 @@ std::string getFaceNormalAtPoint(const std::string& id,
         }
 
         // Calculate normal at the intersection point
-        BRepAdaptor_Surface surface(closestFace);
+        BRepAdaptor_Surface surface(closestFace, Standard_True);
         const GeomAbs_SurfaceType surfaceType = surface.GetType();
         BRepLProp_SLProps props(surface, 1, 1e-6);
         props.SetParameters(closestU, closestV);
@@ -1598,8 +1598,13 @@ std::string getFaceNormalAtPoint(const std::string& id,
             const gp_Cylinder cylinder = surface.Cylinder();
             const gp_Ax1 axis = cylinder.Axis();
             const gp_Lin axisLine(axis);
-            const Standard_Real axisParameter = ElCLib::Parameter(axisLine, closestPoint);
-            inferredPosition = ElCLib::Value(axisParameter, axisLine);
+            Standard_Real axisCenterParameter = ElCLib::Parameter(axisLine, closestPoint);
+            const Standard_Real firstVParameter = surface.FirstVParameter();
+            const Standard_Real lastVParameter = surface.LastVParameter();
+            if (!Precision::IsInfinite(firstVParameter) && !Precision::IsInfinite(lastVParameter)) {
+                axisCenterParameter = 0.5 * (surface.FirstVParameter() + surface.LastVParameter());
+            }
+            inferredPosition = ElCLib::Value(axisCenterParameter, axisLine);
             inferredDirection = axis.Direction();
             if (inferredDirection.Dot(normal) < 0.0) {
                 inferredDirection.Reverse();
