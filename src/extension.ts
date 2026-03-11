@@ -13,7 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
     const openCadEditor = async () => {
         console.log('Opening CAD Editor...');
         vscode.window.showInformationMessage('Opening CAD Editor...');
-        await CadEditorPanel.createOrShow(context.extensionUri, { openInNewWindow: true });
+        await CadEditorPanel.createOrShow(context.extensionUri, { openInNewWindow: false });
     };
 
     const openEditorCommand = vscode.commands.registerCommand(

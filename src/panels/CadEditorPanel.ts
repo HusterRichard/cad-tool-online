@@ -28,10 +28,11 @@ export class CadEditorPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-        const openInNewWindow = options?.openInNewWindow ?? true;
+        const openInNewWindow = options?.openInNewWindow ?? false;
 
         if (CadEditorPanel.currentPanel) {
             CadEditorPanel.currentPanel._panel.reveal(column);
+            await CadEditorPanel._closeSidebar();
             return;
         }
 
@@ -48,8 +49,18 @@ export class CadEditorPanel {
 
         CadEditorPanel.currentPanel = new CadEditorPanel(panel, extensionUri);
 
+        await CadEditorPanel._closeSidebar();
+
         if (openInNewWindow) {
             await CadEditorPanel._tryMoveActiveEditorToNewWindow();
+        }
+    }
+
+    private static async _closeSidebar(): Promise<void> {
+        try {
+            await vscode.commands.executeCommand('workbench.action.closeSidebar');
+        } catch {
+            // If the command is unavailable, keep the current workbench layout.
         }
     }
 
