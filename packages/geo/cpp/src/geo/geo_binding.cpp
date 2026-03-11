@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <unordered_map>
 #include <streambuf>
 
 #include "ShapeStore.h"
@@ -688,37 +689,89 @@ bool tryGetColorFromLabel(const Handle(XCAFDoc_ColorTool)& colorTool,
         || colorTool->GetColor(label, XCAFDoc_ColorCurv, color);
 }
 
+std::string toHexColor(const Quantity_Color& color);
+
+bool tryGetColorFromShape(const Handle(XCAFDoc_ColorTool)& colorTool,
+                          const TopoDS_Shape& shape,
+                          Quantity_Color& color)
+{
+    if (shape.IsNull()) {
+        return false;
+    }
+
+    return colorTool->GetColor(shape, XCAFDoc_ColorSurf, color)
+        || colorTool->GetColor(shape, XCAFDoc_ColorGen, color)
+        || colorTool->GetColor(shape, XCAFDoc_ColorCurv, color);
+}
+
+bool tryGetDominantFaceColor(const Handle(XCAFDoc_ColorTool)& colorTool,
+                             const TopoDS_Shape& shape,
+                             Quantity_Color& color)
+{
+    if (shape.IsNull()) {
+        return false;
+    }
+
+    std::unordered_map<std::string, std::pair<int, Quantity_Color>> histogram;
+
+    for (TopExp_Explorer explorer(shape, TopAbs_FACE); explorer.More(); explorer.Next()) {
+        Quantity_Color faceColor;
+        if (!tryGetColorFromShape(colorTool, explorer.Current(), faceColor)) {
+            continue;
+        }
+
+        const std::string hex = toHexColor(faceColor);
+        auto& bucket = histogram[hex];
+        bucket.first += 1;
+        bucket.second = faceColor;
+    }
+
+    int bestCount = 0;
+    bool found = false;
+    for (const auto& entry : histogram) {
+        if (entry.second.first <= bestCount) {
+            continue;
+        }
+        bestCount = entry.second.first;
+        color = entry.second.second;
+        found = true;
+    }
+
+    return found;
+}
+
 bool tryResolveNodeColor(const Handle(XCAFDoc_ShapeTool)& shapeTool,
                          const Handle(XCAFDoc_ColorTool)& colorTool,
                          const TDF_Label& label,
                          Quantity_Color& color)
 {
-    // 1) Direct color on current label.
+    TDF_Label resolvedLabel = label;
+    resolveReferenceTarget(shapeTool, label, resolvedLabel);
+
+    TopoDS_Shape shape = shapeTool->GetShape(label);
+    TopoDS_Shape resolvedShape = shapeTool->GetShape(resolvedLabel);
+
+    // 1) Prefer colors bound to the actual instance/definition geometry.
+    if (tryGetColorFromShape(colorTool, shape, color) || tryGetColorFromShape(colorTool, resolvedShape, color)) {
+        return true;
+    }
+
+    // 2) If only sub-face styling exists, use the dominant face color as the part display color.
+    if (tryGetDominantFaceColor(colorTool, shape, color) || tryGetDominantFaceColor(colorTool, resolvedShape, color)) {
+        return true;
+    }
+
+    // 3) Fall back to direct label colors.
     if (tryGetColorFromLabel(colorTool, label, color)) {
         return true;
     }
 
-    // 2) If current label is a reference, try its referred shape label.
-    if (shapeTool->IsReference(label)) {
-        TDF_Label referred;
-        if (shapeTool->GetReferredShape(label, referred)) {
-            if (tryGetColorFromLabel(colorTool, referred, color)) {
-                return true;
-            }
-        }
+    // 4) Try the resolved/referred label for instance-bound styles.
+    if (resolvedLabel != label && tryGetColorFromLabel(colorTool, resolvedLabel, color)) {
+        return true;
     }
 
-    // 3) Try color bound directly on shape.
-    TopoDS_Shape shape = shapeTool->GetShape(label);
-    if (!shape.IsNull()) {
-        if (colorTool->GetColor(shape, XCAFDoc_ColorSurf, color)
-            || colorTool->GetColor(shape, XCAFDoc_ColorGen, color)
-            || colorTool->GetColor(shape, XCAFDoc_ColorCurv, color)) {
-            return true;
-        }
-    }
-
-    // 4) Inherit from parent labels.
+    // 5) Inherit from parent labels.
     TDF_Label parent = label.Father();
     while (!parent.IsNull()) {
         if (tryGetColorFromLabel(colorTool, parent, color)) {
@@ -849,6 +902,9 @@ std::string readStepFromBuffer(const Uint8Array& buffer, const std::string& base
         // Create XCAF document for hierarchy support
         Handle(TDocStd_Document) doc = new TDocStd_Document("MDTV-XCAF");
         STEPCAFControl_Reader reader;
+        reader.SetColorMode(Standard_True);
+        reader.SetNameMode(Standard_True);
+        reader.SetLayerMode(Standard_True);
 
         // Read STEP data from binary stream
         std::vector<uint8_t> input = convertJSArrayToNumberVector<uint8_t>(buffer);

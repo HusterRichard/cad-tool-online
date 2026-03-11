@@ -534,9 +534,8 @@ export class CadEditorPanel {
 
         // Get URI for icon resources
         const icons32 = webview.asWebviewUri(
-            vscode.Uri.joinPath(extensionUri, 'public', 'icons', 'png', '32')
+            vscode.Uri.joinPath(extensionUri, 'public', 'icons', 'svg', '32')
         );
-
         const nonce = this._getNonce();
 
         return `<!DOCTYPE html>
@@ -1130,13 +1129,16 @@ export class CadEditorPanel {
         /* Model tree styles */
         .tree-node-container {
             display: block;
+            margin: 0;
         }
         .tree-node {
-            padding: 4px 8px;
+            padding: 0 4px;
+            min-height: 18px;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 2px;
+            gap: 1px;
+            line-height: 18px;
         }
         .tree-node:hover {
             background-color: var(--color-bg-hover);
@@ -1156,36 +1158,39 @@ export class CadEditorPanel {
             outline: 1px solid rgba(239, 68, 68, 0.75);
         }
         .tree-node .expand-btn {
-            width: 12px;
-            height: 12px;
+            width: 13px;
+            height: 13px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             user-select: none;
-            border-radius: 2px;
+            border-radius: 3px;
+            background-color: transparent;
+            flex: 0 0 13px;
         }
         .tree-node .expand-btn img {
-            width: 10px;
-            height: 10px;
+            width: 11px;
+            height: 11px;
+            display: block;
             object-fit: contain;
-            opacity: 0.78;
+            opacity: 0.88;
         }
         .tree-node .expand-btn:hover {
-            background-color: var(--color-bg-hover);
+            background-color: rgba(148, 163, 184, 0.14);
         }
         .tree-node .expand-btn:hover img {
             opacity: 1;
         }
         .tree-node .expand-spacer {
-            width: 12px;
-            height: 12px;
+            width: 13px;
+            height: 13px;
             display: inline-block;
-            flex: 0 0 12px;
+            flex: 0 0 13px;
         }
         .tree-node .visibility-btn {
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1194,10 +1199,11 @@ export class CadEditorPanel {
             border-radius: 2px;
         }
         .tree-node .visibility-btn img {
-            width: 12px;
-            height: 12px;
+            width: 13px;
+            height: 13px;
+            display: block;
             object-fit: contain;
-            opacity: 0.74;
+            opacity: 0.9;
         }
         .tree-node .visibility-btn:hover {
             background-color: var(--color-bg-hover);
@@ -1206,33 +1212,47 @@ export class CadEditorPanel {
             opacity: 1;
         }
         .tree-node .visibility-spacer {
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             display: inline-block;
-            flex: 0 0 14px;
+            flex: 0 0 13px;
         }
         .tree-node .icon {
-            width: 16px;
-            height: 16px;
+            width: 13px;
+            height: 13px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 12px;
-            margin-right: 1px;
+            margin-right: 2px;
         }
         .tree-node .icon img {
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
+            display: block;
             object-fit: contain;
+        }
+        .tree-node.tree-node-category .icon {
+            width: 11px;
+            height: 11px;
+        }
+        .tree-node.tree-node-category .icon img {
+            width: 11px;
+            height: 11px;
         }
         .tree-node .name {
             flex: 1;
+            font-size: 12px;
+            line-height: 18px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
         .tree-children {
             display: none;
+            margin-left: 0;
+            padding-left: 0;
+            border-left: 1px solid rgba(148, 163, 184, 0.28);
         }
         .tree-children.expanded {
             display: block;
@@ -1571,19 +1591,19 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" id="btn-import">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_import.png" alt="导入"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_import.svg" alt="导入"></span>
                         <span class="ribbon-btn-text">导入</span>
                     </button>
                     <button class="ribbon-btn" id="btn-open">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_open_file.png" alt="打开"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_open_file.svg" alt="打开"></span>
                         <span class="ribbon-btn-text">打开</span>
                     </button>
                     <button class="ribbon-btn" id="btn-save">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_file.png" alt="保存"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_file.svg" alt="保存"></span>
                         <span class="ribbon-btn-text">保存</span>
                     </button>
                     <button class="ribbon-btn" id="btn-saveas">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_as.png" alt="另存"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_save_as.svg" alt="另存"></span>
                         <span class="ribbon-btn-text">另存</span>
                     </button>
                 </div>
@@ -1594,19 +1614,19 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" data-action-id="createGroup">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_group.png" alt="组合"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_group.svg" alt="组合"></span>
                         <span class="ribbon-btn-text">组合</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="ungroupGroup">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_ungroup.png" alt="分解"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_ungroup.svg" alt="分解"></span>
                         <span class="ribbon-btn-text">分解</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="cleanGroup">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_clear.png" alt="清理"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_clear.svg" alt="清理"></span>
                         <span class="ribbon-btn-text">清理</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createDefaultGroup">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_default_group.png" alt="默认分组"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_create_default_group.svg" alt="默认分组"></span>
                         <span class="ribbon-btn-text">默认分组</span>
                     </button>
                 </div>
@@ -1617,15 +1637,15 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" data-action-id="createFrame">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_marker.png" alt="标架"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_marker.svg" alt="标架"></span>
                         <span class="ribbon-btn-text">标架</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createRefFrame">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_refmarker.png" alt="参考标架"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_place_refmarker.svg" alt="参考标架"></span>
                         <span class="ribbon-btn-text">参考标架</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createDesignPoint">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.png" alt="设计点"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_design_pnt.svg" alt="设计点"></span>
                         <span class="ribbon-btn-text">设计点</span>
                     </button>
                 </div>
@@ -1636,35 +1656,35 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" data-action-id="createJoint_fixed">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_fixed.png" alt="固定副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_fixed.svg" alt="固定副"></span>
                         <span class="ribbon-btn-text">固定副</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_revolute">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_revolute.png" alt="转动副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_revolute.svg" alt="转动副"></span>
                         <span class="ribbon-btn-text">转动副</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_prismatic">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_prismatic.png" alt="平移副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_prismatic.svg" alt="平移副"></span>
                         <span class="ribbon-btn-text">平移副</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_cylindrical">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_cylindrical.png" alt="圆柱副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_cylindrical.svg" alt="圆柱副"></span>
                         <span class="ribbon-btn-text">圆柱副</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_spherical">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_spherical.png" alt="球副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_spherical.svg" alt="球副"></span>
                         <span class="ribbon-btn-text">球副</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_universal">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_universal.png" alt="万向节"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_universal.svg" alt="万向节"></span>
                         <span class="ribbon-btn-text">万向节</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_screw">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_screw.png" alt="螺旋副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_screw.svg" alt="螺旋副"></span>
                         <span class="ribbon-btn-text">螺旋副</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createJoint_planar">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_planar.png" alt="平面副"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/joint_cad_planar.svg" alt="平面副"></span>
                         <span class="ribbon-btn-text">平面副</span>
                     </button>
                 </div>
@@ -1675,11 +1695,11 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" data-action-id="createMotion_rotational">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_rotational.png" alt="转动驱动"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_rotational.svg" alt="转动驱动"></span>
                         <span class="ribbon-btn-text">转动驱动</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="createMotion_translational">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_translational.png" alt="平移驱动"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/motion_cad_translational.svg" alt="平移驱动"></span>
                         <span class="ribbon-btn-text">平移驱动</span>
                     </button>
                 </div>
@@ -1690,11 +1710,11 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" data-action-id="fluidTankSlice">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_point.png" alt="点点接触"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_point.svg" alt="点点接触"></span>
                         <span class="ribbon-btn-text">点点接触</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="fluidPort">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_surface.png" alt="点面接触"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_surface.svg" alt="点面接触"></span>
                         <span class="ribbon-btn-text">点面接触</span>
                     </button>
                 </div>
@@ -1705,19 +1725,19 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" data-action-id="measureTool">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_measure.png" alt="测量"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_measure.svg" alt="测量"></span>
                         <span class="ribbon-btn-text">测量</span>
                     </button>
                     <button class="ribbon-btn" id="btn-explode">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_exploded_view.png" alt="爆炸视图"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_exploded_view.svg" alt="爆炸视图"></span>
                         <span class="ribbon-btn-text">爆炸视图</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="surfaceThicken">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_surface_thickening.png" alt="曲面加厚"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_surface_thickening.svg" alt="曲面加厚"></span>
                         <span class="ribbon-btn-text">曲面加厚</span>
                     </button>
                     <button class="ribbon-btn" data-action-id="planarRingProcess">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_planar_loop_constraint.png" alt="平面环"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_planar_loop_constraint.svg" alt="平面环"></span>
                         <span class="ribbon-btn-text">平面环</span>
                     </button>
                 </div>
@@ -1728,11 +1748,11 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" id="btn-export-check">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/check_cad_check.png" alt="检查"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/check_cad_check.svg" alt="检查"></span>
                         <span class="ribbon-btn-text">检查</span>
                     </button>
                     <button class="ribbon-btn" id="btn-accept-exit">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_cancel.png" alt="接受并退出"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_cancel.svg" alt="接受并退出"></span>
                         <span class="ribbon-btn-text">接受并退出</span>
                     </button>
                 </div>
@@ -1743,7 +1763,7 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" id="btn-render-config">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.png" alt="设置"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_option.svg" alt="设置"></span>
                         <span class="ribbon-btn-text">设置</span>
                     </button>
                 </div>
@@ -1754,7 +1774,7 @@ export class CadEditorPanel {
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
                     <button class="ribbon-btn" id="btn-about">
-                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_about.png" alt="关于"></span>
+                        <span class="ribbon-btn-icon"><img src="${icons32}/cad_about.svg" alt="关于"></span>
                         <span class="ribbon-btn-text">关于</span>
                     </button>
                 </div>
@@ -1866,7 +1886,7 @@ export class CadEditorPanel {
     <script nonce="${nonce}">
         window.WASM_BASE_URL = "${wasmUri}";
         window.ICONS_32_BASE = "${icons32}";
-    </script>
+        </script>
     <script nonce="${nonce}" type="module" src="${webviewUri}"></script>
 </body>
 </html>`;

@@ -112,7 +112,7 @@ export class ThreeViewer {
 
         // Controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.enableDamping = true;
+        this.controls.enableDamping = false;
         this.onControlStartHandler = () => {
             this.selectionManager?.setHoverEnabled(false);
         };
@@ -138,6 +138,7 @@ export class ThreeViewer {
                 options.selectionOptions
             );
             this.selectionManager.onSelectionChange(() => {
+                this.syncFrameSelectionVisuals();
                 this.updateOutlineTargets();
             });
         }
@@ -821,6 +822,12 @@ export class ThreeViewer {
         this.camera.updateProjectionMatrix();
     }
 
+    private syncFrameSelectionVisuals(): void {
+        this.frameVisualizer.getAllFrameIds().forEach((id) => {
+            this.frameVisualizer.setFrameSelected(id, this.selectionManager?.isSelected(id) ?? false);
+        });
+    }
+
     dispose(): void {
         window.removeEventListener('resize', this.onResizeHandler);
         this.controls.removeEventListener('start', this.onControlStartHandler);
@@ -898,6 +905,7 @@ export class ThreeViewer {
         if (!data.id.startsWith('__draft_')) {
             this.selectionManager?.registerObject(data.id, group);
         }
+        this.syncFrameSelectionVisuals();
         return group;
     }
 
@@ -913,6 +921,7 @@ export class ThreeViewer {
         if (group && !data.id.startsWith('__draft_')) {
             this.selectionManager?.registerObject(data.id, group);
         }
+        this.syncFrameSelectionVisuals();
     }
 
     /**
@@ -923,6 +932,7 @@ export class ThreeViewer {
             this.selectionManager?.unregisterObject(id);
         }
         this.frameVisualizer.removeFrame(id);
+        this.syncFrameSelectionVisuals();
     }
 
     /**

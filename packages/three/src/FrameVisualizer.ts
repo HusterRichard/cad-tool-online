@@ -16,6 +16,7 @@ export interface FrameData {
     size?: number;
     visible?: boolean;
     isPrimary?: boolean;
+    selected?: boolean;
 }
 
 export class FrameVisualizer {
@@ -27,9 +28,33 @@ export class FrameVisualizer {
         xAxis: 0xff0000,
         yAxis: 0x00ff00,
         zAxis: 0x0000ff,
-        primary: 0xffff00,
-        secondary: 0x00ffff
+        markerDefault: 0xb45309,
+        markerSelected: 0xf59e0b,
+        refFrameDefault: 0x0f766e,
+        refFrameSelected: 0x14b8a6
     };
+
+    private getAccentColor(isPrimary: boolean | undefined, selected: boolean): number {
+        if (isPrimary) {
+            return selected
+                ? FrameVisualizer.COLORS.markerSelected
+                : FrameVisualizer.COLORS.markerDefault;
+        }
+        return selected
+            ? FrameVisualizer.COLORS.refFrameSelected
+            : FrameVisualizer.COLORS.refFrameDefault;
+    }
+
+    private createAccentSphere(color: number, length: number): THREE.Mesh {
+        const sphereGeometry = new THREE.SphereGeometry(length * 0.08, 16, 16);
+        const sphereMaterial = new THREE.MeshBasicMaterial({
+            color,
+            toneMapped: false
+        });
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.userData.frameAccentRole = 'core';
+        return sphere;
+    }
 
     constructor(scene: THREE.Scene, options: FrameVisualizerOptions = {}) {
         this.scene = scene;
@@ -61,11 +86,36 @@ export class FrameVisualizer {
         const ringMaterial = new THREE.MeshBasicMaterial({
             color,
             transparent: true,
-            opacity: 0.85
+            opacity: 0.72,
+            toneMapped: false
         });
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
         ring.rotation.x = Math.PI / 2;
+        ring.userData.frameAccentRole = 'ring';
         return ring;
+    }
+
+    private applySelectionAppearance(group: THREE.Group, selected: boolean): void {
+        const accentColor = this.getAccentColor(group.userData.isPrimary as boolean | undefined, selected);
+        group.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) {
+                return;
+            }
+            const material = child.material;
+            if (!(material instanceof THREE.MeshBasicMaterial)) {
+                return;
+            }
+            if (child.userData.frameAccentRole === 'core') {
+                material.color.setHex(accentColor);
+                material.opacity = 1;
+                material.transparent = false;
+            } else if (child.userData.frameAccentRole === 'ring') {
+                material.color.setHex(accentColor);
+                material.opacity = selected ? 0.92 : 0.72;
+                material.transparent = true;
+            }
+        });
+        group.userData.frameSelected = selected;
     }
 
     private createFrameGroup(data: FrameData): THREE.Group {
@@ -85,16 +135,8 @@ export class FrameVisualizer {
         group.add(this.createAxis(yAxis, FrameVisualizer.COLORS.yAxis, length));
         group.add(this.createAxis(zAxis, FrameVisualizer.COLORS.zAxis, length));
 
-        const sphereGeometry = new THREE.SphereGeometry(length * 0.08, 16, 16);
-        const sphereMaterial = new THREE.MeshBasicMaterial({
-            color: data.isPrimary
-                ? FrameVisualizer.COLORS.primary
-                : FrameVisualizer.COLORS.secondary
-        });
-        const accentColor = data.isPrimary
-            ? FrameVisualizer.COLORS.primary
-            : FrameVisualizer.COLORS.secondary;
-        group.add(new THREE.Mesh(sphereGeometry, sphereMaterial));
+        const accentColor = this.getAccentColor(data.isPrimary, Boolean(data.selected));
+        group.add(this.createAccentSphere(accentColor, length));
         group.add(this.createMarkerRing(accentColor, length));
 
         group.position.set(data.position.x, data.position.y, data.position.z);
@@ -103,10 +145,13 @@ export class FrameVisualizer {
             frameId: data.id,
             frameName: data.name,
             isPrimary: data.isPrimary,
+            selectionAppearance: 'frame',
+            frameSelected: Boolean(data.selected),
             orientation: { m: [...data.orientation.m] },
             size: data.size,
             visible: data.visible ?? true
         };
+        this.applySelectionAppearance(group, Boolean(data.selected));
 
         return group;
     }
@@ -167,6 +212,14 @@ export class FrameVisualizer {
         }
     }
 
+    setFrameSelected(id: string, selected: boolean): void {
+        const group = this.frames.get(id);
+        if (!group) {
+            return;
+        }
+        this.applySelectionAppearance(group, selected);
+    }
+
     setAllFramesVisible(visible: boolean): void {
         this.frames.forEach((group) => {
             group.visible = visible;
@@ -190,7 +243,8 @@ export class FrameVisualizer {
                 orientation: group.userData.orientation as Mat3,
                 size: group.userData.size as number | undefined,
                 visible: group.userData.visible as boolean | undefined,
-                isPrimary: group.userData.isPrimary as boolean | undefined
+                isPrimary: group.userData.isPrimary as boolean | undefined,
+                selected: group.userData.frameSelected as boolean | undefined
             });
         });
 

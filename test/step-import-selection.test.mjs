@@ -26,6 +26,21 @@ test('marker creation opens the options panel without requiring a preselected pa
   assert.match(startMarkerCreationSource, /viewer\?\.setSelectionEnabled\(false\)/);
 });
 
+test('reference marker creation opens options panel and requires an existing base marker', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const startRefFrameCreationMatch = source.match(/function startRefFrameCreation\(\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(startRefFrameCreationMatch, 'expected to find startRefFrameCreation implementation');
+
+  const startRefFrameCreationSource = startRefFrameCreationMatch[0];
+  assert.match(startRefFrameCreationSource, /if \(createdMarkers\.length === 0\)/);
+  assert.match(startRefFrameCreationSource, /Please create a basic marker first before creating a reference marker\./);
+  assert.match(startRefFrameCreationSource, /pendingRefFrameBaseId\s*=\s*null/);
+  assert.match(startRefFrameCreationSource, /pendingRefFrameTargetShapeId\s*=\s*null/);
+  assert.match(startRefFrameCreationSource, /selectSelection\(null\)/);
+  assert.match(startRefFrameCreationSource, /renderRefFrameCreationPanel\(\)/);
+});
+
 test('marker and reference marker tree nodes prefer the host part node', async () => {
   const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
 
@@ -64,7 +79,75 @@ test('marker creation stays in marker placement mode after creating a marker', a
 test('marker tree context menu supports deleting marker nodes', async () => {
   const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /if \(nodeData\.frameId\) \{\s*return \[\s*\{ label: '删除', action: 'deleteFrame' \}/);
+  assert.match(source, /if \(nodeData\.frameId\) \{\s*return \[\s*\{ label: '.*', action: 'deleteFrame' \}/);
+});
+
+test('reference marker fast mode auto-creates after selecting target part', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /if \(refFrameCreationMode === 'fast' && pendingRefFrameBaseId\) \{\s*createReferenceFrameFromSelection\(pendingRefFrameBaseId, selectedShapeId\);/);
+});
+
+test('reference marker standard mode validates base and target before confirm creation', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderRefFrameCreationPanelMatch = source.match(/function renderRefFrameCreationPanel\(\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderRefFrameCreationPanelMatch, 'expected to find renderRefFrameCreationPanel implementation');
+
+  const panelSource = renderRefFrameCreationPanelMatch[0];
+  assert.match(panelSource, /buildActionButtons\('opt-ref-confirm', '添加', 'opt-ref-cancel'\)/);
+  assert.match(panelSource, /if \(!pendingRefFrameBaseId \|\| !pendingRefFrameTargetShapeId\)/);
+  assert.match(panelSource, /createReferenceFrameFromSelection\(pendingRefFrameBaseId, pendingRefFrameTargetShapeId\)/);
+});
+
+test('reference marker panel asks users to pick the base marker from 3D selection', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderRefFrameCreationPanelMatch = source.match(/function renderRefFrameCreationPanel\(\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderRefFrameCreationPanelMatch, 'expected to find renderRefFrameCreationPanel implementation');
+
+  const panelSource = renderRefFrameCreationPanelMatch[0];
+  assert.match(panelSource, /当前基本标架：\$\{selectedBaseMarker\?\.name \?\? '\(未选择，请在三维中拾取标架\)'\}/);
+  assert.doesNotMatch(panelSource, /id="opt-ref-base"/);
+});
+
+test('reference marker panel shows selected target part name', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderRefFrameCreationPanelMatch = source.match(/function renderRefFrameCreationPanel\(\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderRefFrameCreationPanelMatch, 'expected to find renderRefFrameCreationPanel implementation');
+
+  const panelSource = renderRefFrameCreationPanelMatch[0];
+  assert.match(panelSource, /目标零件：\$\{selectedTargetShape\?\.name \?\? '\(未选择\)'\}/);
+});
+
+test('reference marker target selection updates status info with selected part name', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /setStatusInfo\(`Target part selected: \$\{selectedTargetShape\.name\}`\)/);
+});
+
+test('reference marker creation keeps the options workflow active after validation failures', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const createReferenceFrameFromSelectionMatch = source.match(/function createReferenceFrameFromSelection\(baseMarkerId: string, targetShapeId: string\): boolean \{[\s\S]*?\n\}/);
+
+  assert.ok(createReferenceFrameFromSelectionMatch, 'expected to find createReferenceFrameFromSelection implementation');
+
+  const fnSource = createReferenceFrameFromSelectionMatch[0];
+  assert.match(fnSource, /const restoreRefFrameCreationPanel = \(statusInfo\?: string\): void => \{/);
+  assert.match(fnSource, /renderRefFrameCreationPanel\(\)/);
+  assert.match(fnSource, /setStatus\('Select a basic marker and target part to create reference marker'\)/);
+  assert.match(fnSource, /restoreRefFrameCreationPanel\(reason\)/);
+});
+
+test('reference marker name is aligned with the selected base marker name', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const createReferenceFrameFromSelectionMatch = source.match(/function createReferenceFrameFromSelection\(baseMarkerId: string, targetShapeId: string\): boolean \{[\s\S]*?\n\}/);
+
+  assert.ok(createReferenceFrameFromSelectionMatch, 'expected to find createReferenceFrameFromSelection implementation');
+
+  const fnSource = createReferenceFrameFromSelectionMatch[0];
+  assert.match(fnSource, /name:\s*relatedMarker\.name/);
 });
 
 test('marker properties panel exposes editable name visibility size position and direction', async () => {
@@ -81,6 +164,28 @@ test('marker properties panel exposes editable name visibility size position and
   assert.match(panelSource, /buildVec3Input\('prop-marker-dir'/);
 });
 
+test('reference marker properties panel keeps core fields read-only and only edits visibility', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderRefFramePropertiesPanelMatch = source.match(/function renderRefFramePropertiesPanel\(refFrameId: string\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderRefFramePropertiesPanelMatch, 'expected to find renderRefFramePropertiesPanel implementation');
+
+  const panelSource = renderRefFramePropertiesPanelMatch[0];
+  assert.match(panelSource, /createPropertyRow\('名称', refFrame\.name, \{ boxed: true \}\)/);
+  assert.match(panelSource, /createPropertyRow\('基本标架', relatedMarker\?\.name \?\? '\(none\)', \{ boxed: true \}\)/);
+  assert.match(panelSource, /createPropertyRow\('宿主对象', frameOwnerDisplayName\(refFrame\.groupId\), \{ boxed: true \}\)/);
+  assert.match(panelSource, /id="prop-ref-frame-visible"/);
+  assert.doesNotMatch(panelSource, /buildNameInput\('prop-ref-frame-name'/);
+  assert.doesNotMatch(panelSource, /buildVec3Input\('prop-ref-frame-/);
+});
+
+test('reference marker deletion detaches from base marker and clears entity map', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /if \(refFrame\.relatedMarkerId\) \{\s*const parentMarker = createdMarkers\.find\(\(marker\) => marker\.id === refFrame\.relatedMarkerId\);\s*parentMarker\?\.removeRefMarker\(refFrame\.id\);/);
+  assert.match(source, /createdRefFrames\.delete\(refFrame\.id\);/);
+});
+
 test('mesh picking uses double sided surfaces for marker hover coverage', async () => {
   const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
 
@@ -91,6 +196,23 @@ test('frame visualizer adds a circular ring around the marker triad', async () =
   const frameVisualizerSource = await readFile(new URL('../packages/three/src/FrameVisualizer.ts', import.meta.url), 'utf8');
 
   assert.match(frameVisualizerSource, /new THREE\.TorusGeometry\(/);
+});
+
+test('frame selection uses dedicated accent colors instead of the generic pale highlight overlay', async () => {
+  const frameVisualizerSource = await readFile(new URL('../packages/three/src/FrameVisualizer.ts', import.meta.url), 'utf8');
+  const selectionManagerSource = await readFile(new URL('../packages/three/src/SelectionManager.ts', import.meta.url), 'utf8');
+  const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
+
+  assert.match(frameVisualizerSource, /markerDefault:/);
+  assert.match(frameVisualizerSource, /markerSelected:/);
+  assert.match(frameVisualizerSource, /refFrameDefault:/);
+  assert.match(frameVisualizerSource, /refFrameSelected:/);
+  assert.match(frameVisualizerSource, /selectionAppearance:\s*'frame'/);
+  assert.match(frameVisualizerSource, /frameSelected:\s*Boolean\(data\.selected\)/);
+  assert.match(frameVisualizerSource, /setFrameSelected\(id: string, selected: boolean\): void/);
+  assert.match(selectionManagerSource, /if \(object\.userData\.selectionAppearance === 'frame'\) \{\s*return;\s*\}/);
+  assert.match(viewerSource, /this\.syncFrameSelectionVisuals\(\);/);
+  assert.match(viewerSource, /this\.frameVisualizer\.setFrameSelected\(id, this\.selectionManager\?\.isSelected\(id\) \?\? false\);/);
 });
 
 test('marker face placement converts viewer rays through the shape transform', async () => {
@@ -105,4 +227,89 @@ test('marker face placement converts viewer rays through the shape transform', a
   assert.match(resolveFacePlacementSource, /transformDirection\(\s*inverseShapeTransform,\s*ray\.direction\.x/);
   assert.match(resolveFacePlacementSource, /transformPoint\(\s*shapeTransform,\s*result\.position\.x/);
   assert.match(resolveFacePlacementSource, /transformDirection\(\s*shapeTransform,\s*result\.normal\.x/);
+});
+
+test('cad editor panel serves ribbon icons from svg assets', async () => {
+  const panelSource = await readFile(new URL('../src/panels/CadEditorPanel.ts', import.meta.url), 'utf8');
+
+  assert.match(panelSource, /joinPath\(extensionUri, 'public', 'icons', 'svg', '32'\)/);
+  assert.doesNotMatch(panelSource, /\$\{icons32\}\/[a-z0-9_]+\.png/);
+  assert.match(panelSource, /\$\{icons32\}\/cad_import\.svg/);
+});
+
+test('model tree icons resolve svg files instead of raster png files', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const panelSource = await readFile(new URL('../src/panels/CadEditorPanel.ts', import.meta.url), 'utf8');
+
+  assert.match(panelSource, /joinPath\(extensionUri, 'public', 'icons', 'svg', '32'\)/);
+  assert.match(panelSource, /window\.ICONS_32_BASE = "\$\{icons32\}";/);
+  assert.match(source, /function toTreeIconsBase\(base: string\): string/);
+  assert.ok(source.includes("return base.replace(/\\/(?:png|svg)\\/32$/i, '/svg/16');"));
+  assert.match(source, /function resolveTreeIconsBase\(\): string \| null/);
+  assert.ok(source.includes("fileName.replace(/\\.png$/i, '.svg')"));
+  assert.match(source, /data-icons32-base/);
+  assert.match(source, /case 'category_objects':\s*return treeIconPath\('model_tree_body_dir\.png'\)/);
+  assert.match(source, /case 'category_connections':\s*return treeIconPath\('model_tree_connector_dir\.png'\)/);
+  assert.match(source, /case 'category_motions':\s*return treeIconPath\('model_tree_motion_dir\.png'\)/);
+  assert.match(source, /case 'category_forces':\s*return treeIconPath\('model_tree_force_dir\.png'\)/);
+  assert.match(source, /case 'category_materials':\s*return treeIconPath\('model_tree_material_dir\.png'\)/);
+});
+
+test('orbit controls disable damping for immediate camera response', async () => {
+  const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
+
+  assert.match(viewerSource, /this\.controls\.enableDamping = false;/);
+  assert.doesNotMatch(viewerSource, /this\.controls\.enableDamping = true;/);
+});
+
+test('step reader enables color transfer and resolves colors through referenced shapes', async () => {
+  const geoBindingSource = await readFile(new URL('../packages/geo/cpp/src/geo/geo_binding.cpp', import.meta.url), 'utf8');
+
+  assert.match(geoBindingSource, /reader\.SetColorMode\(Standard_True\);/);
+  assert.match(geoBindingSource, /resolveReferenceTarget\(shapeTool, label, resolvedLabel\)/);
+  assert.match(geoBindingSource, /TopoDS_Shape resolvedShape = shapeTool->GetShape\(resolvedLabel\);/);
+});
+
+test('step import normalizes low-information solid colors for clearer CAD presentation', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /function normalizeImportedDisplayColor\(/);
+  assert.match(source, /CAD_BODY_DISPLAY_COLOR = '#D4A017'/);
+  assert.match(source, /CAD_DARK_COMPONENT_COLOR = '#2B2B2B'/);
+  assert.match(source, /CAD_LIGHT_METAL_COLOR = '#B8B8B8'/);
+  assert.match(source, /normalizeImportedDisplayColor\(node\.name, node\.type, node\.color\)/);
+});
+
+test('model tree uses icon-based expand toggles and compact unified icon sizing', async () => {
+  const panelSource = await readFile(new URL('../src/panels/CadEditorPanel.ts', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const expandIcon = await readFile(new URL('../public/icons/svg/16/model_tree_cad_expand.svg', import.meta.url), 'utf8');
+  const collapseIcon = await readFile(new URL('../public/icons/svg/16/model_tree_cad_collapse.svg', import.meta.url), 'utf8');
+
+  assert.match(panelSource, /\.tree-node \{\s*padding: 0 4px;/);
+  assert.match(panelSource, /\.tree-node \{\s*[\s\S]*min-height: 18px;/);
+  assert.match(panelSource, /\.tree-node \.icon \{\s*width: 13px;\s*height: 13px;/);
+  assert.match(panelSource, /\.tree-node \.icon img \{\s*width: 13px;\s*height: 13px;/);
+  assert.match(panelSource, /\.tree-node \.visibility-btn \{\s*width: 13px;\s*height: 13px;/);
+  assert.match(panelSource, /\.tree-node \.visibility-btn img \{\s*width: 13px;\s*height: 13px;/);
+  assert.match(panelSource, /\.tree-node \.expand-btn \{\s*width: 13px;\s*height: 13px;/);
+  assert.match(panelSource, /\.tree-node \.expand-btn img \{\s*width: 11px;\s*height: 11px;/);
+  assert.match(panelSource, /\.tree-node\.tree-node-category \.icon \{\s*width: 11px;\s*height: 11px;/);
+  assert.match(panelSource, /\.tree-node\.tree-node-category \.icon img \{\s*width: 11px;\s*height: 11px;/);
+  assert.doesNotMatch(panelSource, /\.tree-node \.expand-btn::before \{/);
+  assert.match(panelSource, /\.tree-node \.expand-btn \{\s*[\s\S]*background-color: transparent;/);
+  assert.match(panelSource, /\.tree-children \{\s*[\s\S]*border-left: 1px solid/);
+  assert.match(panelSource, /\.tree-children \{\s*[\s\S]*margin-left: 0;/);
+  assert.match(panelSource, /\.tree-children \{\s*[\s\S]*padding-left: 0;/);
+  assert.match(source, /if \(nodeData\.kind === 'category'\) \{\s*node\.classList\.add\('tree-node-category'\);/);
+  assert.match(source, /expandBtn\.dataset\.expanded = expanded \? 'true' : 'false';/);
+  assert.match(source, /function expandIconPath\(expanded: boolean\): string \| null/);
+  assert.match(source, /const iconPath = expandIconPath\(expanded\);/);
+  assert.match(source, /const img = document\.createElement\('img'\);/);
+  assert.match(source, /container\.style\.marginLeft = '0px';/);
+  assert.match(source, /setExpandButtonState\(expandBtn, expandedByDefault\);/);
+  assert.doesNotMatch(expandIcon, /linearGradient|rect|polyline/i);
+  assert.doesNotMatch(collapseIcon, /linearGradient|rect|polyline/i);
+  assert.match(expandIcon, /<path[^>]+stroke="#64748B"/i);
+  assert.match(collapseIcon, /<path[^>]+stroke="#64748B"/i);
 });

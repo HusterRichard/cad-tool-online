@@ -195,6 +195,9 @@ export class SelectionManager {
     private applyHighlightMaterial(id: string): void {
         const object = this.selectableObjects.get(id);
         if (!object) return;
+        if (object.userData.selectionAppearance === 'frame') {
+            return;
+        }
 
         const cachedMaterials = this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
         if (!this.originalMaterials.has(id)) {
@@ -219,6 +222,9 @@ export class SelectionManager {
     private applyHoverMaterial(id: string): void {
         const object = this.selectableObjects.get(id);
         if (!object) return;
+        if (object.userData.selectionAppearance === 'frame') {
+            return;
+        }
 
         const cachedMaterials = this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
         if (!this.originalMaterials.has(id)) {
@@ -243,7 +249,12 @@ export class SelectionManager {
     private restoreMaterial(id: string): void {
         const object = this.selectableObjects.get(id);
         const originalMaterials = this.originalMaterials.get(id);
-        if (!object || !originalMaterials) return;
+        if (!object) return;
+        if (object.userData.selectionAppearance === 'frame') {
+            this.originalMaterials.delete(id);
+            return;
+        }
+        if (!originalMaterials) return;
 
         object.traverse((child) => {
             if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {

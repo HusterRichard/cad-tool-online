@@ -120,6 +120,9 @@ type CanvasInteractionMode = 'none' | 'createMarker' | 'createDesignPoint' | 'ed
 let canvasInteractionMode: CanvasInteractionMode = 'none';
 
 const DRAFT_MARKER_ID = '__draft_marker__';
+const CAD_BODY_DISPLAY_COLOR = '#D4A017';
+const CAD_DARK_COMPONENT_COLOR = '#2B2B2B';
+const CAD_LIGHT_METAL_COLOR = '#B8B8B8';
 
 interface MbsRefFrameEntity {
     id: string;
@@ -141,6 +144,39 @@ interface MarkerDraft {
     position: Vec3;
     orientation: Mat3;
     size: number;
+}
+
+function normalizeImportedDisplayColor(
+    name: string,
+    type: LoadedShape['type'],
+    color?: string
+): string | undefined {
+    if (!color || !/^#[0-9A-F]{6}$/i.test(color)) {
+        return type === 'assembly' ? '#C0C0C0' : CAD_BODY_DISPLAY_COLOR;
+    }
+
+    const normalized = color.toUpperCase();
+    const r = parseInt(normalized.slice(1, 3), 16);
+    const g = parseInt(normalized.slice(3, 5), 16);
+    const b = parseInt(normalized.slice(5, 7), 16);
+    const lowerName = name.toLowerCase();
+    const isNearlyWhite = r >= 0xec && g >= 0xec && b >= 0xec;
+    const isNeutralMetal = Math.abs(r - g) <= 10 && Math.abs(g - b) <= 10 && r >= 0xc0;
+    const isWarmBodyPaint = r >= 0xd0 && g >= 0x78 && b <= 0x50;
+
+    if (/(tire|tyre|rubber|seat|cushion|damping|damper)/.test(lowerName) && (isNearlyWhite || isNeutralMetal)) {
+        return CAD_DARK_COMPONENT_COLOR;
+    }
+
+    if (/(cylinder|rod|shaft|axle|eje|piston|hub|nave|rim)/.test(lowerName) && (isNearlyWhite || isNeutralMetal)) {
+        return CAD_LIGHT_METAL_COLOR;
+    }
+
+    if (type !== 'assembly' && (isWarmBodyPaint || isNearlyWhite || isNeutralMetal)) {
+        return CAD_BODY_DISPLAY_COLOR;
+    }
+
+    return normalized;
 }
 
 interface MbsDesignPointEntity {
@@ -861,13 +897,25 @@ function selectSelection(
 
     if (refFrameCreationPanelActive) {
         if (selectedMarkerId) {
-            pendingRefFrameBaseId = selectedMarkerId;
+            // In reference-marker mode, base marker selection must come from 3D picking.
+            setStatusInfo('Please pick a base marker in the 3D view.');
             renderRefFrameCreationPanel();
         } else if (selectedShapeId) {
             pendingRefFrameTargetShapeId = selectedShapeId;
+            const selectedTargetShape = loadedShapes.get(selectedShapeId);
+            if (selectedTargetShape) {
+                setStatusInfo(`Target part selected: ${selectedTargetShape.name}`);
+            }
             if (refFrameCreationMode === 'fast' && pendingRefFrameBaseId) {
                 createReferenceFrameFromSelection(pendingRefFrameBaseId, selectedShapeId);
             } else {
+                if (!pendingRefFrameBaseId) {
+                    setStatusInfo(
+                        selectedTargetShape
+                            ? `Target part selected: ${selectedTargetShape.name}. Please pick a base marker in the 3D view first.`
+                            : 'Please pick a base marker in the 3D view first.'
+                    );
+                }
                 renderRefFrameCreationPanel();
             }
         }
@@ -922,12 +970,27 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
     if (refFrameCreationPanelActive) {
         if (selectedMarkerId) {
             pendingRefFrameBaseId = selectedMarkerId;
+            const selectedBaseMarker = createdMarkers.find((marker) => marker.id === selectedMarkerId);
+            if (selectedBaseMarker) {
+                setStatusInfo(`Base marker selected: ${selectedBaseMarker.name}`);
+            }
             renderRefFrameCreationPanel();
         } else if (selectedShapeId) {
             pendingRefFrameTargetShapeId = selectedShapeId;
+            const selectedTargetShape = loadedShapes.get(selectedShapeId);
+            if (selectedTargetShape) {
+                setStatusInfo(`Target part selected: ${selectedTargetShape.name}`);
+            }
             if (refFrameCreationMode === 'fast' && pendingRefFrameBaseId) {
                 createReferenceFrameFromSelection(pendingRefFrameBaseId, selectedShapeId);
             } else {
+                if (!pendingRefFrameBaseId) {
+                    setStatusInfo(
+                        selectedTargetShape
+                            ? `Target part selected: ${selectedTargetShape.name}. Please pick a base marker in the 3D view first.`
+                            : 'Please pick a base marker in the 3D view first.'
+                    );
+                }
                 renderRefFrameCreationPanel();
             }
         }
@@ -2261,6 +2324,11 @@ function toNamedEntityList<T extends { id: string; name: string }>(items: Iterab
 }
 
 let resolvedIcons32Base: string | null | undefined;
+let resolvedTreeIconsBase: string | null | undefined;
+
+function toTreeIconsBase(base: string): string {
+    return base.replace(/\/(?:png|svg)\/32$/i, '/svg/16');
+}
 
 function resolveIcons32Base(): string | null {
     if (typeof resolvedIcons32Base === 'string' && resolvedIcons32Base.length > 0) {
@@ -2280,7 +2348,7 @@ function resolveIcons32Base(): string | null {
     }
 
     const probeImg = document.querySelector<HTMLImageElement>(
-        '.ribbon-btn-icon img, img[src*="icons/png/32/"], img[src*="public/icons/png/32/"]'
+        '.ribbon-btn-icon img, img[src*="icons/svg/32/"], img[src*="public/icons/svg/32/"], img[src*="icons/png/32/"], img[src*="public/icons/png/32/"]'
     );
     if (probeImg?.src) {
         const idx = probeImg.src.lastIndexOf('/');
@@ -2293,12 +2361,38 @@ function resolveIcons32Base(): string | null {
     return null;
 }
 
+function resolveTreeIconsBase(): string | null {
+    if (typeof resolvedTreeIconsBase === 'string' && resolvedTreeIconsBase.length > 0) {
+        return resolvedTreeIconsBase;
+    }
+
+    const fromWindow = typeof window.ICONS_32_BASE === 'string' ? window.ICONS_32_BASE.trim() : '';
+    if (fromWindow.length > 0) {
+        resolvedTreeIconsBase = toTreeIconsBase(fromWindow);
+        return resolvedTreeIconsBase;
+    }
+
+    const fromDataAttr = document.documentElement.getAttribute('data-icons32-base')?.trim() ?? '';
+    if (fromDataAttr.length > 0) {
+        resolvedTreeIconsBase = toTreeIconsBase(fromDataAttr);
+        return resolvedTreeIconsBase;
+    }
+
+    const fallback = resolveIcons32Base();
+    resolvedTreeIconsBase = fallback ? toTreeIconsBase(fallback) : null;
+    return resolvedTreeIconsBase;
+}
+
 function treeIconPath(fileName: string): string | null {
-    const base = resolveIcons32Base();
+    const base = resolveTreeIconsBase();
     if (!base) {
         return null;
     }
-    return `${base}/${fileName}`;
+    return `${base}/${fileName.replace(/\.png$/i, '.svg')}`;
+}
+
+function expandIconPath(expanded: boolean): string | null {
+    return treeIconPath(expanded ? 'model_tree_cad_collapse.png' : 'model_tree_cad_expand.png');
 }
 
 function buildOwnedFrameNodes(ownerId: string): ModelTreeNode[] {
@@ -2525,20 +2619,26 @@ function iconAssetForNode(node: ModelTreeNode): string | null {
     }
 }
 
-function expandIconPath(expanded: boolean): string | null {
-    return treeIconPath(expanded ? 'model_tree_cad_collapse.png' : 'model_tree_cad_expand.png');
-}
-
 function setExpandButtonState(expandBtn: HTMLElement, expanded: boolean): void {
-    const icon = expandBtn.querySelector('img');
+    expandBtn.dataset.expanded = expanded ? 'true' : 'false';
     const iconPath = expandIconPath(expanded);
+    const icon = expandBtn.querySelector('img');
     if (icon && iconPath) {
         const img = icon as HTMLImageElement;
         img.src = iconPath;
         img.alt = expanded ? 'collapse' : 'expand';
         return;
     }
-    expandBtn.textContent = expanded ? 'v' : '>';
+
+    if (iconPath) {
+        const img = document.createElement('img');
+        img.src = iconPath;
+        img.alt = expanded ? 'collapse' : 'expand';
+        img.draggable = false;
+        expandBtn.textContent = '';
+        expandBtn.appendChild(img);
+    }
+    expandBtn.setAttribute('aria-label', expanded ? 'collapse' : 'expand');
 }
 
 function visibilityIconPath(visible: boolean): string | null {
@@ -2675,10 +2775,14 @@ function showTreeContextMenu(x: number, y: number, nodeData: ModelTreeNode): voi
 function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     const container = document.createElement('div');
     container.className = 'tree-node-container';
-    container.style.marginLeft = `${level * 16}px`;
+    // Keep node container offset at zero for a compact tree layout.
+    container.style.marginLeft = '0px';
 
     const node = document.createElement('div');
     node.className = 'tree-node';
+    if (nodeData.kind === 'category') {
+        node.classList.add('tree-node-category');
+    }
     if (nodeData.selectionKey && selectedNodeIds.has(nodeData.selectionKey)) {
         node.classList.add('selected');
     }
@@ -2702,16 +2806,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
         const expandedByDefault = nodeData.kind === 'category' || nodeData.kind === 'assembly' || nodeData.kind === 'group';
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
-        const expandIcon = expandIconPath(expandedByDefault);
-        if (expandIcon) {
-            const iconImg = document.createElement('img');
-            iconImg.src = expandIcon;
-            iconImg.alt = expandedByDefault ? 'collapse' : 'expand';
-            iconImg.draggable = false;
-            expandBtn.appendChild(iconImg);
-        } else {
-            expandBtn.textContent = expandedByDefault ? 'v' : '>';
-        }
+        setExpandButtonState(expandBtn, expandedByDefault);
         expandBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleNodeExpand(container);
@@ -3608,12 +3703,13 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             ): LoadedShape => {
                 const localTransform = normalizeRigidTransform(node.transform);
                 const worldTransform = composeRigidTransforms(parentTransform, localTransform);
+                const displayColor = normalizeImportedDisplayColor(node.name, node.type, node.color);
                 const shape: LoadedShape = {
                     id: node.id,
                     name: node.name,
                     type: node.type,
                     shapeId: node.shapeId,
-                    color: node.color,
+                    color: displayColor,
                     transform: worldTransform,
                     visible: true,
                     parent
@@ -3628,8 +3724,8 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                         viewer.addMeshFromData(meshId, meshData, undefined, edgeData);
 
                         // Apply color if available
-                        if (node.color) {
-                            const colorHex = parseInt(node.color.replace('#', ''), 16);
+                        if (displayColor) {
+                            const colorHex = parseInt(displayColor.replace('#', ''), 16);
                             viewer.setMeshColor(meshId, colorHex);
                         }
                     }
@@ -5706,7 +5802,18 @@ function finalizeMarkerDraft(): void {
 function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: string): boolean {
     const relatedMarker = createdMarkers.find((marker) => marker.id === baseMarkerId);
     const targetShape = loadedShapes.get(targetShapeId);
+
+    const restoreRefFrameCreationPanel = (statusInfo?: string): void => {
+        // Keep reference-marker workflow active after failed attempts so users can continue quickly.
+        renderRefFrameCreationPanel();
+        setStatus('Select a basic marker and target part to create reference marker');
+        if (statusInfo) {
+            setStatusInfo(statusInfo);
+        }
+    };
+
     if (!relatedMarker || !targetShape) {
+        restoreRefFrameCreationPanel('Reference marker creation is waiting for a valid base marker and target part.');
         return false;
     }
 
@@ -5717,16 +5824,19 @@ function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: 
         buildMarkerDesignGroupMap()
     );
     if (!validation.valid) {
+        const reason = validation.reason ?? '参考标架创建失败。';
         vscode.postMessage({
             command: 'alert',
-            text: validation.reason ?? '参考标架创建失败。'
+            text: reason
         });
+        restoreRefFrameCreationPanel(reason);
         return false;
     }
 
     const refFrame: MbsRefFrameEntity = {
         id: nextEntityId('refMarker', createdRefFrames.size),
-        name: `RefMarker${createdRefFrames.size + 1}`,
+        // Keep the reference marker name aligned with the base marker for traceable pairing.
+        name: relatedMarker.name,
         groupId: targetOwner.id,
         parentId: targetShape.id,
         position: cloneVec3(relatedMarker.position),
@@ -5751,6 +5861,8 @@ function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: 
     updateModelTree();
     selectSelection({ kind: 'refFrame', id: refFrame.id });
     renderRefFrameCreationPanel();
+    setStatus('Select a basic marker and target part to create reference marker');
+    setStatusInfo(`Reference marker created: ${refFrame.name}`);
     return true;
 }
 
@@ -5845,9 +5957,9 @@ function renderRefFrameCreationPanel(): void {
         return;
     }
 
-    const markerOptions = createdMarkers.map((marker) =>
-        `<option value="${escapeAttr(marker.id)}"${marker.id === pendingRefFrameBaseId ? ' selected' : ''}>${marker.name}</option>`
-    ).join('');
+    const selectedBaseMarker = pendingRefFrameBaseId
+        ? createdMarkers.find((marker) => marker.id === pendingRefFrameBaseId) ?? null
+        : null;
     const selectedTargetShape = pendingRefFrameTargetShapeId ? loadedShapes.get(pendingRefFrameTargetShapeId) ?? null : null;
     const targetOwnerName = selectedTargetShape
         ? frameOwnerDisplayName(resolveFrameOwnerForShape(selectedTargetShape.id).id)
@@ -5858,26 +5970,20 @@ function renderRefFrameCreationPanel(): void {
     </div>`;
 
     propsEl.innerHTML = `<div class="opt-section">
-        <div class="opt-row">
-            <label for="opt-ref-base">基本标架</label>
-            <select id="opt-ref-base" class="opt-dropdown">${markerOptions}</select>
-        </div>
+        <div class="opt-label">当前基本标架：${selectedBaseMarker?.name ?? '(未选择，请在三维中拾取标架)'}</div>
         ${buildSeparator()}
         ${modeRow}
         ${buildSeparator()}
         <div class="opt-label">目标零件：${selectedTargetShape?.name ?? '(未选择)'}</div>
         <div class="opt-label">目标零件所属组：${targetOwnerName}</div>
         ${buildSeparator()}
-        <div class="opt-hint">${refFrameCreationMode === 'fast' ? '闪电模式下，选择目标零件后会立即创建参考标架。' : '标准模式下，选择目标零件后点击“添加”完成创建。'}</div>
+        <div class="opt-hint">${refFrameCreationMode === 'fast' ? '先在三维中拾取一个标架，再选择目标零件后会立即创建参考标架。' : '先在三维中拾取一个标架，再选择目标零件并点击“添加”完成创建。'}</div>
         ${buildSeparator()}
         ${refFrameCreationMode === 'standard'
             ? buildActionButtons('opt-ref-confirm', '添加', 'opt-ref-cancel')
             : '<div class="opt-btn-row"><button id="opt-ref-cancel" class="opt-btn-secondary">取消</button></div>'}
     </div>`;
 
-    document.getElementById('opt-ref-base')?.addEventListener('change', (event) => {
-        pendingRefFrameBaseId = (event.currentTarget as HTMLSelectElement).value || null;
-    });
     document.getElementById('opt-ref-mode-fast')?.addEventListener('click', () => {
         refFrameCreationMode = 'fast';
         renderRefFrameCreationPanel();
@@ -6336,10 +6442,11 @@ function startRefFrameCreation(): void {
     }
 
     resetCanvasInteraction();
-    pendingRefFrameBaseId = getActiveMarkerId() ?? createdMarkers.at(-1)?.id ?? null;
-    pendingRefFrameTargetShapeId = selectedShapeId;
+    pendingRefFrameBaseId = null;
+    pendingRefFrameTargetShapeId = null;
+    selectSelection(null);
     renderRefFrameCreationPanel();
-    setStatus('Select a basic marker and target part to create reference marker');
+    setStatus('Pick a marker in 3D view, then select a target part to create reference marker');
     setStatusInfo('Reference marker creation mode active');
 }
 
