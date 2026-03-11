@@ -89,6 +89,7 @@ pnpm setup:git-rules
 
 - `core.hooksPath=.githooks`
 - `commit.template=.gitmessage.txt`
+- 提交流程默认遵循 `.claude/rules/git-workflow.md`
 
 提交标题格式统一为：
 
@@ -96,7 +97,7 @@ pnpm setup:git-rules
 <type>: <task id><简要描述>
 ```
 
-完整规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+完整规范见 [.claude/rules/git-workflow.md](.claude/rules/git-workflow.md)。
 
 ## WASM 构建（可选）
 

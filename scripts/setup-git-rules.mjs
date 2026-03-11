@@ -22,3 +22,4 @@ execFileSync('git', ['config', '--local', 'commit.template', '.gitmessage.txt'],
 console.log('Git commit rules installed.');
 console.log('Configured core.hooksPath=.githooks');
 console.log('Configured commit.template=.gitmessage.txt');
+console.log('Commit workflow source=.claude/rules/git-workflow.md');

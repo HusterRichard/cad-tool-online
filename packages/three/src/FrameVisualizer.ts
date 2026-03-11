@@ -81,7 +81,7 @@ export class FrameVisualizer {
         );
     }
 
-    private createMarkerRing(color: number, length: number): THREE.Mesh {
+    private createMarkerRing(color: number, length: number, direction: THREE.Vector3): THREE.Mesh {
         const ringGeometry = new THREE.TorusGeometry(length * 0.22, Math.max(length * 0.014, 0.35), 12, 48);
         const ringMaterial = new THREE.MeshBasicMaterial({
             color,
@@ -90,7 +90,7 @@ export class FrameVisualizer {
             toneMapped: false
         });
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.rotation.x = Math.PI / 2;
+        ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
         ring.userData.frameAccentRole = 'ring';
         return ring;
     }
@@ -137,7 +137,7 @@ export class FrameVisualizer {
 
         const accentColor = this.getAccentColor(data.isPrimary, Boolean(data.selected));
         group.add(this.createAccentSphere(accentColor, length));
-        group.add(this.createMarkerRing(accentColor, length));
+        group.add(this.createMarkerRing(accentColor, length, zAxis));
 
         group.position.set(data.position.x, data.position.y, data.position.z);
         group.visible = data.visible ?? true;
