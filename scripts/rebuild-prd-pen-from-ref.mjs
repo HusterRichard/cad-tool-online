@@ -2,7 +2,7 @@ import fs from 'fs';
 
 const pageDataPath = 'ref/Docs/CADToolBox/pageData/page-data-list.json';
 const penPath = 'cadtoolonline.pen';
-const prdPath = 'docs/outputs/GLOBAL_PRD_CADToolOnline_三维建模界面重建_2026-03-06.md';
+const prdPath = 'docs/prd/global/GLOBAL_PRD_CADToolOnline_三维建模界面重建_2026-03-06.md';
 
 const pages = JSON.parse(fs.readFileSync(pageDataPath, 'utf8'));
 const pen = JSON.parse(fs.readFileSync(penPath, 'utf8'));

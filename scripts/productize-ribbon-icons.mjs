@@ -1,7 +1,7 @@
 ﻿import fs from 'fs';
 
 const PEN_PATH = 'cadtoolonline.pen';
-const REPORT_PATH = 'docs/outputs/GLOBAL_SPEC_RIBBON_ICON_PRODUCTIZATION_2026-03-06.md';
+const REPORT_PATH = 'docs/reference/GLOBAL_SPEC_RIBBON_ICON_PRODUCTIZATION_2026-03-06.md';
 
 const GROUP_ID_RE = /_G_[A-Z]+$/;
 const GROUP_TITLE_ID_SUFFIX_RE = /_(FT|GT|BT|CT|DRT|TT|ET|ST|DST)$/;
@@ -516,7 +516,7 @@ const semanticRows = Object.entries(SEMANTIC_TO_SRC)
 
 const md = `# Ribbon Icon Productization (Stage 5)\n\n- Date: 2026-03-06\n- Groups processed: ${groups}\n- Action items parsed: ${actionCount}\n- Icons generated: ${iconCount}\n- Rule: one actionable menu item -> one icon node\n\n## Semantic Source Mapping\n| Semantic | Source |\n|---|---|\n${semanticRows}\n\n## Unmapped Actions (Fallback Applied)\n| Action | Count |\n|---|---:|\n${missingRows || '| (none) | 0 |'}\n`;
 
-fs.mkdirSync('docs/outputs', { recursive: true });
+fs.mkdirSync('docs/reference', { recursive: true });
 fs.writeFileSync(REPORT_PATH, `${md}\n`, 'utf8');
 
 console.log(`Productized icons generated. groups=${groups}, actions=${actionCount}, icons=${iconCount}`);

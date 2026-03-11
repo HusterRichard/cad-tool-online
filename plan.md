@@ -7,10 +7,10 @@
 
 本计划以以下资料为基线，后续范围判断、优先级排序和验收口径统一以这些文档为准：
 
-- `docs/outputs/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md`
-- `docs/outputs/GLOBAL_TRACEABILITY_CADTool_2026a_帮助页追踪表_2026-03-09.md`
-- `docs/outputs/SC13_PLAN_对零件进行分组_2026-03-09.md`
-- `docs/outputs/SC13_PRD_对零件进行分组_2026-03-11.md`
+- `docs/reference/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md`
+- `docs/reference/GLOBAL_TRACEABILITY_CADTool_2026a_帮助页追踪表_2026-03-09.md`
+- `docs/plan/scenarios/SC13_PLAN_对零件进行分组_2026-03-09.md`
+- `docs/prd/scenarios/SC13_PRD_对零件进行分组_2026-03-11.md`
 - 当前仓库代码、测试和 README
 
 `GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` 共索引 74 页，覆盖：
@@ -331,7 +331,7 @@
 
 阶段产物：
 
-- `docs/outputs/GLOBAL_TRACEABILITY_CADTool_2026a_帮助页追踪表_2026-03-09.md`
+- `docs/reference/GLOBAL_TRACEABILITY_CADTool_2026a_帮助页追踪表_2026-03-09.md`
 
 ### Phase B：多体设计闭环补齐
 

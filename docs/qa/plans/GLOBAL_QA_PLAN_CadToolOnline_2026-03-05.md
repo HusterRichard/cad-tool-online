@@ -165,6 +165,5 @@
 
 ## 15. 交付物
 - QA Plan 文档（本文件）
-- 回归用例清单（建议后续文件：`docs/outputs/QA_CASES_CadToolOnline.md`）
-- 缺陷模板与日报模板（建议后续文件：`docs/outputs/QA_DEFECT_TEMPLATE.md`）
-
+- 回归用例清单（建议后续文件：`docs/qa/cases/GLOBAL_QA_CASES_CadToolOnline.md`）
+- 缺陷模板与日报模板（建议后续文件：`docs/qa/templates/QA_DEFECT_TEMPLATE.md`）

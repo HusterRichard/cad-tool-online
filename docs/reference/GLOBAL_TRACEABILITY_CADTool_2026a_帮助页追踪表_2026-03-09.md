@@ -2,7 +2,7 @@
 
 日期：2026-03-09  
 项目：CadToolOnline  
-基线：`docs/outputs/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md`
+基线：`docs/reference/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md`
 
 状态定义：
 
@@ -19,7 +19,7 @@
 | `CADOverview.html` | WP-BASE | 部分落地 | `README.md`、`plan.md` | - | 需要补产品内概述入口 |
 | `GettingStartedCADToolBox.html` | WP-BASE | 部分落地 | `plan.md` | - | 入门导航已纳入计划，未单独产品化 |
 | `HowToUseCADToolBox.html` | WP-BASE | 部分落地 | `plan.md` | - | 作为主能力目录基线 |
-| `FaqOverview.html` | WP-ERR | 未开始 | `docs/outputs/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` | - | 仅文档索引层 |
+| `FaqOverview.html` | WP-ERR | 未开始 | `docs/reference/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` | - | 仅文档索引层 |
 | `ApplicationCases.html` | WP-CASE | 未开始 | `plan.md` | - | 案例验收尚未启动 |
 
 ## 2. 入门与官方案例
