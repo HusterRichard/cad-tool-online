@@ -10,7 +10,13 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
-import type { EdgeData, MeshData } from '@cadtool-online/core';
+import {
+    computeCylinderGuideGeometry,
+    sampleCirclePolyline,
+    type EdgeData,
+    type MeshData,
+    type Vec3
+} from '@cadtool-online/core';
 import { SelectionManager, type SelectionCallback, type SelectionOptions } from './SelectionManager';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
 import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
@@ -38,6 +44,22 @@ interface ViewerManagedMaterialState {
 }
 
 type EdgeOverlay = LineSegments2;
+
+export type MarkerGuideData =
+    | {
+        kind: 'circle';
+        center: Vec3;
+        normal: Vec3;
+        radius: number;
+    }
+    | {
+        kind: 'cylinder';
+        axisStart: Vec3;
+        axisEnd: Vec3;
+        radius: number;
+        viewDirection: Vec3;
+        snapCircleCenter?: Vec3;
+    };
 
 export class ThreeViewer {
     private scene: THREE.Scene;
@@ -70,6 +92,8 @@ export class ThreeViewer {
     private rimLight: THREE.DirectionalLight | null = null;
     private topLight: THREE.DirectionalLight | null = null;
     private edgeMaterial: LineMaterial | null = null;
+    private markerGuideGroup: THREE.Group | null = null;
+    private markerGuideMaterial: THREE.LineBasicMaterial | null = null;
 
     private readonly onResizeHandler: () => void;
     private readonly onControlStartHandler: () => void;
@@ -591,6 +615,126 @@ export class ThreeViewer {
         );
     }
 
+    private getMarkerGuideMaterial(): THREE.LineBasicMaterial {
+        if (!this.markerGuideMaterial) {
+            this.markerGuideMaterial = new THREE.LineBasicMaterial({
+                color: 0x00f5ff,
+                transparent: true,
+                opacity: 0.98,
+                depthTest: false,
+                depthWrite: false,
+                toneMapped: false
+            });
+        }
+        return this.markerGuideMaterial;
+    }
+
+    private buildGuideCircle(center: Vec3, normal: Vec3, radius: number): THREE.LineLoop | null {
+        const points = sampleCirclePolyline(center, normal, radius, 64);
+        if (points.length < 4) {
+            return null;
+        }
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(
+            points.slice(0, -1).map((point) => new THREE.Vector3(point.x, point.y, point.z))
+        );
+        const circle = new THREE.LineLoop(geometry, this.getMarkerGuideMaterial());
+        circle.renderOrder = 6;
+        return circle;
+    }
+
+    private buildGuideSegments(segments: Array<[Vec3, Vec3]>): THREE.LineSegments | null {
+        if (segments.length === 0) {
+            return null;
+        }
+
+        const positions = new Float32Array(segments.length * 6);
+        segments.forEach(([start, end], index) => {
+            const offset = index * 6;
+            positions[offset] = start.x;
+            positions[offset + 1] = start.y;
+            positions[offset + 2] = start.z;
+            positions[offset + 3] = end.x;
+            positions[offset + 4] = end.y;
+            positions[offset + 5] = end.z;
+        });
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const lineSegments = new THREE.LineSegments(geometry, this.getMarkerGuideMaterial());
+        lineSegments.renderOrder = 6;
+        return lineSegments;
+    }
+
+    clearMarkerGuide(): void {
+        if (!this.markerGuideGroup) {
+            return;
+        }
+
+        this.markerGuideGroup.traverse((child) => {
+            if (child instanceof THREE.Line || child instanceof THREE.LineLoop || child instanceof THREE.LineSegments) {
+                child.geometry.dispose();
+            }
+        });
+        this.scene.remove(this.markerGuideGroup);
+        this.markerGuideGroup = null;
+    }
+
+    setMarkerGuide(guide: MarkerGuideData | null): void {
+        this.clearMarkerGuide();
+        if (!guide) {
+            return;
+        }
+
+        const group = new THREE.Group();
+        if (guide.kind === 'circle') {
+            const circle = this.buildGuideCircle(guide.center, guide.normal, guide.radius);
+            if (circle) {
+                group.add(circle);
+            }
+        } else {
+            const geometry = computeCylinderGuideGeometry(
+                guide.axisStart,
+                guide.axisEnd,
+                guide.radius,
+                guide.viewDirection,
+                guide.snapCircleCenter
+            );
+            if (geometry) {
+                const rails = this.buildGuideSegments([
+                    [geometry.railAStart, geometry.railAEnd],
+                    [geometry.railBStart, geometry.railBEnd]
+                ]);
+                if (rails) {
+                    group.add(rails);
+                }
+
+                const startCircle = this.buildGuideCircle(geometry.axisStart, geometry.axisDirection, geometry.radius);
+                const endCircle = this.buildGuideCircle(geometry.axisEnd, geometry.axisDirection, geometry.radius);
+                const snapCircle = geometry.snapCircleCenter
+                    ? this.buildGuideCircle(geometry.snapCircleCenter, geometry.axisDirection, geometry.radius)
+                    : null;
+                if (startCircle) {
+                    group.add(startCircle);
+                }
+                if (endCircle) {
+                    group.add(endCircle);
+                }
+                if (snapCircle) {
+                    group.add(snapCircle);
+                }
+            }
+        }
+
+        if (group.children.length === 0) {
+            return;
+        }
+
+        group.renderOrder = 6;
+        this.markerGuideGroup = group;
+        this.scene.add(group);
+    }
+
     addMeshFromData(id: string, meshData: MeshData, material?: THREE.Material, edgeData?: EdgeData): THREE.Mesh {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));
@@ -877,6 +1021,7 @@ export class ThreeViewer {
         window.removeEventListener('resize', this.onResizeHandler);
         this.controls.removeEventListener('start', this.onControlStartHandler);
         this.controls.removeEventListener('end', this.onControlEndHandler);
+        this.clearMarkerGuide();
         this.meshes.forEach((_mesh, id) => this.removeMesh(id));
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();
@@ -886,6 +1031,7 @@ export class ThreeViewer {
         this.pmremGenerator?.dispose();
         this.environmentTexture?.dispose();
         this.matcapTexture.dispose();
+        this.markerGuideMaterial?.dispose();
 
         this.renderer.dispose();
         this.controls.dispose();
@@ -1066,8 +1212,8 @@ export class ThreeViewer {
 
         // 归一化设备坐标 (NDC): -1 到 +1
         const mouse = new THREE.Vector2(
-            ((x / rect.width) * 2) - 1,
-            -((y / rect.height) * 2) + 1
+            (((x - rect.left) / rect.width) * 2) - 1,
+            -(((y - rect.top) / rect.height) * 2) + 1
         );
 
         // 创建射线

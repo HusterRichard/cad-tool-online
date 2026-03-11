@@ -87,6 +87,9 @@ export interface FaceNormalResult {
     snapPoint?: Vec3;
     snapDirection?: Vec3;
     snapConfidence?: number;
+    cylinderRadius?: number;
+    cylinderAxisStart?: Vec3;
+    cylinderAxisEnd?: Vec3;
     inferredFeature?: 'cylinderAxis' | 'sphereCenter';
     inferredPosition?: Vec3;
     inferredDirection?: Vec3;

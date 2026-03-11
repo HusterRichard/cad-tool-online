@@ -60,6 +60,23 @@ test('marker creation wires hover preview updates on canvas pointer move', async
   assert.doesNotMatch(selectionManagerSource, /pickObjectIdAtScreenPoint\(x: number, y: number\): string \| null \{\s*if \(!this\.enabled\)/);
 });
 
+test('frame editing reuses hover inference while suppressing normal scene selection', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const startFrameEditModeForTargetMatch = source.match(/function startFrameEditModeForTarget\([\s\S]*?\n\}/);
+  const handleCanvasPointerMoveMatch = source.match(/function handleCanvasPointerMove\(event: MouseEvent\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(startFrameEditModeForTargetMatch, 'expected to find startFrameEditModeForTarget implementation');
+  assert.ok(handleCanvasPointerMoveMatch, 'expected to find handleCanvasPointerMove implementation');
+
+  const startFrameEditModeForTargetSource = startFrameEditModeForTargetMatch[0];
+  const handleCanvasPointerMoveSource = handleCanvasPointerMoveMatch[0];
+
+  assert.match(startFrameEditModeForTargetSource, /viewer\?\.setSelectionEnabled\(false\)/);
+  assert.match(handleCanvasPointerMoveSource, /canvasInteractionMode === 'editFrame' && editingFrameTarget !== null/);
+  assert.match(handleCanvasPointerMoveSource, /viewer\?\.setMarkerGuide\(placement\.guide\)/);
+  assert.match(handleCanvasPointerMoveSource, /if \(markerPlacementActive\) \{\s*showMarkerPreview/);
+});
+
 test('marker creation stays in marker placement mode after creating a marker', async () => {
   const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
   const handleCanvasClickMatch = source.match(/function handleCanvasClick\(event: MouseEvent\): void \{[\s\S]*?\n\}/);
@@ -201,10 +218,13 @@ test('frame visualizer adds a circular ring around the marker triad', async () =
 test('frame visualizer aligns the marker ring with the frame orientation', async () => {
   const frameVisualizerSource = await readFile(new URL('../packages/three/src/FrameVisualizer.ts', import.meta.url), 'utf8');
 
-  assert.match(frameVisualizerSource, /const frameBody = new THREE\.Group\(\);/);
+  assert.match(frameVisualizerSource, /const accentGroup = new THREE\.Group\(\);/);
   assert.match(frameVisualizerSource, /frameRotation\.makeBasis\(xAxis, yAxis, zAxis\);/);
-  assert.match(frameVisualizerSource, /frameBody\.setRotationFromMatrix\(frameRotation\);/);
-  assert.match(frameVisualizerSource, /frameBody\.add\(this\.createMarkerRing\(accentColor, length\)\);/);
+  assert.match(frameVisualizerSource, /accentGroup\.setRotationFromMatrix\(frameRotation\);/);
+  assert.match(frameVisualizerSource, /accentGroup\.add\(this\.createMarkerRing\(accentColor, length\)\);/);
+  assert.match(frameVisualizerSource, /group\.add\(this\.createAxis\(xAxis, FrameVisualizer\.COLORS\.xAxis, length\)\);/);
+  assert.match(frameVisualizerSource, /group\.add\(this\.createAxis\(yAxis, FrameVisualizer\.COLORS\.yAxis, length\)\);/);
+  assert.match(frameVisualizerSource, /group\.add\(this\.createAxis\(zAxis, FrameVisualizer\.COLORS\.zAxis, length\)\);/);
 });
 
 test('frame selection uses dedicated accent colors instead of the generic pale highlight overlay', async () => {
@@ -226,11 +246,13 @@ test('frame selection uses dedicated accent colors instead of the generic pale h
 
 test('marker face placement converts viewer rays through the shape transform', async () => {
   const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
   const resolveFacePlacementMatch = source.match(/function resolveFacePlacement\([\s\S]*?\n\}/);
 
   assert.ok(resolveFacePlacementMatch, 'expected to find resolveFacePlacement implementation');
 
   const resolveFacePlacementSource = resolveFacePlacementMatch[0];
+  assert.match(resolveFacePlacementSource, /viewer\.getRayFromScreenPoint\(event\.clientX,\s*event\.clientY\)/);
   assert.match(resolveFacePlacementSource, /invertRigidTransform\(shapeTransform\)/);
   assert.match(resolveFacePlacementSource, /transformPoint\(\s*inverseShapeTransform,\s*ray\.origin\.x/);
   assert.match(resolveFacePlacementSource, /transformDirection\(\s*inverseShapeTransform,\s*ray\.direction\.x/);
@@ -239,6 +261,8 @@ test('marker face placement converts viewer rays through the shape transform', a
   assert.match(resolveFacePlacementSource, /const localSnapPoint = result\.snapPoint \?\? result\.inferredPosition;/);
   assert.match(resolveFacePlacementSource, /const worldSnapPoint = localSnapPoint/);
   assert.match(resolveFacePlacementSource, /const worldSnapDirection = localSnapDirection/);
+  assert.match(viewerSource, /\(\(\(x - rect\.left\) \/ rect\.width\) \* 2\) - 1/);
+  assert.match(viewerSource, /-\(\(\(y - rect\.top\) \/ rect\.height\) \* 2\) \+ 1/);
 });
 
 test('cad editor panel serves ribbon icons from svg assets', async () => {
@@ -307,16 +331,36 @@ test('cylindrical marker hover inference exposes explicit cylinder-axis snap met
   const geoBindingSource = await readFile(new URL('../packages/geo/cpp/src/geo/geo_binding.cpp', import.meta.url), 'utf8');
   const geoTypesSource = await readFile(new URL('../packages/geo/src/types.ts', import.meta.url), 'utf8');
   const webviewSource = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
 
   assert.match(geoBindingSource, /BRepAdaptor_Surface surface\(closestFace,\s*Standard_True\);/);
   assert.match(geoBindingSource, /const Standard_Real axisParameter = ElCLib::Parameter\(axisLine, closestPoint\);/);
   assert.match(geoBindingSource, /inferredPosition = ElCLib::Value\(axisParameter, axisLine\);/);
   assert.match(geoBindingSource, /snapKindName = "cylinder-axis";/);
+  assert.match(geoBindingSource, /BRepTools::UVBounds\(closestFace,\s*uMin,\s*uMax,\s*vMin,\s*vMax\);/);
+  assert.match(geoBindingSource, /result << ",\\"cylinderRadius\\":" << cylinderRadius;/);
   assert.match(geoBindingSource, /result << ",\\"snapKind\\":\\"" << snapKindName << "\\"";/);
   assert.match(geoTypesSource, /snapKind\?: 'cylinder-axis' \| 'sphere-center';/);
   assert.match(geoTypesSource, /snapPoint\?: Vec3;/);
+  assert.match(geoTypesSource, /cylinderRadius\?: number;/);
+  assert.match(geoTypesSource, /cylinderAxisStart\?: Vec3;/);
   assert.match(webviewSource, /snapKind = result\.snapKind/);
   assert.match(webviewSource, /if \(geometryHint\?\.snapKind === 'cylinder-axis'/);
+  assert.match(webviewSource, /findNearestCircularEdge\(shape\.edgeData,\s*hitPosition/);
+  assert.match(webviewSource, /kind: 'cylinder'/);
+  assert.match(webviewSource, /viewer\?\.setMarkerGuide\(placement\.guide\)/);
+  assert.match(viewerSource, /setMarkerGuide\(guide: MarkerGuideData \| null\)/);
+  assert.match(viewerSource, /computeCylinderGuideGeometry\(/);
+});
+
+test('marker hover guide uses a higher-contrast overlay style', async () => {
+  const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
+
+  assert.match(viewerSource, /color:\s*0x00f5ff/);
+  assert.match(viewerSource, /transparent:\s*true/);
+  assert.match(viewerSource, /opacity:\s*0\.98/);
+  assert.match(viewerSource, /depthTest:\s*false/);
+  assert.match(viewerSource, /renderOrder = 6/);
 });
 
 test('step import normalizes low-information solid colors for clearer CAD presentation', async () => {

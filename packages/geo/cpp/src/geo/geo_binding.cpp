@@ -69,6 +69,7 @@
 #include <BRepIntCurveSurface_Inter.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepLProp_SLProps.hxx>
+#include <BRepTools.hxx>
 #include <IntCurveSurface_IntersectionPoint.hxx>
 #include <ElCLib.hxx>
 #include <gp_Lin.hxx>
@@ -1595,6 +1596,10 @@ std::string getFaceNormalAtPoint(const std::string& id,
         gp_Pnt inferredPosition;
         gp_Dir inferredDirection = normal;
         double snapConfidence = 0.0;
+        bool hasCylinderGuide = false;
+        double cylinderRadius = 0.0;
+        gp_Pnt cylinderAxisStart;
+        gp_Pnt cylinderAxisEnd;
 
         if (surfaceType == GeomAbs_Cylinder) {
             const gp_Cylinder cylinder = surface.Cylinder();
@@ -1609,6 +1614,17 @@ std::string getFaceNormalAtPoint(const std::string& id,
             inferredFeatureName = "cylinderAxis";
             snapKindName = "cylinder-axis";
             snapConfidence = 1.0;
+            cylinderRadius = cylinder.Radius();
+            Standard_Real uMin = 0.0;
+            Standard_Real uMax = 0.0;
+            Standard_Real vMin = 0.0;
+            Standard_Real vMax = 0.0;
+            BRepTools::UVBounds(closestFace, uMin, uMax, vMin, vMax);
+            if (std::isfinite(vMin) && std::isfinite(vMax) && std::abs(vMax - vMin) > Precision::Confusion()) {
+                cylinderAxisStart = ElCLib::Value(vMin, axisLine);
+                cylinderAxisEnd = ElCLib::Value(vMax, axisLine);
+                hasCylinderGuide = true;
+            }
             hasInferredPlacement = true;
         } else if (surfaceType == GeomAbs_Sphere) {
             const gp_Sphere sphere = surface.Sphere();
@@ -1660,6 +1676,17 @@ std::string getFaceNormalAtPoint(const std::string& id,
                 result << ",\"y\":" << inferredDirection.Y();
                 result << ",\"z\":" << inferredDirection.Z() << "}";
                 result << ",\"snapConfidence\":" << snapConfidence;
+                if (hasCylinderGuide) {
+                    result << ",\"cylinderRadius\":" << cylinderRadius;
+                    result << ",\"cylinderAxisStart\":{";
+                    result << "\"x\":" << cylinderAxisStart.X();
+                    result << ",\"y\":" << cylinderAxisStart.Y();
+                    result << ",\"z\":" << cylinderAxisStart.Z() << "}";
+                    result << ",\"cylinderAxisEnd\":{";
+                    result << "\"x\":" << cylinderAxisEnd.X();
+                    result << ",\"y\":" << cylinderAxisEnd.Y();
+                    result << ",\"z\":" << cylinderAxisEnd.Z() << "}";
+                }
             }
         }
         result << ",\"distance\":" << minDistance;

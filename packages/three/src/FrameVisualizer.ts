@@ -67,11 +67,12 @@ export class FrameVisualizer {
     }
 
     private createAxis(
+        direction: THREE.Vector3,
         color: number,
         length: number
     ): THREE.ArrowHelper {
         return new THREE.ArrowHelper(
-            new THREE.Vector3(1, 0, 0),
+            direction.clone().normalize(),
             new THREE.Vector3(0, 0, 0),
             length,
             color,
@@ -125,27 +126,22 @@ export class FrameVisualizer {
             : this.options.axisLength;
 
         const m = data.orientation.m;
-        const xAxis = new THREE.Vector3(m[0], m[3], m[6]).normalize();
-        const yAxis = new THREE.Vector3(m[1], m[4], m[7]).normalize();
-        const zAxis = new THREE.Vector3(m[2], m[5], m[8]).normalize();
-        const frameBody = new THREE.Group();
+        const xAxis = new THREE.Vector3(m[0], m[1], m[2]).normalize();
+        const yAxis = new THREE.Vector3(m[3], m[4], m[5]).normalize();
+        const zAxis = new THREE.Vector3(m[6], m[7], m[8]).normalize();
+        const accentGroup = new THREE.Group();
         const frameRotation = new THREE.Matrix4();
         frameRotation.makeBasis(xAxis, yAxis, zAxis);
-        frameBody.setRotationFromMatrix(frameRotation);
+        accentGroup.setRotationFromMatrix(frameRotation);
 
-        const xAxisArrow = this.createAxis(FrameVisualizer.COLORS.xAxis, length);
-        const yAxisArrow = this.createAxis(FrameVisualizer.COLORS.yAxis, length);
-        const zAxisArrow = this.createAxis(FrameVisualizer.COLORS.zAxis, length);
-        yAxisArrow.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
-        zAxisArrow.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1));
-        frameBody.add(xAxisArrow);
-        frameBody.add(yAxisArrow);
-        frameBody.add(zAxisArrow);
+        group.add(this.createAxis(xAxis, FrameVisualizer.COLORS.xAxis, length));
+        group.add(this.createAxis(yAxis, FrameVisualizer.COLORS.yAxis, length));
+        group.add(this.createAxis(zAxis, FrameVisualizer.COLORS.zAxis, length));
 
         const accentColor = this.getAccentColor(data.isPrimary, Boolean(data.selected));
-        frameBody.add(this.createAccentSphere(accentColor, length));
-        frameBody.add(this.createMarkerRing(accentColor, length));
-        group.add(frameBody);
+        accentGroup.add(this.createAccentSphere(accentColor, length));
+        accentGroup.add(this.createMarkerRing(accentColor, length));
+        group.add(accentGroup);
 
         group.position.set(data.position.x, data.position.y, data.position.z);
         group.visible = data.visible ?? true;

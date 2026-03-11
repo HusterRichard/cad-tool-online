@@ -1,7 +1,7 @@
 ﻿// WebView entry point
 // This file will be bundled by Vite for the WebView
 
-import { ThreeViewer } from '@cadtool-online/three';
+import { ThreeViewer, type MarkerGuideData } from '@cadtool-online/three';
 import { OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
 import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
@@ -9,6 +9,7 @@ import {
     buildModelBrowserTree,
     collectLeafShapeIds,
     createCadtoolErrorNotification,
+    findNearestCircularEdge,
     flattenTopLevelAssemblyShapes,
     getUniqueGroupName as getUniqueGroupNameFromState,
     markerCreator,
@@ -4379,6 +4380,42 @@ function inferPlacementFromEdgeEndpoints(shape: LoadedShape, hitPosition: Vec3, 
     };
 }
 
+function inferPlacementFromCircularEdge(
+    shape: LoadedShape,
+    hitPosition: Vec3,
+    fallbackNormal: Vec3
+): { position: Vec3; normal: Vec3; guide: MarkerGuideData } | null {
+    if (!markerFeatureInferenceEnabled) {
+        return null;
+    }
+
+    const tolerance = estimateShapeInferenceTolerance(shape);
+    const candidate = findNearestCircularEdge(shape.edgeData, hitPosition, {
+        proximityTolerance: Math.max(tolerance * 0.6, 0.25)
+    });
+    if (!candidate) {
+        return null;
+    }
+
+    const dot = (candidate.normal.x * fallbackNormal.x)
+        + (candidate.normal.y * fallbackNormal.y)
+        + (candidate.normal.z * fallbackNormal.z);
+    const alignedNormal = dot < 0
+        ? { x: -candidate.normal.x, y: -candidate.normal.y, z: -candidate.normal.z }
+        : candidate.normal;
+
+    return {
+        position: cloneVec3(candidate.center),
+        normal: alignedNormal,
+        guide: {
+            kind: 'circle',
+            center: cloneVec3(candidate.center),
+            normal: cloneVec3(alignedNormal),
+            radius: candidate.radius
+        }
+    };
+}
+
 function pickShapeAtScreenPoint(screenX: number, screenY: number): LoadedShape | null {
     const objectId = viewer?.pickSelectableIdAtScreenPoint(screenX, screenY) ?? null;
     if (!objectId) {
@@ -4447,6 +4484,7 @@ function clearMarkerDraftPreview(): void {
     markerDraft = null;
     if (viewer) {
         viewer.removeFrame(DRAFT_MARKER_ID);
+        viewer.setMarkerGuide(null);
     }
 }
 
@@ -6511,6 +6549,7 @@ function startFrameEditModeForTarget(
     canvasInteractionMode = 'editFrame';
     editingFrameTarget = { id, kind };
     frameEditPickIntent = pickIntent;
+    viewer?.setSelectionEnabled(false);
     setStatus(pickIntent === 'position'
         ? 'Click on a face to update frame position'
         : pickIntent === 'direction'
@@ -6523,7 +6562,7 @@ function startFrameEditModeForTarget(
 function resolveFacePlacement(
     event: MouseEvent,
     options?: { silent?: boolean; enableInference?: boolean }
-): { selectedShape: LoadedShape; position: Vec3; normal: Vec3 } | null {
+): { selectedShape: LoadedShape; position: Vec3; normal: Vec3; guide: MarkerGuideData | null } | null {
     if (!viewer || !occt) {
         return null;
     }
@@ -6541,16 +6580,7 @@ function resolveFacePlacement(
         return null;
     }
 
-    const container = document.getElementById('canvas-container');
-    if (!container) {
-        return null;
-    }
-
-    const rect = container.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
-    const ray = viewer.getRayFromScreenPoint(x, y);
+    const ray = viewer.getRayFromScreenPoint(event.clientX, event.clientY);
     if (!ray) {
         console.warn('Failed to get ray from screen point');
         return null;
@@ -6647,10 +6677,62 @@ function resolveFacePlacement(
             return normalizeVector({ x, y, z }) ?? { x, y, z };
         })()
         : undefined;
+    const worldCylinderAxisStart = result.cylinderAxisStart
+        ? (() => {
+            const [x, y, z] = transformPoint(
+                shapeTransform,
+                result.cylinderAxisStart.x,
+                result.cylinderAxisStart.y,
+                result.cylinderAxisStart.z
+            );
+            return { x, y, z };
+        })()
+        : undefined;
+    const worldCylinderAxisEnd = result.cylinderAxisEnd
+        ? (() => {
+            const [x, y, z] = transformPoint(
+                shapeTransform,
+                result.cylinderAxisEnd.x,
+                result.cylinderAxisEnd.y,
+                result.cylinderAxisEnd.z
+            );
+            return { x, y, z };
+        })()
+        : undefined;
 
     const inferEnabled = options?.enableInference ?? (canvasInteractionMode === 'createMarker' || canvasInteractionMode === 'editFrame');
+    const circularEdgePlacement = inferEnabled
+        ? inferPlacementFromCircularEdge(
+            selectedShape,
+            {
+                x: worldPositionX,
+                y: worldPositionY,
+                z: worldPositionZ
+            },
+            worldNormal
+        )
+        : null;
     const inferredPlacement = inferEnabled
-        ? inferMarkerPlacement(
+        ? (circularEdgePlacement ?? {
+            position: {
+                x: worldPositionX,
+                y: worldPositionY,
+                z: worldPositionZ
+            },
+            normal: worldNormal,
+            guide: null
+        })
+        : {
+            position: {
+                x: worldPositionX,
+                y: worldPositionY,
+                z: worldPositionZ
+            },
+            normal: worldNormal,
+            guide: null
+        };
+    if (inferEnabled && !circularEdgePlacement) {
+        const placement = inferMarkerPlacement(
             selectedShape,
             {
                 x: worldPositionX,
@@ -6669,37 +6751,59 @@ function resolveFacePlacement(
                 snapKind?: string;
                 snapConfidence?: number;
             }
-        )
-        : {
-            position: {
-                x: worldPositionX,
-                y: worldPositionY,
-                z: worldPositionZ
-            },
-            normal: worldNormal
-        };
+        );
+        inferredPlacement.position = placement.position;
+        inferredPlacement.normal = placement.normal;
+        if (
+            markerFeatureInferenceEnabled
+            && snapKind === 'cylinder-axis'
+            && worldCylinderAxisStart
+            && worldCylinderAxisEnd
+            && worldSnapPoint
+            && typeof result.cylinderRadius === 'number'
+            && Number.isFinite(result.cylinderRadius)
+            && result.cylinderRadius > 0
+        ) {
+            inferredPlacement.guide = {
+                kind: 'cylinder',
+                axisStart: worldCylinderAxisStart,
+                axisEnd: worldCylinderAxisEnd,
+                radius: result.cylinderRadius,
+                viewDirection: normalizeVector(ray.direction) ?? ray.direction,
+                snapCircleCenter: worldSnapPoint
+            };
+        }
+    }
 
     return {
         selectedShape,
         position: inferredPlacement.position,
-        normal: inferredPlacement.normal
+        normal: inferredPlacement.normal,
+        guide: inferredPlacement.guide
     };
 }
 
 function handleCanvasPointerMove(event: MouseEvent): void {
-    if (canvasInteractionMode !== 'createMarker' || !markerCreationPanelActive) {
+    const markerPlacementActive = canvasInteractionMode === 'createMarker' && markerCreationPanelActive;
+    const frameEditActive = canvasInteractionMode === 'editFrame' && editingFrameTarget !== null;
+    if (!markerPlacementActive && !frameEditActive) {
         return;
     }
 
     const placement = resolveFacePlacement(event, { silent: true, enableInference: true });
     if (!placement) {
-        if (!markerDraft) {
+        if (markerPlacementActive && !markerDraft) {
             clearMarkerDraftPreview();
+        } else {
+            viewer?.setMarkerGuide(null);
         }
         return;
     }
 
-    showMarkerPreview(buildMarkerPreviewDraft(placement.selectedShape, placement.position, placement.normal));
+    viewer?.setMarkerGuide(placement.guide);
+    if (markerPlacementActive) {
+        showMarkerPreview(buildMarkerPreviewDraft(placement.selectedShape, placement.position, placement.normal));
+    }
 }
 
 function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
