@@ -7,15 +7,13 @@
 
 本计划以以下资料为基线，后续范围判断、优先级排序和验收口径统一以这些文档为准：
 
-- `docs/outputs/CADTool_2026a_Doc_Index.md`
-- `docs/outputs/CADTool_2026a_Traceability_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_PLAN_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_BASELINE_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_DELIVERY_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_QA_2026-03-09.md`
+- `docs/outputs/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md`
+- `docs/outputs/GLOBAL_TRACEABILITY_CADTool_2026a_帮助页追踪表_2026-03-09.md`
+- `docs/outputs/SC13_PLAN_对零件进行分组_2026-03-09.md`
+- `docs/outputs/SC13_PRD_对零件进行分组_2026-03-11.md`
 - 当前仓库代码、测试和 README
 
-`CADTool_2026a_Doc_Index.md` 共索引 74 页，覆盖：
+`GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` 共索引 74 页，覆盖：
 
 - 概述 / 新手入门 / 如何操作
 - CAD 导入、模型浏览、三维视图、文件管理
@@ -116,7 +114,7 @@
 
 已完成并有较强证据支撑的子项：
 
-- `GroupParts` 已形成独立方案、基线、交付、QA 文档
+- `GroupParts` 已形成独立方案与 PRD 文档
 - 分组层级状态、模型树组节点、多选、右键菜单、拖拽、重命名、分解、清理、默认分组、导入导出层级字段已落地
 - `packages/core/test/group-design.spec.ts`
 - `packages/core/test/model-browser.spec.ts`
@@ -124,7 +122,7 @@
 
 当前已知缺口：
 
-- `GROUP_DESIGN_DELIVERY_2026-03-09.md` 已明确：Joint / Motion 的归属仍偏向 part，而非完整 group-oriented
+- `SC13_PRD_对零件进行分组_2026-03-11.md` 已明确：Joint / Motion 的归属仍偏向 part，而非完整 group-oriented
 - 缺少专门的 Webview 集成回归套件
 - `BuildContacts`、`ModifyUnknownConnectors`、`PlanarLoopConstraints` 尚无完整闭环验收证据
 
@@ -333,7 +331,7 @@
 
 阶段产物：
 
-- `docs/outputs/CADTool_2026a_Traceability_2026-03-09.md`
+- `docs/outputs/GLOBAL_TRACEABILITY_CADTool_2026a_帮助页追踪表_2026-03-09.md`
 
 ### Phase B：多体设计闭环补齐
 
@@ -483,5 +481,5 @@
 本次修订完成了三件事：
 
 1. 修复 `plan.md` 编码损坏问题。
-2. 将计划基线从旧 PRD 切换为 `CADTool_2026a_Doc_Index.md` 的 74 页帮助目录。
+2. 将计划基线从旧 PRD 切换为 `GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` 的 74 页帮助目录。
 3. 明确把“分组设计已形成交付证据，但整体验收仍未完成”的真实状态写入主计划。

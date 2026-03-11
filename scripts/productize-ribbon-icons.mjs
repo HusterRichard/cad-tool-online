@@ -1,7 +1,7 @@
 ﻿import fs from 'fs';
 
 const PEN_PATH = 'cadtoolonline.pen';
-const REPORT_PATH = 'docs/outputs/RIBBON_ICON_PRODUCTIZATION_2026-03-06.md';
+const REPORT_PATH = 'docs/outputs/GLOBAL_SPEC_RIBBON_ICON_PRODUCTIZATION_2026-03-06.md';
 
 const GROUP_ID_RE = /_G_[A-Z]+$/;
 const GROUP_TITLE_ID_SUFFIX_RE = /_(FT|GT|BT|CT|DRT|TT|ET|ST|DST)$/;

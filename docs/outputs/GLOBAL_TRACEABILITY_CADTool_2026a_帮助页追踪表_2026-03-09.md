@@ -2,7 +2,7 @@
 
 日期：2026-03-09  
 项目：CadToolOnline  
-基线：`docs/outputs/CADTool_2026a_Doc_Index.md`
+基线：`docs/outputs/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md`
 
 状态定义：
 
@@ -19,7 +19,7 @@
 | `CADOverview.html` | WP-BASE | 部分落地 | `README.md`、`plan.md` | - | 需要补产品内概述入口 |
 | `GettingStartedCADToolBox.html` | WP-BASE | 部分落地 | `plan.md` | - | 入门导航已纳入计划，未单独产品化 |
 | `HowToUseCADToolBox.html` | WP-BASE | 部分落地 | `plan.md` | - | 作为主能力目录基线 |
-| `FaqOverview.html` | WP-ERR | 未开始 | `docs/outputs/CADTool_2026a_Doc_Index.md` | - | 仅文档索引层 |
+| `FaqOverview.html` | WP-ERR | 未开始 | `docs/outputs/GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` | - | 仅文档索引层 |
 | `ApplicationCases.html` | WP-CASE | 未开始 | `plan.md` | - | 案例验收尚未启动 |
 
 ## 2. 入门与官方案例
@@ -50,7 +50,7 @@
 | `ModelImport.html` | WP-EXP | 部分落地 | `importCadtoolConfig` | `CFG-003` | 配置导入可用 |
 | `ModelExport.html` | WP-EXP | 部分落地 | `exportCadtoolConfig`、`exportModel` | `CFG-003` | 产物契约待细化 |
 | `ModelTreeBrowser.html` | WP-IMP | 部分落地 | `buildModelBrowserTree`、`src/webview/main.ts` | `WV-004` `WV-005` `packages/core/test/model-browser.spec.ts` | 基础树和选中联动存在 |
-| `MultibodyModelBrowser.html` | WP-MB | 部分落地 | 组节点树、上下文菜单、拖拽 | `GROUP_DESIGN_QA_2026-03-09.md` | 已支持 group 节点 |
+| `MultibodyModelBrowser.html` | WP-MB | 部分落地 | 组节点树、上下文菜单、拖拽 | `SC13_PRD_对零件进行分组_2026-03-11.md` | 已支持 group 节点 |
 | `FluidModelBrowser.html` | WP-FL | 入口级 | `fluidSlices` / `fluidPorts` 数据源 | - | 浏览器行为未闭环 |
 | `ViewInteractions.html` | WP-IMP | 部分落地 | `ThreeViewer`、`src/webview/main.ts` | `WV-005` `WV-006` `WV-008` | 三维视图基本交互已落地 |
 | `Measure.html` | WP-TOOL | 部分落地 | `measureTool` | `RIB-016` `RIB-017` | 基础测量已通 |
@@ -60,15 +60,15 @@
 
 | 页面 | 工作包 | 状态 | 代码/文档证据 | 测试/QA 证据 | 备注 |
 |---|---|---|---|---|---|
-| `MultiBodyDesign.html` | WP-MB | 部分落地 | Ribbon 多体命令组、`src/webview/main.ts` | `QA_CASES_CadToolOnline_2026-03-05.md` 多体条目 | 功能已分散落地 |
-| `GroupParts.html` | WP-MB | 已落地 | `packages/core/src/groupDesign.ts`、`src/webview/main.ts` | `packages/core/test/group-design.spec.ts`、`GROUP_DESIGN_*_2026-03-09.md` | 当前完成度最高 |
+| `MultiBodyDesign.html` | WP-MB | 部分落地 | Ribbon 多体命令组、`src/webview/main.ts` | `GLOBAL_QA_CASES_CadToolOnline_2026-03-05.md` 多体条目 | 功能已分散落地 |
+| `GroupParts.html` | WP-MB | 已落地 | `packages/core/src/groupDesign.ts`、`src/webview/main.ts` | `packages/core/test/group-design.spec.ts`、`SC13_PRD_对零件进行分组_2026-03-11.md` | 当前完成度最高 |
 | `BuildMarkers.html` | WP-MB | 部分落地 | `createFrame` / `createRefFrame` / `editFrame` / `deleteFrame` | `RIB-004` ~ `RIB-007` | 仍需按帮助页校对模式与属性流程 |
-| `BuildDesignPoints.html` | WP-MB | 部分落地 | `createDesignPoint` | `GROUP_DESIGN_DELIVERY_2026-03-09.md`、QA 文档 | 已能创建并挂组 |
+| `BuildDesignPoints.html` | WP-MB | 部分落地 | `createDesignPoint` | `SC13_PRD_对零件进行分组_2026-03-11.md`、QA 文档 | 已能创建并挂组 |
 | `BuildConnectors.html` | WP-MB | 部分落地 | `createJoint_*`、关节数据结构 | `RIB-008` `RIB-009` `RIB-010` | 类型与拾取规则仍需帮助页对齐 |
 | `ModifyUnknownConnectors.html` | WP-MB | 未开始 | `plan.md` | - | 尚无明确实现证据 |
 | `BuildMotions.html` | WP-MB | 部分落地 | `createMotion_*` | `RIB-011` `RIB-012` `RIB-013` | 已有基本驱动对象 |
 | `BuildContacts.html` | WP-MB | 入口级 | PRD 场景映射 | - | 尚未见独立接触对象闭环 |
-| `ObjectAttribute.html` | WP-MB | 部分落地 | Properties 面板、group aggregation | `GROUP_DESIGN_DELIVERY_2026-03-09.md` | group 属性较完整，其它对象待补齐 |
+| `ObjectAttribute.html` | WP-MB | 部分落地 | Properties 面板、group aggregation | `SC13_PRD_对零件进行分组_2026-03-11.md` | group 属性较完整，其它对象待补齐 |
 | `MaterialModify.html` | WP-MB | 入口级 | `selectedDensityByShapeId`、质量计算协调器 | `packages/core/test/mass-aggregation.spec.ts` | 用户工作流未形成 |
 | `PlanarLoopConstraints.html` | WP-TOOL | 入口级 | `planarRingProcess` 入口 | `RIB-020` | 仅入口和提示 |
 

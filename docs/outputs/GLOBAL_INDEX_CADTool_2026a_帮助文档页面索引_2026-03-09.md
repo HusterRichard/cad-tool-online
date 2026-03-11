@@ -2,10 +2,8 @@
 
 ## 本地输出文档
 
-- `docs/outputs/GROUP_DESIGN_PLAN_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_BASELINE_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_DELIVERY_2026-03-09.md`
-- `docs/outputs/GROUP_DESIGN_QA_2026-03-09.md`
+- `docs/outputs/SC13_PLAN_对零件进行分组_2026-03-09.md`
+- `docs/outputs/SC13_PRD_对零件进行分组_2026-03-11.md`
 
 | 页面 | 一级标题 | 关键章节 |
 |---|---|---|
