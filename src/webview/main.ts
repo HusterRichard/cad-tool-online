@@ -124,6 +124,7 @@ const DRAFT_MARKER_ID = '__draft_marker__';
 const CAD_BODY_DISPLAY_COLOR = '#D4A017';
 const CAD_DARK_COMPONENT_COLOR = '#2B2B2B';
 const CAD_LIGHT_METAL_COLOR = '#B8B8B8';
+const TREE_NODE_INDENT_PX = 12;
 
 interface MbsRefFrameEntity {
     id: string;
@@ -2447,6 +2448,46 @@ function toFallbackTreeShapeNode(shape: LoadedShape): ModelTreeNode {
     };
 }
 
+function toImportedLeafTreeNode(shape: LoadedShape, parentGroupName?: string): ModelTreeNode {
+    const normalizedLabel = shape.name === parentGroupName ? `${shape.name}_1` : shape.name;
+    return {
+        id: `shape_${shape.id}`,
+        kind: shape.type,
+        label: normalizedLabel,
+        shapeId: shape.id,
+        selectionKey: toShapeSelectionKey(shape.id),
+        children: buildOwnedFrameNodes(shape.id)
+    };
+}
+
+function toImportedTreeNode(
+    shape: LoadedShape,
+    options: {
+        wrapSinglePart?: boolean;
+        parentGroupName?: string;
+    } = {}
+): ModelTreeNode {
+    const shouldWrapAsGroup = shape.type === 'assembly' || options.wrapSinglePart;
+
+    if (!shouldWrapAsGroup) {
+        return toImportedLeafTreeNode(shape, options.parentGroupName);
+    }
+
+    const childNodes = shape.children?.map((child) => toImportedTreeNode(child, { parentGroupName: shape.name })) ?? [];
+    const wrappedLeafNodes = options.wrapSinglePart ? [toImportedLeafTreeNode(shape, shape.name)] : [];
+
+    return {
+        id: `import_group_${shape.id}`,
+        kind: 'group',
+        label: shape.name,
+        children: [
+            ...childNodes,
+            ...wrappedLeafNodes,
+            ...buildOwnedFrameNodes(shape.id)
+        ]
+    };
+}
+
 function toGroupTreeNode(groupId: string): ModelTreeNode | null {
     const group = getGroupNode(groupId);
     if (!group) {
@@ -2488,7 +2529,11 @@ function buildObjectTreeNodes(): ModelTreeNode[] {
     }
 
     return rootShapes.length > 0
-        ? flattenTopLevelAssemblyShapes(rootShapes).map((shape) => toFallbackTreeShapeNode(shape))
+        ? flattenTopLevelAssemblyShapes(rootShapes).map((shape) => (
+            shape.type === 'assembly'
+                ? toImportedTreeNode(shape)
+                : toImportedTreeNode(shape, { wrapSinglePart: true })
+        ))
         : externalModelTreeShapes.map((shape) => ({
             id: `shape_${shape.id}`,
             label: shape.name,
@@ -2776,8 +2821,7 @@ function showTreeContextMenu(x: number, y: number, nodeData: ModelTreeNode): voi
 function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     const container = document.createElement('div');
     container.className = 'tree-node-container';
-    // Keep node container offset at zero for a compact tree layout.
-    container.style.marginLeft = '0px';
+    container.style.marginLeft = `${Math.max(0, level) * TREE_NODE_INDENT_PX}px`;
 
     const node = document.createElement('div');
     node.className = 'tree-node';
@@ -2804,7 +2848,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
 
     if (nodeData.children && nodeData.children.length > 0) {
-        const expandedByDefault = nodeData.kind === 'category' || nodeData.kind === 'assembly' || nodeData.kind === 'group';
+        const expandedByDefault = nodeData.kind === 'category';
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
         setExpandButtonState(expandBtn, expandedByDefault);

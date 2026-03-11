@@ -399,10 +399,28 @@ test('model tree uses icon-based expand toggles and compact unified icon sizing'
   assert.match(source, /function expandIconPath\(expanded: boolean\): string \| null/);
   assert.match(source, /const iconPath = expandIconPath\(expanded\);/);
   assert.match(source, /const img = document\.createElement\('img'\);/);
-  assert.match(source, /container\.style\.marginLeft = '0px';/);
+  assert.match(source, /const TREE_NODE_INDENT_PX = 12;/);
+  assert.match(source, /container\.style\.marginLeft = `\$\{Math\.max\(0, level\) \* TREE_NODE_INDENT_PX\}px`;/);
   assert.match(source, /setExpandButtonState\(expandBtn, expandedByDefault\);/);
+  assert.match(source, /const expandedByDefault = nodeData\.kind === 'category';/);
   assert.doesNotMatch(expandIcon, /linearGradient|rect|polyline/i);
   assert.doesNotMatch(collapseIcon, /linearGradient|rect|polyline/i);
   assert.match(expandIcon, /<path[^>]+stroke="#64748B"/i);
   assert.match(collapseIcon, /<path[^>]+stroke="#64748B"/i);
+});
+
+test('imported tree wraps top-level single parts into a synthetic group node', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /function toImportedTreeNode\(/);
+  assert.match(source, /const shouldWrapAsGroup = shape\.type === 'assembly' \|\| options\.wrapSinglePart;/);
+  assert.match(source, /const wrappedLeafNodes = options\.wrapSinglePart \? \[toImportedLeafTreeNode\(shape, shape\.name\)\] : \[\];/);
+  assert.match(source, /id: `import_group_\$\{shape\.id\}`,/);
+  assert.match(source, /label: shape\.name,/);
+});
+
+test('single-part synthetic group disambiguates duplicate part labels with a suffix', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /const normalizedLabel = shape\.name === parentGroupName \? `\$\{shape\.name\}_1` : shape\.name;/);
 });
