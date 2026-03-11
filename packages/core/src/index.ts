@@ -6,6 +6,7 @@ export * from './types';
 export * from './services/MarkerCreator';
 export * from './modelBrowser';
 export * from './markerDesign';
+export * from './markerSnapGeometry';
 export * from './groupDesign';
 export * from './massAggregation';
 export * from './cadtoolErrors';

@@ -201,8 +201,10 @@ test('frame visualizer adds a circular ring around the marker triad', async () =
 test('frame visualizer aligns the marker ring with the frame orientation', async () => {
   const frameVisualizerSource = await readFile(new URL('../packages/three/src/FrameVisualizer.ts', import.meta.url), 'utf8');
 
-  assert.match(frameVisualizerSource, /ring\.quaternion\.setFromUnitVectors\(new THREE\.Vector3\(0, 0, 1\), direction\.clone\(\)\.normalize\(\)\);/);
-  assert.doesNotMatch(frameVisualizerSource, /ring\.rotation\.x = Math\.PI \/ 2;/);
+  assert.match(frameVisualizerSource, /const frameBody = new THREE\.Group\(\);/);
+  assert.match(frameVisualizerSource, /frameRotation\.makeBasis\(xAxis, yAxis, zAxis\);/);
+  assert.match(frameVisualizerSource, /frameBody\.setRotationFromMatrix\(frameRotation\);/);
+  assert.match(frameVisualizerSource, /frameBody\.add\(this\.createMarkerRing\(accentColor, length\)\);/);
 });
 
 test('frame selection uses dedicated accent colors instead of the generic pale highlight overlay', async () => {
@@ -234,6 +236,9 @@ test('marker face placement converts viewer rays through the shape transform', a
   assert.match(resolveFacePlacementSource, /transformDirection\(\s*inverseShapeTransform,\s*ray\.direction\.x/);
   assert.match(resolveFacePlacementSource, /transformPoint\(\s*shapeTransform,\s*result\.position\.x/);
   assert.match(resolveFacePlacementSource, /transformDirection\(\s*shapeTransform,\s*result\.normal\.x/);
+  assert.match(resolveFacePlacementSource, /const localSnapPoint = result\.snapPoint \?\? result\.inferredPosition;/);
+  assert.match(resolveFacePlacementSource, /const worldSnapPoint = localSnapPoint/);
+  assert.match(resolveFacePlacementSource, /const worldSnapDirection = localSnapDirection/);
 });
 
 test('cad editor panel serves ribbon icons from svg assets', async () => {
@@ -269,6 +274,27 @@ test('orbit controls disable damping for immediate camera response', async () =>
   assert.doesNotMatch(viewerSource, /this\.controls\.enableDamping = true;/);
 });
 
+test('cad visual preset uses restrained neutral lighting instead of an overexposed showroom rig', async () => {
+  const viewerSource = await readFile(new URL('../packages/three/src/ThreeViewer.ts', import.meta.url), 'utf8');
+
+  assert.match(viewerSource, /this\.renderer\.toneMappingExposure = 1\.02;/);
+  assert.match(viewerSource, /this\.ambientLight = new THREE\.AmbientLight\(0xffffff, 0\.62\);/);
+  assert.match(viewerSource, /this\.hemisphereLight = new THREE\.HemisphereLight\(0xf5f8fc, 0xa7afb8, 0\.58\);/);
+  assert.match(viewerSource, /this\.keyLight = new THREE\.DirectionalLight\(0xffffff, 1\.02\);/);
+  assert.match(viewerSource, /this\.fillLight = new THREE\.DirectionalLight\(0xf1f5fa, 0\.46\);/);
+  assert.match(viewerSource, /this\.rimLight = new THREE\.DirectionalLight\(0xfaf3e4, 0\.28\);/);
+  assert.match(viewerSource, /this\.topLight = new THREE\.DirectionalLight\(0xffffff, 0\.22\);/);
+  assert.match(viewerSource, /this\.ambientLight\.intensity = 0\.74;/);
+  assert.match(viewerSource, /this\.hemisphereLight\.intensity = 0\.54;/);
+  assert.match(viewerSource, /this\.keyLight\.intensity = 1\.08;/);
+  assert.match(viewerSource, /this\.fillLight\.intensity = 0\.42;/);
+  assert.match(viewerSource, /this\.rimLight\.intensity = 0\.24;/);
+  assert.match(viewerSource, /this\.topLight\.intensity = 0\.18;/);
+  assert.doesNotMatch(viewerSource, /this\.renderer\.toneMappingExposure = 1\.34;/);
+  assert.doesNotMatch(viewerSource, /this\.ambientLight\.intensity = 1\.08;/);
+  assert.doesNotMatch(viewerSource, /this\.keyLight\.intensity = 1\.48;/);
+});
+
 test('step reader enables color transfer and resolves colors through referenced shapes', async () => {
   const geoBindingSource = await readFile(new URL('../packages/geo/cpp/src/geo/geo_binding.cpp', import.meta.url), 'utf8');
 
@@ -277,13 +303,20 @@ test('step reader enables color transfer and resolves colors through referenced 
   assert.match(geoBindingSource, /TopoDS_Shape resolvedShape = shapeTool->GetShape\(resolvedLabel\);/);
 });
 
-test('cylindrical marker hover inference projects the hover point onto the cylinder axis instead of forcing the face midpoint', async () => {
+test('cylindrical marker hover inference exposes explicit cylinder-axis snap metadata', async () => {
   const geoBindingSource = await readFile(new URL('../packages/geo/cpp/src/geo/geo_binding.cpp', import.meta.url), 'utf8');
+  const geoTypesSource = await readFile(new URL('../packages/geo/src/types.ts', import.meta.url), 'utf8');
+  const webviewSource = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
 
   assert.match(geoBindingSource, /BRepAdaptor_Surface surface\(closestFace,\s*Standard_True\);/);
   assert.match(geoBindingSource, /const Standard_Real axisParameter = ElCLib::Parameter\(axisLine, closestPoint\);/);
   assert.match(geoBindingSource, /inferredPosition = ElCLib::Value\(axisParameter, axisLine\);/);
-  assert.doesNotMatch(geoBindingSource, /axisCenterParameter = 0\.5 \* \(surface\.FirstVParameter\(\) \+ surface\.LastVParameter\(\)\);/);
+  assert.match(geoBindingSource, /snapKindName = "cylinder-axis";/);
+  assert.match(geoBindingSource, /result << ",\\"snapKind\\":\\"" << snapKindName << "\\"";/);
+  assert.match(geoTypesSource, /snapKind\?: 'cylinder-axis' \| 'sphere-center';/);
+  assert.match(geoTypesSource, /snapPoint\?: Vec3;/);
+  assert.match(webviewSource, /snapKind = result\.snapKind/);
+  assert.match(webviewSource, /if \(geometryHint\?\.snapKind === 'cylinder-axis'/);
 });
 
 test('step import normalizes low-information solid colors for clearer CAD presentation', async () => {
