@@ -4402,9 +4402,10 @@ function inferMarkerPlacement(
     hitPosition: Vec3,
     fallbackNormal: Vec3,
     geometryHint: {
-        inferredPosition?: Vec3;
-        inferredDirection?: Vec3;
-        inferredFeature?: string;
+        snapPoint?: Vec3;
+        snapDirection?: Vec3;
+        snapKind?: string;
+        snapConfidence?: number;
     } | null
 ): { position: Vec3; normal: Vec3 } {
     if (!markerFeatureInferenceEnabled) {
@@ -4414,20 +4415,20 @@ function inferMarkerPlacement(
         };
     }
 
-    const inferredPosition = geometryHint?.inferredPosition ? cloneVec3(geometryHint.inferredPosition) : null;
-    const inferredDirection = geometryHint?.inferredDirection
-        ? normalizeVector(geometryHint.inferredDirection) ?? null
+    const snapPoint = geometryHint?.snapPoint ? cloneVec3(geometryHint.snapPoint) : null;
+    const snapDirection = geometryHint?.snapDirection
+        ? normalizeVector(geometryHint.snapDirection) ?? null
         : null;
-    if (geometryHint?.inferredFeature === 'sphereCenter' && inferredPosition && inferredDirection) {
+    if (geometryHint?.snapKind === 'sphere-center' && snapPoint && snapDirection && (geometryHint.snapConfidence ?? 0) >= 0.5) {
         return {
-            position: inferredPosition,
-            normal: inferredDirection
+            position: snapPoint,
+            normal: snapDirection
         };
     }
-    if (geometryHint?.inferredFeature === 'cylinderAxis' && inferredPosition && inferredDirection) {
+    if (geometryHint?.snapKind === 'cylinder-axis' && snapPoint && snapDirection && (geometryHint.snapConfidence ?? 0) >= 0.5) {
         return {
-            position: inferredPosition,
-            normal: inferredDirection
+            position: snapPoint,
+            normal: snapDirection
         };
     }
 
@@ -6616,24 +6617,32 @@ function resolveFacePlacement(
         y: worldNormalY,
         z: worldNormalZ
     };
-    const worldInferencePosition = result.inferredPosition
+    const localSnapPoint = result.snapPoint ?? result.inferredPosition;
+    const localSnapDirection = result.snapDirection ?? result.inferredDirection;
+    const snapKind = result.snapKind
+        ?? (result.inferredFeature === 'cylinderAxis'
+            ? 'cylinder-axis'
+            : result.inferredFeature === 'sphereCenter'
+                ? 'sphere-center'
+                : undefined);
+    const worldSnapPoint = localSnapPoint
         ? (() => {
             const [x, y, z] = transformPoint(
                 shapeTransform,
-                result.inferredPosition.x,
-                result.inferredPosition.y,
-                result.inferredPosition.z
+                localSnapPoint.x,
+                localSnapPoint.y,
+                localSnapPoint.z
             );
             return { x, y, z };
         })()
         : undefined;
-    const worldInferenceDirection = result.inferredDirection
+    const worldSnapDirection = localSnapDirection
         ? (() => {
             const [x, y, z] = transformDirection(
                 shapeTransform,
-                result.inferredDirection.x,
-                result.inferredDirection.y,
-                result.inferredDirection.z
+                localSnapDirection.x,
+                localSnapDirection.y,
+                localSnapDirection.z
             );
             return normalizeVector({ x, y, z }) ?? { x, y, z };
         })()
@@ -6650,15 +6659,15 @@ function resolveFacePlacement(
             },
             worldNormal,
             {
-                ...(result as {
-                    inferredFeature?: string;
-                }),
-                inferredPosition: worldInferencePosition,
-                inferredDirection: worldInferenceDirection
+                snapKind,
+                snapPoint: worldSnapPoint,
+                snapDirection: worldSnapDirection,
+                snapConfidence: result.snapConfidence ?? (snapKind ? 1 : undefined)
             } as {
-                inferredPosition?: Vec3;
-                inferredDirection?: Vec3;
-                inferredFeature?: string;
+                snapPoint?: Vec3;
+                snapDirection?: Vec3;
+                snapKind?: string;
+                snapConfidence?: number;
             }
         )
         : {

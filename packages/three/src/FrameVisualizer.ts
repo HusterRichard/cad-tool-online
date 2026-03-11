@@ -67,12 +67,11 @@ export class FrameVisualizer {
     }
 
     private createAxis(
-        direction: THREE.Vector3,
         color: number,
         length: number
     ): THREE.ArrowHelper {
         return new THREE.ArrowHelper(
-            direction.normalize(),
+            new THREE.Vector3(1, 0, 0),
             new THREE.Vector3(0, 0, 0),
             length,
             color,
@@ -81,7 +80,7 @@ export class FrameVisualizer {
         );
     }
 
-    private createMarkerRing(color: number, length: number, direction: THREE.Vector3): THREE.Mesh {
+    private createMarkerRing(color: number, length: number): THREE.Mesh {
         const ringGeometry = new THREE.TorusGeometry(length * 0.22, Math.max(length * 0.014, 0.35), 12, 48);
         const ringMaterial = new THREE.MeshBasicMaterial({
             color,
@@ -90,7 +89,6 @@ export class FrameVisualizer {
             toneMapped: false
         });
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
         ring.userData.frameAccentRole = 'ring';
         return ring;
     }
@@ -127,17 +125,27 @@ export class FrameVisualizer {
             : this.options.axisLength;
 
         const m = data.orientation.m;
-        const xAxis = new THREE.Vector3(m[0], m[3], m[6]);
-        const yAxis = new THREE.Vector3(m[1], m[4], m[7]);
-        const zAxis = new THREE.Vector3(m[2], m[5], m[8]);
+        const xAxis = new THREE.Vector3(m[0], m[3], m[6]).normalize();
+        const yAxis = new THREE.Vector3(m[1], m[4], m[7]).normalize();
+        const zAxis = new THREE.Vector3(m[2], m[5], m[8]).normalize();
+        const frameBody = new THREE.Group();
+        const frameRotation = new THREE.Matrix4();
+        frameRotation.makeBasis(xAxis, yAxis, zAxis);
+        frameBody.setRotationFromMatrix(frameRotation);
 
-        group.add(this.createAxis(xAxis, FrameVisualizer.COLORS.xAxis, length));
-        group.add(this.createAxis(yAxis, FrameVisualizer.COLORS.yAxis, length));
-        group.add(this.createAxis(zAxis, FrameVisualizer.COLORS.zAxis, length));
+        const xAxisArrow = this.createAxis(FrameVisualizer.COLORS.xAxis, length);
+        const yAxisArrow = this.createAxis(FrameVisualizer.COLORS.yAxis, length);
+        const zAxisArrow = this.createAxis(FrameVisualizer.COLORS.zAxis, length);
+        yAxisArrow.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
+        zAxisArrow.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1));
+        frameBody.add(xAxisArrow);
+        frameBody.add(yAxisArrow);
+        frameBody.add(zAxisArrow);
 
         const accentColor = this.getAccentColor(data.isPrimary, Boolean(data.selected));
-        group.add(this.createAccentSphere(accentColor, length));
-        group.add(this.createMarkerRing(accentColor, length, zAxis));
+        frameBody.add(this.createAccentSphere(accentColor, length));
+        frameBody.add(this.createMarkerRing(accentColor, length));
+        group.add(frameBody);
 
         group.position.set(data.position.x, data.position.y, data.position.z);
         group.visible = data.visible ?? true;
@@ -148,6 +156,7 @@ export class FrameVisualizer {
             selectionAppearance: 'frame',
             frameSelected: Boolean(data.selected),
             orientation: { m: [...data.orientation.m] },
+            frameRotation: frameRotation.toArray(),
             size: data.size,
             visible: data.visible ?? true
         };

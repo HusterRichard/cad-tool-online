@@ -1591,8 +1591,10 @@ std::string getFaceNormalAtPoint(const std::string& id,
 
         bool hasInferredPlacement = false;
         const char* inferredFeatureName = nullptr;
+        const char* snapKindName = nullptr;
         gp_Pnt inferredPosition;
         gp_Dir inferredDirection = normal;
+        double snapConfidence = 0.0;
 
         if (surfaceType == GeomAbs_Cylinder) {
             const gp_Cylinder cylinder = surface.Cylinder();
@@ -1605,6 +1607,8 @@ std::string getFaceNormalAtPoint(const std::string& id,
                 inferredDirection.Reverse();
             }
             inferredFeatureName = "cylinderAxis";
+            snapKindName = "cylinder-axis";
+            snapConfidence = 1.0;
             hasInferredPlacement = true;
         } else if (surfaceType == GeomAbs_Sphere) {
             const gp_Sphere sphere = surface.Sphere();
@@ -1617,6 +1621,8 @@ std::string getFaceNormalAtPoint(const std::string& id,
                 inferredDirection.Reverse();
             }
             inferredFeatureName = "sphereCenter";
+            snapKindName = "sphere-center";
+            snapConfidence = 1.0;
             hasInferredPlacement = true;
         }
 
@@ -1643,6 +1649,18 @@ std::string getFaceNormalAtPoint(const std::string& id,
             result << "\"x\":" << inferredDirection.X();
             result << ",\"y\":" << inferredDirection.Y();
             result << ",\"z\":" << inferredDirection.Z() << "}";
+            if (snapKindName != nullptr) {
+                result << ",\"snapKind\":\"" << snapKindName << "\"";
+                result << ",\"snapPoint\":{";
+                result << "\"x\":" << inferredPosition.X();
+                result << ",\"y\":" << inferredPosition.Y();
+                result << ",\"z\":" << inferredPosition.Z() << "}";
+                result << ",\"snapDirection\":{";
+                result << "\"x\":" << inferredDirection.X();
+                result << ",\"y\":" << inferredDirection.Y();
+                result << ",\"z\":" << inferredDirection.Z() << "}";
+                result << ",\"snapConfidence\":" << snapConfidence;
+            }
         }
         result << ",\"distance\":" << minDistance;
         result << "}";

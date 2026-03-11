@@ -111,7 +111,7 @@ export class ThreeViewer {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.16;
+        this.renderer.toneMappingExposure = 1.02;
         this.renderer.setClearColor(backgroundColor, 1);
         container.appendChild(this.renderer.domElement);
 
@@ -159,30 +159,30 @@ export class ThreeViewer {
 
     private setupLights(): void {
         // 环境光 - 提供基础照明，确保所有面都能被照亮
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.62);
         this.scene.add(this.ambientLight);
 
         // 半球光 - 模拟天空和地面的反射光，提供更自然的照明
-        this.hemisphereLight = new THREE.HemisphereLight(0xf7fbff, 0xb0b6bd, 0.92);
+        this.hemisphereLight = new THREE.HemisphereLight(0xf5f8fc, 0xa7afb8, 0.58);
         this.hemisphereLight.position.set(0, 0, 1); // Z-up
         this.scene.add(this.hemisphereLight);
 
         // 主方向光 - 从右上方照射
-        this.keyLight = new THREE.DirectionalLight(0xffffff, 1.55);
+        this.keyLight = new THREE.DirectionalLight(0xffffff, 1.02);
         this.keyLight.position.set(190, 135, 250);
         this.scene.add(this.keyLight);
 
         // 辅助方向光 - 从左下方照射，填补阴影
-        this.fillLight = new THREE.DirectionalLight(0xf4f7fc, 0.98);
+        this.fillLight = new THREE.DirectionalLight(0xf1f5fa, 0.46);
         this.fillLight.position.set(-185, -105, 145);
         this.scene.add(this.fillLight);
 
         // 侧面补光 - 增强侧面细节
-        this.rimLight = new THREE.DirectionalLight(0xfcf7eb, 0.72);
+        this.rimLight = new THREE.DirectionalLight(0xfaf3e4, 0.28);
         this.rimLight.position.set(-130, 200, -70);
         this.scene.add(this.rimLight);
 
-        this.topLight = new THREE.DirectionalLight(0xffffff, 0.72);
+        this.topLight = new THREE.DirectionalLight(0xffffff, 0.22);
         this.topLight.position.set(0, 0, 360);
         this.scene.add(this.topLight);
     }
@@ -190,36 +190,36 @@ export class ThreeViewer {
     private applyVisualPreset(): void {
         if (this.visualPreset === 'cad') {
             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            this.renderer.toneMappingExposure = 1.34;
+            this.renderer.toneMappingExposure = 1.02;
 
             if (this.ambientLight) {
                 this.ambientLight.color.setHex(0xffffff);
-                this.ambientLight.intensity = 1.08;
+                this.ambientLight.intensity = 0.74;
             }
             if (this.hemisphereLight) {
-                this.hemisphereLight.color.setHex(0xfbfdff);
-                this.hemisphereLight.groundColor.setHex(0xc0c5cb);
-                this.hemisphereLight.intensity = 0.86;
+                this.hemisphereLight.color.setHex(0xf7fafc);
+                this.hemisphereLight.groundColor.setHex(0xb8bfc7);
+                this.hemisphereLight.intensity = 0.54;
             }
             if (this.keyLight) {
                 this.keyLight.color.setHex(0xffffff);
-                this.keyLight.intensity = 1.48;
-                this.keyLight.position.set(190, 145, 245);
+                this.keyLight.intensity = 1.08;
+                this.keyLight.position.set(175, 140, 225);
             }
             if (this.fillLight) {
-                this.fillLight.color.setHex(0xf8fbff);
-                this.fillLight.intensity = 1.02;
-                this.fillLight.position.set(-185, -110, 150);
+                this.fillLight.color.setHex(0xf4f7fb);
+                this.fillLight.intensity = 0.42;
+                this.fillLight.position.set(-175, -105, 135);
             }
             if (this.rimLight) {
-                this.rimLight.color.setHex(0xfff7e9);
-                this.rimLight.intensity = 0.62;
-                this.rimLight.position.set(-125, 205, -65);
+                this.rimLight.color.setHex(0xfbf3e5);
+                this.rimLight.intensity = 0.24;
+                this.rimLight.position.set(-115, 185, -75);
             }
             if (this.topLight) {
                 this.topLight.color.setHex(0xffffff);
-                this.topLight.intensity = 0.58;
-                this.topLight.position.set(0, 0, 360);
+                this.topLight.intensity = 0.18;
+                this.topLight.position.set(0, 0, 300);
             }
 
             if (this.outlinePass) {
@@ -445,7 +445,7 @@ export class ThreeViewer {
                     metalness: 0.05,
                     clearcoat: 0.02,
                     clearcoatRoughness: 0.7,
-                    envMapIntensity: 0.8,
+                    envMapIntensity: 0.45,
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
@@ -465,8 +465,8 @@ export class ThreeViewer {
             case 'phong':
                 return new THREE.MeshPhongMaterial({
                     color,
-                    shininess: 36,
-                    specular: new THREE.Color(0x2f2f2f),
+                    shininess: 20,
+                    specular: new THREE.Color(0x1a1a1a),
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
                     polygonOffsetUnits: 1,
