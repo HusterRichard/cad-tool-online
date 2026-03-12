@@ -168,6 +168,7 @@ export class ThreeViewer {
             );
             this.selectionManager.onSelectionChange(() => {
                 this.syncFrameSelectionVisuals();
+                this.syncJointSelectionVisuals();
                 this.updateOutlineTargets();
             });
         }
@@ -1017,6 +1018,12 @@ export class ThreeViewer {
         });
     }
 
+    private syncJointSelectionVisuals(): void {
+        this.jointVisualizer.getAllJointIds().forEach((id) => {
+            this.jointVisualizer.setJointSelected(id, this.selectionManager?.isSelected(id) ?? false);
+        });
+    }
+
     dispose(): void {
         window.removeEventListener('resize', this.onResizeHandler);
         this.controls.removeEventListener('start', this.onControlStartHandler);
@@ -1075,6 +1082,14 @@ export class ThreeViewer {
 
     pickSelectableIdAtScreenPoint(x: number, y: number): string | null {
         return this.selectionManager?.pickObjectIdAtScreenPoint(x, y) ?? null;
+    }
+
+    registerSelectableObject(id: string, object: THREE.Object3D): void {
+        this.selectionManager?.registerObject(id, object);
+    }
+
+    unregisterSelectableObject(id: string): void {
+        this.selectionManager?.unregisterObject(id);
     }
 
     /**
@@ -1148,21 +1163,32 @@ export class ThreeViewer {
      * 添加关节
      */
     addJoint(data: JointData): THREE.Group {
-        return this.jointVisualizer.addJoint(data);
+        const group = this.jointVisualizer.addJoint(data);
+        this.selectionManager?.registerObject(data.id, group);
+        this.syncJointSelectionVisuals();
+        return group;
     }
 
     /**
      * 更新关节
      */
     updateJoint(data: JointData): void {
+        this.selectionManager?.unregisterObject(data.id);
         this.jointVisualizer.updateJoint(data);
+        const group = this.jointVisualizer.getJoint(data.id);
+        if (group) {
+            this.selectionManager?.registerObject(data.id, group);
+        }
+        this.syncJointSelectionVisuals();
     }
 
     /**
      * 移除关节
      */
     removeJoint(id: string): void {
+        this.selectionManager?.unregisterObject(id);
         this.jointVisualizer.removeJoint(id);
+        this.syncJointSelectionVisuals();
     }
 
     /**

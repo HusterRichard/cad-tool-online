@@ -1,21 +1,26 @@
 ﻿// WebView entry point
 // This file will be bundled by Vite for the WebView
 
-import { ThreeViewer, type MarkerGuideData } from '@cadtool-online/three';
-import { OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
+import * as THREE from 'three';
+import { ThreeViewer, type JointData, type MarkerGuideData } from '@cadtool-online/three';
+import { MbsJointType, OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
 import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
     aggregateMassProperties,
     buildModelBrowserTree,
     collectLeafShapeIds,
+    DEFAULT_CONNECTOR_DIRECTION,
     createCadtoolErrorNotification,
     findNearestCircularEdge,
     flattenTopLevelAssemblyShapes,
     getUniqueGroupName as getUniqueGroupNameFromState,
     markerCreator,
+    normalizeConnectorType,
+    resolveConnectorDirection,
     resolveMarkerOwnerRef,
     renameGroupNode as renameGroupNodeInState,
     sanitizeGroupName,
+    validateConnectorParticipants,
     validateReferenceMarkerCreation,
     type CadtoolErrorCode,
     type CadtoolRuntimeNotification,
@@ -90,6 +95,10 @@ let selectedShapeId: string | null = null;
 let selectedGroupId: string | null = null;
 let selectedMarkerId: string | null = null;
 let selectedRefFrameId: string | null = null;
+let selectedJointId: string | null = null;
+let selectedMotionId: string | null = null;
+let selectedDesignPointId: string | null = null;
+let selectedContactId: string | null = null;
 let activeSelectionKey: string | null = null;
 const selectedNodeIds = new Set<string>();
 let treeContextMenuEl: HTMLDivElement | null = null;
@@ -108,6 +117,13 @@ let markerCreationMode: 'fast' | 'standard' = 'fast';
 let refFrameCreationMode: 'fast' | 'standard' = 'fast';
 let markerFeatureInferenceEnabled = true;
 let pendingMarkerSize = 20;
+let jointCreationMode: 'fast' | 'standard' = 'fast';
+let jointCreationPanelActive = false;
+let jointFeatureInferenceEnabled = true;
+let pendingJointIconSize = 20;
+let jointDraftPickStage: 'part1' | 'part2' = 'part1';
+let jointDraft: JointDraft | null = null;
+let pendingDesignPointSize = 20;
 let pendingRefFrameBaseId: string | null = null;
 let pendingRefFrameTargetShapeId: string | null = null;
 let frameEditPickIntent: 'placement' | 'position' | 'direction' = 'placement';
@@ -115,12 +131,29 @@ let markerDraftPickIntent: 'placement' | 'position' | 'direction' = 'placement';
 let markerDraft: MarkerDraft | null = null;
 let markerCreationPanelActive = false;
 let refFrameCreationPanelActive = false;
+let designPointCreationPanelActive = false;
+let designPointCreationMode: 'pick' | 'calc' = 'pick';
+let designPointCalcMode: 'midpoint' | 'offset' | 'intersection' = 'midpoint';
+let designPointPickIntent: 'placement' | 'firstPoint' | 'secondPoint' | 'basePoint' | 'direction' | 'featureA' | 'featureB' = 'placement';
+let designPointDraft: DesignPointDraft | null = null;
+let motionCreationPanelActive = false;
+let motionCreationMode: 'fast' | 'standard' = 'fast';
+let pendingMotionIconSize = 20;
+let motionDraft: MotionDraft | null = null;
+let motionCreationPreset: MotionType = 'rotational';
+let contactCreationPanelActive = false;
+let contactCreationMode: ContactCreationMode = 'fast';
+let pendingContactSize = 20;
+let contactDraft: ContactDraft | null = null;
+let contactCreationPreset: ContactType = 'pointPoint';
+let activeContactHighlightIds: string[] = [];
 
 type FrameEntityKind = 'marker' | 'refFrame';
-type CanvasInteractionMode = 'none' | 'createMarker' | 'createDesignPoint' | 'editFrame';
+type CanvasInteractionMode = 'none' | 'createMarker' | 'createDesignPoint' | 'createJoint' | 'createMotion' | 'editFrame' | 'createContact';
 let canvasInteractionMode: CanvasInteractionMode = 'none';
 
 const DRAFT_MARKER_ID = '__draft_marker__';
+const GROUND_PART_ID = '__ground__';
 const CAD_BODY_DISPLAY_COLOR = '#D4A017';
 const CAD_DARK_COMPONENT_COLOR = '#2B2B2B';
 const CAD_LIGHT_METAL_COLOR = '#B8B8B8';
@@ -146,6 +179,54 @@ interface MarkerDraft {
     position: Vec3;
     orientation: Mat3;
     size: number;
+}
+
+interface JointDraftPick {
+    partId: string;
+    position: Vec3;
+    direction: Vec3;
+}
+
+interface JointDraft {
+    name: string;
+    jointType: string;
+    part1?: string;
+    part2?: string;
+    position: Vec3;
+    direction: Vec3;
+    iconSize: number;
+    inferenceEnabled: boolean;
+    zAxisReversed: boolean;
+    part1Pick?: JointDraftPick;
+    part2Pick?: JointDraftPick;
+}
+
+interface ContactDraft {
+    name: string;
+    contactType: ContactType;
+    iconSize: number;
+    featureA?: ContactFeatureRef;
+    featureB?: ContactFeatureRef;
+}
+
+type MotionType = 'rotational' | 'translational';
+type MotionDriveMode =
+    | 'angle'
+    | 'angularVelocity'
+    | 'angularAcceleration'
+    | 'displacement'
+    | 'velocity'
+    | 'acceleration';
+
+interface MotionDraft {
+    name: string;
+    motionType: MotionType;
+    driveMode: MotionDriveMode;
+    connectorRef?: string;
+    iconSize: number;
+    visible: boolean;
+    phiStart: number;
+    wStart: number;
 }
 
 function normalizeImportedDisplayColor(
@@ -194,6 +275,39 @@ interface MbsDesignPointEntity {
     createdAt: string;
 }
 
+interface DesignPointFeatureLine {
+    kind: 'line';
+    point: Vec3;
+    direction: Vec3;
+    label: string;
+}
+
+interface DesignPointFeaturePlane {
+    kind: 'plane';
+    point: Vec3;
+    normal: Vec3;
+    label: string;
+}
+
+type DesignPointFeature = DesignPointFeatureLine | DesignPointFeaturePlane;
+
+interface DesignPointDraft {
+    name: string;
+    groupId: string;
+    hostShapeId: string;
+    position: Vec3;
+    direction: Vec3;
+    markerRefId?: string;
+    size: number;
+    isDirectionReverse: boolean;
+    offsetValue: number;
+    firstPoint?: Vec3;
+    secondPoint?: Vec3;
+    basePoint?: Vec3;
+    featureA?: DesignPointFeature;
+    featureB?: DesignPointFeature;
+}
+
 interface MbsGroupEntity {
     id: string;
     name: string;
@@ -205,6 +319,9 @@ interface MbsGroupEntity {
 }
 
 type GroupKind = 'manual' | 'default' | 'imported';
+type SelectionKind = 'shape' | 'group' | 'marker' | 'refFrame' | 'joint' | 'motion' | 'designPoint' | 'contact';
+type ContactType = 'pointPoint' | 'pointSurface';
+type ContactCreationMode = 'fast' | 'standard';
 
 interface GroupNode {
     id: string;
@@ -227,9 +344,13 @@ interface GroupDesignState {
 }
 
 interface ModelTreeNode extends Omit<ModelBrowserNode, 'children'> {
-    kind: ModelBrowserNode['kind'] | 'group' | 'marker' | 'refFrame';
+    kind: ModelBrowserNode['kind'] | 'group' | 'marker' | 'refFrame' | 'designPoint';
     groupId?: string;
     frameId?: string;
+    jointId?: string;
+    motionId?: string;
+    designPointId?: string;
+    contactId?: string;
     selectionKey?: string;
     children?: ModelTreeNode[];
 }
@@ -240,14 +361,43 @@ interface MbsJointEntity {
     jointType: string;
     part1: string;
     part2: string;
+    position: Vec3;
+    direction: Vec3;
+    iconSize: number;
+    inferenceEnabled: boolean;
+    zAxisReversed: boolean;
     createdAt: string;
 }
 
 interface MbsMotionEntity {
     id: string;
     name: string;
-    motionType: string;
+    motionType: MotionType;
+    driveMode: MotionDriveMode;
     connectorRef: string;
+    iconSize: number;
+    visible: boolean;
+    phiStart: number;
+    wStart: number;
+    createdAt: string;
+}
+
+interface ContactFeatureRef {
+    shapeId: string;
+    position: Vec3;
+    normal: Vec3;
+}
+
+interface MbsContactEntity {
+    id: string;
+    name: string;
+    contactType: ContactType;
+    partA: string;
+    partB: string;
+    featureA: ContactFeatureRef;
+    featureB: ContactFeatureRef;
+    iconSize: number;
+    visible: boolean;
     createdAt: string;
 }
 
@@ -270,6 +420,8 @@ interface FluidPortEntity {
 let groupDesignState: GroupDesignState = createEmptyGroupDesignState();
 const mbsJoints = new Map<string, MbsJointEntity>();
 const mbsMotions = new Map<string, MbsMotionEntity>();
+const mbsContacts = new Map<string, MbsContactEntity>();
+const contactVisuals = new Map<string, THREE.Group>();
 const fluidSlices = new Map<string, FluidSliceEntity>();
 const fluidPorts = new Map<string, FluidPortEntity>();
 const shapeSelectionHistory: string[] = [];
@@ -368,16 +520,42 @@ function toRefFrameSelectionKey(refFrameId: string): string {
     return `refFrame:${refFrameId}`;
 }
 
-function parseSelectionKey(selectionKey: string | null): { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } | null {
+function toJointSelectionKey(jointId: string): string {
+    return `joint:${jointId}`;
+}
+
+function toMotionSelectionKey(motionId: string): string {
+    return `motion:${motionId}`;
+}
+
+function toDesignPointSelectionKey(designPointId: string): string {
+    return `designPoint:${designPointId}`;
+}
+
+function toContactSelectionKey(contactId: string): string {
+    return `contact:${contactId}`;
+}
+
+function parseSelectionKey(selectionKey: string | null): { kind: SelectionKind; id: string } | null {
     if (!selectionKey) {
         return null;
     }
     const [kind, ...rest] = selectionKey.split(':');
-    if ((kind !== 'shape' && kind !== 'group' && kind !== 'marker' && kind !== 'refFrame') || rest.length === 0) {
+    if (
+        (kind !== 'shape'
+            && kind !== 'group'
+            && kind !== 'marker'
+            && kind !== 'refFrame'
+            && kind !== 'joint'
+            && kind !== 'motion'
+            && kind !== 'designPoint'
+            && kind !== 'contact')
+        || rest.length === 0
+    ) {
         return null;
     }
     return {
-        kind: kind as 'shape' | 'group' | 'marker' | 'refFrame',
+        kind: kind as SelectionKind,
         id: rest.join(':')
     };
 }
@@ -564,7 +742,7 @@ function frameOwnerDisplayName(ownerId: string): string {
 function getSelectedShapeIds(): string[] {
     return Array.from(selectedNodeIds)
         .map((selectionKey) => parseSelectionKey(selectionKey))
-        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'shape')
         .map((entry) => entry.id);
 }
@@ -572,7 +750,7 @@ function getSelectedShapeIds(): string[] {
 function getSelectedGroupIds(): string[] {
     return Array.from(selectedNodeIds)
         .map((selectionKey) => parseSelectionKey(selectionKey))
-        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'group')
         .map((entry) => entry.id);
 }
@@ -580,7 +758,7 @@ function getSelectedGroupIds(): string[] {
 function getSelectedMarkerIds(): string[] {
     return Array.from(selectedNodeIds)
         .map((selectionKey) => parseSelectionKey(selectionKey))
-        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'marker')
         .map((entry) => entry.id);
 }
@@ -588,8 +766,40 @@ function getSelectedMarkerIds(): string[] {
 function getSelectedRefFrameIds(): string[] {
     return Array.from(selectedNodeIds)
         .map((selectionKey) => parseSelectionKey(selectionKey))
-        .filter((entry): entry is { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } => Boolean(entry))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
         .filter((entry) => entry.kind === 'refFrame')
+        .map((entry) => entry.id);
+}
+
+function getSelectedJointIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'joint')
+        .map((entry) => entry.id);
+}
+
+function getSelectedMotionIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'motion')
+        .map((entry) => entry.id);
+}
+
+function getSelectedDesignPointIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'designPoint')
+        .map((entry) => entry.id);
+}
+
+function getSelectedContactIds(): string[] {
+    return Array.from(selectedNodeIds)
+        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
+        .filter((entry) => entry.kind === 'contact')
         .map((entry) => entry.id);
 }
 
@@ -608,6 +818,39 @@ function getActiveRefFrameId(): string | null {
     return active?.kind === 'refFrame' ? active.id : null;
 }
 
+function getActiveJointId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'joint' ? active.id : null;
+}
+
+function getActiveMotionId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'motion' ? active.id : null;
+}
+
+function getActiveDesignPointId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'designPoint' ? active.id : null;
+}
+
+function getActiveContactId(): string | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    return active?.kind === 'contact' ? active.id : null;
+}
+
+function syncSelectedEntitiesFromActive(): { kind: SelectionKind; id: string } | null {
+    const active = parseSelectionKey(activeSelectionKey);
+    selectedShapeId = active?.kind === 'shape' ? active.id : null;
+    selectedGroupId = active?.kind === 'group' ? active.id : null;
+    selectedMarkerId = active?.kind === 'marker' ? active.id : null;
+    selectedRefFrameId = active?.kind === 'refFrame' ? active.id : null;
+    selectedJointId = active?.kind === 'joint' ? active.id : null;
+    selectedMotionId = active?.kind === 'motion' ? active.id : null;
+    selectedDesignPointId = active?.kind === 'designPoint' ? active.id : null;
+    selectedContactId = active?.kind === 'contact' ? active.id : null;
+    return active;
+}
+
 function updateTreeSelectionClasses(): void {
     document.querySelectorAll<HTMLElement>('.tree-node[data-selection-key]').forEach((node) => {
         const selectionKey = node.dataset.selectionKey ?? '';
@@ -621,6 +864,10 @@ function isMarkerId(id: string): boolean {
 
 function isRefFrameId(id: string): boolean {
     return createdRefFrames.has(id);
+}
+
+function isJointId(id: string): boolean {
+    return mbsJoints.has(id);
 }
 
 function collectMeshBackedShapeIds(shape: LoadedShape): string[] {
@@ -652,6 +899,9 @@ function syncViewerSelectionFromState(): void {
 
     getSelectedMarkerIds().forEach((markerId) => targetIds.add(markerId));
     getSelectedRefFrameIds().forEach((refFrameId) => targetIds.add(refFrameId));
+    getSelectedJointIds().forEach((jointId) => targetIds.add(jointId));
+    getSelectedDesignPointIds().forEach((designPointId) => targetIds.add(designPointId));
+    getSelectedContactIds().forEach((contactId) => targetIds.add(contactId));
 
     const currentIds = new Set(viewer.getSelectedIds());
     isSyncingViewerSelection = true;
@@ -668,6 +918,44 @@ function syncViewerSelectionFromState(): void {
         });
     } finally {
         isSyncingViewerSelection = false;
+    }
+}
+
+function applyShapeVisualColor(shapeId: string, color: string | undefined): void {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape?.meshId || !viewer || !color) {
+        return;
+    }
+    const normalized = color.startsWith('#') ? color.slice(1) : color;
+    const parsed = Number.parseInt(normalized, 16);
+    if (Number.isFinite(parsed)) {
+        viewer.setMeshColor(shape.meshId, parsed);
+    }
+}
+
+function clearContactPartHighlights(): void {
+    activeContactHighlightIds.forEach((shapeId) => {
+        applyShapeVisualColor(shapeId, loadedShapes.get(shapeId)?.color);
+    });
+    activeContactHighlightIds = [];
+}
+
+function syncContactPartHighlights(): void {
+    clearContactPartHighlights();
+    const contactId = getActiveContactId();
+    if (!contactId) {
+        return;
+    }
+    const contact = mbsContacts.get(contactId);
+    if (!contact) {
+        return;
+    }
+
+    applyShapeVisualColor(contact.partA, '#DC2626');
+    activeContactHighlightIds.push(contact.partA);
+    if (contact.partB !== contact.partA) {
+        applyShapeVisualColor(contact.partB, '#2563EB');
+        activeContactHighlightIds.push(contact.partB);
     }
 }
 
@@ -846,11 +1134,27 @@ function updateSelectionPropertiesPanel(): void {
         renderRefFramePropertiesPanel(active.id);
         return;
     }
+    if (active.kind === 'joint') {
+        renderJointPropertiesPanel(active.id);
+        return;
+    }
+    if (active.kind === 'motion') {
+        renderMotionPropertiesPanel(active.id);
+        return;
+    }
+    if (active.kind === 'designPoint') {
+        renderDesignPointPropertiesPanel(active.id);
+        return;
+    }
+    if (active.kind === 'contact') {
+        renderContactPropertiesPanel(active.id);
+        return;
+    }
     updatePropertiesPanel(active.id);
 }
 
 function selectSelection(
-    nextSelection: { kind: 'shape' | 'group' | 'marker' | 'refFrame'; id: string } | null,
+    nextSelection: { kind: SelectionKind; id: string } | null,
     options?: { additive?: boolean; toggle?: boolean; fromViewer?: boolean }
 ): void {
     const selectionKey = nextSelection
@@ -861,7 +1165,15 @@ function selectSelection(
                     ? toGroupSelectionKey(nextSelection.id)
                     : nextSelection.kind === 'marker'
                         ? toMarkerSelectionKey(nextSelection.id)
-                        : toRefFrameSelectionKey(nextSelection.id)
+                        : nextSelection.kind === 'refFrame'
+                            ? toRefFrameSelectionKey(nextSelection.id)
+                            : nextSelection.kind === 'joint'
+                                ? toJointSelectionKey(nextSelection.id)
+                                : nextSelection.kind === 'motion'
+                                    ? toMotionSelectionKey(nextSelection.id)
+                                : nextSelection.kind === 'designPoint'
+                                    ? toDesignPointSelectionKey(nextSelection.id)
+                                    : toContactSelectionKey(nextSelection.id)
         )
         : null;
 
@@ -879,18 +1191,18 @@ function selectSelection(
         activeSelectionKey = null;
     }
 
-    const active = parseSelectionKey(activeSelectionKey);
-    selectedShapeId = active?.kind === 'shape' ? active.id : null;
-    selectedGroupId = active?.kind === 'group' ? active.id : null;
-    selectedMarkerId = active?.kind === 'marker' ? active.id : null;
-    selectedRefFrameId = active?.kind === 'refFrame' ? active.id : null;
-    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+    syncSelectedEntitiesFromActive();
 
     updateTreeSelectionClasses();
     if (!options?.fromViewer) {
         syncViewerSelectionFromState();
     }
     updateSelectionPropertiesPanel();
+    syncContactPartHighlights();
+
+    if (motionCreationPanelActive && selectedJointId) {
+        applyMotionConnectorSelection(selectedJointId);
+    }
 
     if (selectedShapeId) {
         rememberShapeSelection(selectedShapeId);
@@ -922,6 +1234,10 @@ function selectSelection(
             }
         }
     }
+
+    if (motionCreationPanelActive && selectedJointId) {
+        applyMotionConnectorSelection(selectedJointId);
+    }
 }
 
 function syncSelectionFromViewer(activeObjectId: string | null): void {
@@ -938,6 +1254,18 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
         if (isRefFrameId(id)) {
             return [toRefFrameSelectionKey(id)];
         }
+        if (isJointId(id)) {
+            return [toJointSelectionKey(id)];
+        }
+        if (mbsMotions.has(id)) {
+            return [toMotionSelectionKey(id)];
+        }
+        if (mbsDesignPoints.has(id)) {
+            return [toDesignPointSelectionKey(id)];
+        }
+        if (mbsContacts.has(id)) {
+            return [toContactSelectionKey(id)];
+        }
         return [];
     });
     selectionKeys.forEach((selectionKey) => selectedNodeIds.add(selectionKey));
@@ -950,20 +1278,24 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
             activeSelectionKey = toMarkerSelectionKey(activeObjectId);
         } else if (isRefFrameId(activeObjectId)) {
             activeSelectionKey = toRefFrameSelectionKey(activeObjectId);
+        } else if (isJointId(activeObjectId)) {
+            activeSelectionKey = toJointSelectionKey(activeObjectId);
+        } else if (mbsMotions.has(activeObjectId)) {
+            activeSelectionKey = toMotionSelectionKey(activeObjectId);
+        } else if (mbsDesignPoints.has(activeObjectId)) {
+            activeSelectionKey = toDesignPointSelectionKey(activeObjectId);
+        } else if (mbsContacts.has(activeObjectId)) {
+            activeSelectionKey = toContactSelectionKey(activeObjectId);
         } else {
             activeSelectionKey = selectionKeys.at(-1) ?? null;
         }
     } else {
         activeSelectionKey = selectionKeys.at(-1) ?? null;
     }
-    const active = parseSelectionKey(activeSelectionKey);
-    selectedShapeId = active?.kind === 'shape' ? active.id : null;
-    selectedGroupId = active?.kind === 'group' ? active.id : null;
-    selectedMarkerId = active?.kind === 'marker' ? active.id : null;
-    selectedRefFrameId = active?.kind === 'refFrame' ? active.id : null;
-    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+    syncSelectedEntitiesFromActive();
     updateTreeSelectionClasses();
     updateSelectionPropertiesPanel();
+    syncContactPartHighlights();
     if (selectedShapeId) {
         rememberShapeSelection(selectedShapeId);
         vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
@@ -996,6 +1328,10 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
                 renderRefFrameCreationPanel();
             }
         }
+    }
+
+    if (motionCreationPanelActive && selectedJointId) {
+        applyMotionConnectorSelection(selectedJointId);
     }
 }
 
@@ -1281,10 +1617,7 @@ function syncDragSelection(selectionKeys: string[]): void {
     selectionKeys.forEach((selectionKey) => selectedNodeIds.add(selectionKey));
     activeSelectionKey = activeKey;
 
-    const active = parseSelectionKey(activeSelectionKey);
-    selectedShapeId = active?.kind === 'shape' ? active.id : null;
-    selectedGroupId = active?.kind === 'group' ? active.id : null;
-    groupDesignState.selectedNodeIds = Array.from(selectedNodeIds);
+    syncSelectedEntitiesFromActive();
     updateTreeSelectionClasses();
     syncViewerSelectionFromState();
     updateSelectionPropertiesPanel();
@@ -1354,6 +1687,11 @@ function getPartDeletionReferences(shapeId: string): string[] {
     Array.from(mbsJoints.values()).forEach((joint) => {
         if (joint.part1 === shapeId || joint.part2 === shapeId) {
             references.push(`joint:${joint.name}`);
+        }
+    });
+    Array.from(mbsContacts.values()).forEach((contact) => {
+        if (contact.partA === shapeId || contact.partB === shapeId) {
+            references.push(`contact:${contact.name}`);
         }
     });
     Array.from(fluidSlices.values()).forEach((slice) => {
@@ -1452,7 +1790,28 @@ function deleteSelectedGroups(): { deletedCount: number; blockedMessages: string
     return { deletedCount, blockedMessages };
 }
 
+function deleteSelectedDesignPoints(): number {
+    const selectedDesignPointIds = getSelectedDesignPointIds();
+    const deletedSelectionKeys = new Set(selectedDesignPointIds.map((designPointId) => toDesignPointSelectionKey(designPointId)));
+    selectedDesignPointIds.forEach((designPointId) => {
+        mbsDesignPoints.delete(designPointId);
+        selectedNodeIds.delete(toDesignPointSelectionKey(designPointId));
+        viewer?.removeFrame(designPointId);
+    });
+    if (selectedDesignPointIds.length > 0) {
+        if (activeSelectionKey && deletedSelectionKeys.has(activeSelectionKey)) {
+            activeSelectionKey = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds).at(-1) ?? null : null;
+        }
+        syncSelectedEntitiesFromActive();
+    }
+    return selectedDesignPointIds.length;
+}
+
 function handleDeleteSelection(): void {
+    const deletedDesignPointCount = deleteSelectedDesignPoints();
+    const selectedJointIds = getSelectedJointIds();
+    const selectedMotionIds = getSelectedMotionIds();
+    const selectedContactIds = getSelectedContactIds();
     const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
     const coveredGroupIds = new Set<string>();
     selectedGroupIds.forEach((groupId) => {
@@ -1466,15 +1825,25 @@ function handleDeleteSelection(): void {
         return !ownerGroupId || !coveredGroupIds.has(ownerGroupId);
     });
 
-    if (selectedGroupIds.length === 0 && selectedPartIds.length === 0) {
+    if (
+        selectedGroupIds.length === 0
+        && selectedPartIds.length === 0
+        && deletedDesignPointCount === 0
+        && selectedJointIds.length === 0
+        && selectedMotionIds.length === 0
+        && selectedContactIds.length === 0
+    ) {
         vscode.postMessage({
             command: 'alert',
-            text: 'Select one or more parts/groups first.'
+            text: 'Select one or more design points, joints, motions, contacts, parts or groups first.'
         });
         return;
     }
 
     let deletedPartCount = 0;
+    let deletedJointCount = 0;
+    let deletedMotionCount = 0;
+    let deletedContactCount = 0;
     const blockedMessages: string[] = [];
 
     selectedPartIds.forEach((shapeId) => {
@@ -1488,9 +1857,24 @@ function handleDeleteSelection(): void {
 
     const groupDeleteResult = deleteSelectedGroups();
     blockedMessages.push(...groupDeleteResult.blockedMessages);
+    selectedJointIds.forEach((jointId) => {
+        if (deleteJointById(jointId)) {
+            deletedJointCount += 1;
+        }
+    });
+    selectedMotionIds.forEach((motionId) => {
+        if (deleteMotionById(motionId)) {
+            deletedMotionCount += 1;
+        }
+    });
+    selectedContactIds.forEach((contactId) => {
+        if (deleteContactById(contactId)) {
+            deletedContactCount += 1;
+        }
+    });
 
     updateModelTree();
-    setStatusInfo(`Deleted ${deletedPartCount} part(s) and ${groupDeleteResult.deletedCount} group(s).`);
+    setStatusInfo(`Deleted ${deletedDesignPointCount} design point(s), ${deletedJointCount} joint(s), ${deletedMotionCount} motion(s), ${deletedContactCount} contact(s), ${deletedPartCount} part(s) and ${groupDeleteResult.deletedCount} group(s).`);
 
     if (blockedMessages.length > 0) {
         const message = blockedMessages.length > 4
@@ -2397,7 +2781,7 @@ function expandIconPath(expanded: boolean): string | null {
     return treeIconPath(expanded ? 'model_tree_cad_collapse.png' : 'model_tree_cad_expand.png');
 }
 
-function buildOwnedFrameNodes(ownerId: string): ModelTreeNode[] {
+function buildOwnedDesignNodes(ownerId: string): ModelTreeNode[] {
     const markerNodes = createdMarkers
         .filter((marker) => (marker.parentId ?? marker.groupId) === ownerId)
         .map((marker) => ({
@@ -2416,7 +2800,16 @@ function buildOwnedFrameNodes(ownerId: string): ModelTreeNode[] {
             frameId: refFrame.id,
             selectionKey: toRefFrameSelectionKey(refFrame.id)
         }));
-    return [...markerNodes, ...refFrameNodes];
+    const designPointNodes = Array.from(mbsDesignPoints.values())
+        .filter((point) => point.groupId === ownerId)
+        .map((point) => ({
+            id: `designPoint_${point.id}`,
+            kind: 'designPoint' as const,
+            label: point.name,
+            designPointId: point.id,
+            selectionKey: toDesignPointSelectionKey(point.id)
+        }));
+    return [...markerNodes, ...refFrameNodes, ...designPointNodes];
 }
 
 function toGroupTreeShapeNode(shapeId: string): ModelTreeNode | null {
@@ -2430,7 +2823,7 @@ function toGroupTreeShapeNode(shapeId: string): ModelTreeNode | null {
         label: shape.name,
         shapeId: shape.id,
         selectionKey: toShapeSelectionKey(shape.id),
-        children: buildOwnedFrameNodes(shape.id)
+        children: buildOwnedDesignNodes(shape.id)
     };
 }
 
@@ -2443,7 +2836,7 @@ function toFallbackTreeShapeNode(shape: LoadedShape): ModelTreeNode {
         selectionKey: toShapeSelectionKey(shape.id),
         children: [
             ...(shape.children?.map((child) => toFallbackTreeShapeNode(child)) ?? []),
-            ...buildOwnedFrameNodes(shape.id)
+            ...buildOwnedDesignNodes(shape.id)
         ]
     };
 }
@@ -2456,7 +2849,7 @@ function toImportedLeafTreeNode(shape: LoadedShape, parentGroupName?: string): M
         label: normalizedLabel,
         shapeId: shape.id,
         selectionKey: toShapeSelectionKey(shape.id),
-        children: buildOwnedFrameNodes(shape.id)
+        children: buildOwnedDesignNodes(shape.id)
     };
 }
 
@@ -2483,7 +2876,7 @@ function toImportedTreeNode(
         children: [
             ...childNodes,
             ...wrappedLeafNodes,
-            ...buildOwnedFrameNodes(shape.id)
+            ...buildOwnedDesignNodes(shape.id)
         ]
     };
 }
@@ -2501,7 +2894,7 @@ function toGroupTreeNode(groupId: string): ModelTreeNode | null {
         ...group.memberPartIds
             .map((shapeId) => toGroupTreeShapeNode(shapeId))
             .filter((node): node is ModelTreeNode => Boolean(node)),
-        ...buildOwnedFrameNodes(group.id)
+        ...buildOwnedDesignNodes(group.id)
     ];
 
     return {
@@ -2543,18 +2936,38 @@ function buildObjectTreeNodes(): ModelTreeNode[] {
         }));
 }
 
-function buildModelTreeNodes(): ModelTreeNode[] {
-    const forceEntities: BrowserNamedEntityInput[] = [
-        ...Array.from(fluidSlices.values(), (slice) => ({ id: `slice_${slice.id}`, name: slice.name })),
-        ...Array.from(fluidPorts.values(), (port) => ({ id: `port_${port.id}`, name: port.name }))
+function buildForceTreeNodes(): ModelTreeNode[] {
+    const contactNodes = Array.from(mbsContacts.values()).map((contact) => ({
+        id: `contact_${contact.id}`,
+        kind: 'force' as const,
+        label: contact.name,
+        contactId: contact.id,
+        selectionKey: toContactSelectionKey(contact.id)
+    }));
+    const fluidNodes = [
+        ...Array.from(fluidSlices.values(), (slice) => ({
+            id: `slice_${slice.id}`,
+            kind: 'force' as const,
+            label: slice.name
+        })),
+        ...Array.from(fluidPorts.values(), (port) => ({
+            id: `port_${port.id}`,
+            kind: 'force' as const,
+            label: port.name
+        }))
     ];
+    return [...contactNodes, ...fluidNodes];
+}
+
+function buildModelTreeNodes(): ModelTreeNode[] {
+    const forceNodes = buildForceTreeNodes();
 
     const objectNodes = buildObjectTreeNodes();
 
     const hasEntities = objectNodes.length > 0
         || mbsJoints.size > 0
         || mbsMotions.size > 0
-        || forceEntities.length > 0;
+        || forceNodes.length > 0;
     if (!hasEntities) {
         return [];
     }
@@ -2564,7 +2977,7 @@ function buildModelTreeNodes(): ModelTreeNode[] {
         includeGround: true,
         connections: toNamedEntityList(mbsJoints.values()),
         motions: toNamedEntityList(mbsMotions.values()),
-        forces: forceEntities,
+        forces: forceNodes.map((node) => ({ id: node.id, name: node.label })),
         materials: []
     }) as unknown as ModelTreeNode[];
 
@@ -2572,6 +2985,33 @@ function buildModelTreeNodes(): ModelTreeNode[] {
     if (objectsCategory) {
         const groundNode = objectsCategory.children?.find((node) => node.kind === 'ground');
         objectsCategory.children = groundNode ? [groundNode as ModelTreeNode, ...objectNodes] : objectNodes;
+    }
+
+    const connectionsCategory = nodes.find((node) => node.id === 'category_connections');
+    if (connectionsCategory) {
+        connectionsCategory.children = Array.from(mbsJoints.values()).map((joint) => ({
+            id: `conn_${joint.id}`,
+            kind: 'connection' as const,
+            label: joint.name,
+            jointId: joint.id,
+            selectionKey: toJointSelectionKey(joint.id)
+        }));
+    }
+
+    const motionsCategory = nodes.find((node) => node.id === 'category_motions');
+    if (motionsCategory) {
+        motionsCategory.children = Array.from(mbsMotions.values()).map((motion) => ({
+            id: `motion_${motion.id}`,
+            kind: 'motion' as const,
+            label: motion.name,
+            motionId: motion.id,
+            selectionKey: toMotionSelectionKey(motion.id)
+        }));
+    }
+
+    const forcesCategory = nodes.find((node) => node.id === 'category_forces');
+    if (forcesCategory) {
+        forcesCategory.children = forceNodes;
     }
 
     return nodes;
@@ -2606,6 +3046,8 @@ function iconForNode(node: ModelTreeNode): string {
             return 'M';
         case 'refFrame':
             return 'R';
+        case 'designPoint':
+            return 'D';
         case 'ground':
             return 'G';
         case 'connection':
@@ -2652,10 +3094,19 @@ function iconAssetForNode(node: ModelTreeNode): string | null {
             return treeIconPath('cad_place_marker.png');
         case 'refFrame':
             return treeIconPath('cad_place_refmarker.png');
+        case 'designPoint':
+            return treeIconPath('cad_design_pnt.png');
         case 'connection':
             return treeIconPath('model_tree_cad_unknown_cnt.png');
         case 'motion':
-            return treeIconPath('model_tree_cad_rotational_gray.png');
+            return (() => {
+                const motion = node.motionId ? mbsMotions.get(node.motionId) : null;
+                return treeIconPath(
+                    motion?.motionType === 'translational'
+                        ? 'model_tree_cad_translational_gray.png'
+                        : 'model_tree_cad_rotational_gray.png'
+                );
+            })();
         case 'force':
             return treeIconPath('force_cad_general_force.png');
         case 'material':
@@ -2747,6 +3198,12 @@ function hideTreeContextMenu(): void {
 }
 
 function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: string; action: string }> {
+    if (nodeData.contactId) {
+        return [
+            { label: '删除', action: 'deleteContact' }
+        ];
+    }
+
     if (nodeData.groupId) {
         return [
             { label: '新建子组', action: 'createChildGroup' },
@@ -2769,6 +3226,26 @@ function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: st
     if (nodeData.frameId) {
         return [
             { label: '删除', action: 'deleteFrame' }
+        ];
+    }
+
+    if (nodeData.jointId) {
+        return [
+            { label: '属性', action: 'jointProperties' },
+            { label: '删除', action: 'deleteJoint' }
+        ];
+    }
+
+    if (nodeData.motionId) {
+        return [
+            { label: '属性', action: 'motionProperties' },
+            { label: '删除', action: 'deleteMotion' }
+        ];
+    }
+
+    if (nodeData.designPointId) {
+        return [
+            { label: '删除', action: 'deleteSelection' }
         ];
     }
 
@@ -2839,6 +3316,18 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
     if (nodeData.frameId) {
         node.dataset.frameId = nodeData.frameId;
+    }
+    if (nodeData.jointId) {
+        node.dataset.jointId = nodeData.jointId;
+    }
+    if (nodeData.motionId) {
+        node.dataset.motionId = nodeData.motionId;
+    }
+    if (nodeData.designPointId) {
+        node.dataset.designPointId = nodeData.designPointId;
+    }
+    if (nodeData.contactId) {
+        node.dataset.contactId = nodeData.contactId;
     }
     if (nodeData.selectionKey) {
         node.dataset.selectionKey = nodeData.selectionKey;
@@ -3354,6 +3843,99 @@ function syncFrameEntityToViewer(kind: FrameEntityKind, id: string): void {
     });
 }
 
+function syncDesignPointEntityToViewer(id: string): void {
+    if (!viewer) {
+        return;
+    }
+
+    const point = mbsDesignPoints.get(id);
+    if (!point) {
+        return;
+    }
+
+    viewer.updateFrame({
+        id: point.id,
+        name: point.name,
+        position: point.position,
+        orientation: createOrientationFromNormal(point.direction ?? { x: 0, y: 0, z: 1 }),
+        size: clampDesignPointSize(point.size),
+        visible: true,
+        isPrimary: false
+    });
+}
+
+function calculateShapeWorldCenter(shapeId: string): Vec3 {
+    const shape = loadedShapes.get(shapeId);
+    if (!shape) {
+        return { x: 0, y: 0, z: 0 };
+    }
+    const localCenter = calculateShapeCenter(shape);
+    const transform = normalizeRigidTransform(shape.transform);
+    const [x, y, z] = transformPoint(transform, localCenter.x, localCenter.y, localCenter.z);
+    return { x, y, z };
+}
+
+function resolveJointViewerType(jointType: string): MbsJointType {
+    switch (normalizeConnectorType(jointType)) {
+        case 'fixed':
+            return MbsJointType.Fixed;
+        case 'prismatic':
+            return MbsJointType.Prismatic;
+        case 'cylindrical':
+        case 'screw':
+            return MbsJointType.Cylindrical;
+        case 'spherical':
+            return MbsJointType.Spherical;
+        case 'universal':
+            return MbsJointType.Universal;
+        case 'planar':
+            return MbsJointType.Planar;
+        case 'revolute':
+        default:
+            return MbsJointType.Revolute;
+    }
+}
+
+function buildJointViewerData(joint: MbsJointEntity): JointData {
+    const position = joint.position ?? (
+        joint.part2 === GROUND_PART_ID
+            ? calculateShapeWorldCenter(joint.part1)
+            : (() => {
+                const p1 = calculateShapeWorldCenter(joint.part1);
+                const p2 = calculateShapeWorldCenter(joint.part2);
+                return {
+                    x: (p1.x + p2.x) / 2,
+                    y: (p1.y + p2.y) / 2,
+                    z: (p1.z + p2.z) / 2
+                };
+            })()
+    );
+
+    return {
+        id: joint.id,
+        name: joint.name,
+        type: resolveJointViewerType(joint.jointType),
+        position,
+        axis: normalizeVector(joint.direction) ?? DEFAULT_CONNECTOR_DIRECTION,
+        size: Math.max(1, joint.iconSize),
+        selected: selectedJointId === joint.id
+    };
+}
+
+function syncJointEntityToViewer(id: string): void {
+    if (!viewer) {
+        return;
+    }
+
+    const joint = mbsJoints.get(id);
+    if (!joint) {
+        viewer.removeJoint(id);
+        return;
+    }
+
+    viewer.updateJoint(buildJointViewerData(joint));
+}
+
 function renderMarkerPropertiesPanel(markerId: string): void {
     const marker = createdMarkers.find((item) => item.id === markerId);
     const propsEl = document.getElementById('properties-panel');
@@ -3451,6 +4033,202 @@ function renderRefFramePropertiesPanel(refFrameId: string): void {
         const target = event.currentTarget as HTMLInputElement;
         refFrame.visible = target.checked;
         viewer?.setFrameVisible(refFrame.id, refFrame.visible);
+    });
+}
+
+function renderJointPropertiesPanel(jointId: string): void {
+    const joint = mbsJoints.get(jointId);
+    const propsEl = document.getElementById('properties-panel');
+    if (!joint || !propsEl) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    setPanelMode('properties', '属性-连接');
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('prop-joint-name', joint.name)}
+        ${buildDropdown('prop-joint-type', '类型', normalizeConnectorType(joint.jointType), JOINT_TYPE_OPTIONS)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-joint-inference">智能推理</label>
+            <input id="prop-joint-inference" type="checkbox"${joint.inferenceEnabled ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="prop-joint-reverse">Z 轴反向</label>
+            <input id="prop-joint-reverse" type="checkbox"${joint.zAxisReversed ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="prop-joint-size">图标大小</label>
+            <input id="prop-joint-size" class="opt-input" type="number" min="1" max="200" step="1" value="${Math.max(1, Math.round(joint.iconSize))}" />
+        </div>
+        ${buildSeparator()}
+        ${createPropertyRow('零件 1', resolvePartRefName(joint.part1), { boxed: true })}
+        ${createPropertyRow('零件 2', resolvePartRefName(joint.part2), { boxed: true })}
+        ${buildSeparator()}
+        ${buildVec3Input('prop-joint-pos', '位置（全局坐标）', joint.position.x, joint.position.y, joint.position.z)}
+        ${buildVec3Input('prop-joint-dir', '方向（单位向量）', joint.direction.x, joint.direction.y, joint.direction.z)}
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="prop-joint-delete" class="opt-btn-secondary">删除</button>
+            <button id="prop-joint-save" class="opt-btn-primary">保存修改</button>
+        </div>
+    </div>`;
+
+    document.getElementById('prop-joint-save')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('prop-joint-name') as HTMLInputElement | null;
+        const typeInput = document.getElementById('prop-joint-type') as HTMLSelectElement | null;
+        const sizeInput = document.getElementById('prop-joint-size') as HTMLInputElement | null;
+        const inferenceInput = document.getElementById('prop-joint-inference') as HTMLInputElement | null;
+        const reverseInput = document.getElementById('prop-joint-reverse') as HTMLInputElement | null;
+        const nextDirection = normalizeVector(readVec3FromInputs('prop-joint-dir')) ?? DEFAULT_CONNECTOR_DIRECTION;
+
+        joint.name = nameInput?.value?.trim() || joint.name;
+        joint.jointType = normalizeConnectorType(typeInput?.value, normalizeConnectorType(joint.jointType));
+        joint.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${joint.iconSize}`) || joint.iconSize);
+        joint.inferenceEnabled = inferenceInput?.checked ?? joint.inferenceEnabled;
+        joint.zAxisReversed = reverseInput?.checked ?? joint.zAxisReversed;
+        joint.position = readVec3FromInputs('prop-joint-pos');
+        joint.direction = resolveConnectorDirection({
+            inferenceEnabled: true,
+            pickedDirection: nextDirection,
+            reverseDirection: joint.zAxisReversed
+        });
+        syncJointEntityToViewer(joint.id);
+        updateModelTree();
+        renderJointPropertiesPanel(joint.id);
+    });
+
+    document.getElementById('prop-joint-delete')?.addEventListener('click', () => {
+        deleteJointById(joint.id);
+        updateSelectionPropertiesPanel();
+    });
+}
+
+function renderMotionPropertiesPanel(motionId: string): void {
+    const motion = mbsMotions.get(motionId);
+    const propsEl = document.getElementById('properties-panel');
+    if (!motion || !propsEl) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    setPanelMode('properties', '属性-驱动');
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('prop-motion-name', motion.name)}
+        ${createPropertyRow('类型', resolveMotionTypeLabel(motion.motionType), { boxed: true })}
+        ${buildDropdown('prop-motion-drive-mode', '驱动类型', motion.driveMode, getMotionDriveModeOptions(motion.motionType))}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-motion-visible">可见性</label>
+            <input id="prop-motion-visible" type="checkbox"${motion.visible ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="prop-motion-size">图标大小</label>
+            <input id="prop-motion-size" class="opt-input" type="number" min="1" max="50000" step="1" value="${Math.max(1, Math.round(motion.iconSize))}" />
+        </div>
+        ${buildSeparator()}
+        ${createPropertyRow('连接', resolveMotionConnectorLabel(motion.connectorRef), { boxed: true })}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-motion-phi">phi.start</label>
+            <input id="prop-motion-phi" class="opt-input" type="number" step="0.01" value="${motion.phiStart}" />
+        </div>
+        <div class="opt-row">
+            <label for="prop-motion-w">w.start</label>
+            <input id="prop-motion-w" class="opt-input" type="number" step="0.01" value="${motion.wStart}" />
+        </div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="prop-motion-delete" class="opt-btn-secondary">删除</button>
+            <button id="prop-motion-save" class="opt-btn-primary">保存修改</button>
+        </div>
+    </div>`;
+
+    document.getElementById('prop-motion-save')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('prop-motion-name') as HTMLInputElement | null;
+        const driveModeInput = document.getElementById('prop-motion-drive-mode') as HTMLSelectElement | null;
+        const visibleInput = document.getElementById('prop-motion-visible') as HTMLInputElement | null;
+        const sizeInput = document.getElementById('prop-motion-size') as HTMLInputElement | null;
+        const phiInput = document.getElementById('prop-motion-phi') as HTMLInputElement | null;
+        const wInput = document.getElementById('prop-motion-w') as HTMLInputElement | null;
+
+        motion.name = nameInput?.value.trim() || motion.name;
+        motion.driveMode = normalizeMotionDriveMode(driveModeInput?.value, motion.motionType);
+        motion.visible = visibleInput?.checked ?? motion.visible;
+        motion.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${motion.iconSize}`) || motion.iconSize);
+        motion.phiStart = Number.parseFloat(phiInput?.value ?? `${motion.phiStart}`) || 0;
+        motion.wStart = Number.parseFloat(wInput?.value ?? `${motion.wStart}`) || 0;
+        updateModelTree();
+        renderMotionPropertiesPanel(motion.id);
+    });
+
+    document.getElementById('prop-motion-delete')?.addEventListener('click', () => {
+        deleteMotionById(motion.id);
+        updateSelectionPropertiesPanel();
+    });
+}
+
+function renderContactPropertiesPanel(contactId: string): void {
+    const contact = mbsContacts.get(contactId);
+    const propsEl = document.getElementById('properties-panel');
+    if (!contact || !propsEl) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    setPanelMode('properties', '属性-接触');
+    const partAName = loadedShapes.get(contact.partA)?.name ?? contact.partA;
+    const partBName = loadedShapes.get(contact.partB)?.name ?? contact.partB;
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('prop-contact-name', contact.name)}
+        ${buildDropdown('prop-contact-type', '类型', contact.contactType, CONTACT_TYPE_OPTIONS)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-contact-visible">可见性</label>
+            <input id="prop-contact-visible" type="checkbox"${contact.visible ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="prop-contact-size">图标大小</label>
+            <input id="prop-contact-size" class="opt-input" type="number" min="1" max="50000" step="1" value="${Math.max(1, Math.round(contact.iconSize))}" />
+        </div>
+        ${buildSeparator()}
+        ${createPropertyRow('零件一', partAName, { boxed: true })}
+        ${createPropertyRow('零件二', partBName, { boxed: true })}
+        ${createPropertyRow('特征一', formatVec3(contact.featureA.position))}
+        ${createPropertyRow('特征二', formatVec3(contact.featureB.position))}
+        ${createPropertyRow('创建时间', contact.createdAt)}
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="prop-contact-delete" class="opt-btn-secondary">删除</button>
+            <button id="prop-contact-save" class="opt-btn-primary">保存修改</button>
+        </div>
+    </div>`;
+
+    document.getElementById('prop-contact-visible')?.addEventListener('change', (event) => {
+        const target = event.currentTarget as HTMLInputElement;
+        contact.visible = target.checked;
+        const visual = contactVisuals.get(contact.id);
+        if (visual) {
+            visual.visible = contact.visible;
+        }
+    });
+
+    document.getElementById('prop-contact-save')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('prop-contact-name') as HTMLInputElement | null;
+        const typeInput = document.getElementById('prop-contact-type') as HTMLSelectElement | null;
+        const sizeInput = document.getElementById('prop-contact-size') as HTMLInputElement | null;
+        contact.name = nameInput?.value?.trim() || contact.name;
+        contact.contactType = (typeInput?.value as ContactType) || contact.contactType;
+        contact.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${contact.iconSize}`) || contact.iconSize);
+        upsertContactVisual(contact);
+        updateModelTree();
+        renderContactPropertiesPanel(contact.id);
+    });
+
+    document.getElementById('prop-contact-delete')?.addEventListener('click', () => {
+        deleteContactById(contact.id);
+        updateSelectionPropertiesPanel();
     });
 }
 
@@ -4087,11 +4865,37 @@ interface CadtoolConfigExportData {
         connectorType: string;
         part1: string;
         part2: string;
+        position?: Vec3;
+        direction?: Vec3;
+        iconSize?: number;
+        inferenceEnabled?: boolean;
+        zAxisReversed?: boolean;
     }>;
     motion: Array<{
         name: string;
         motionType: string;
         connectorRef: string;
+        driveMode?: string;
+        functionType?: string;
+        iconSize?: number;
+        visible?: boolean;
+        visibility?: boolean;
+        phiStart?: number;
+        start?: number;
+        wStart?: number;
+        w?: number;
+    }>;
+    contact: Array<{
+        name: string;
+        partA: string;
+        partB: string;
+        iconSize?: number;
+        visibility?: boolean;
+        position?: Vec3;
+        direction?: Vec3;
+        params?: Record<string, unknown>;
+        featureA?: { position?: Vec3; direction?: Vec3 };
+        featureB?: { position?: Vec3; direction?: Vec3 };
     }>;
     fluidPort: Array<{
         name: string;
@@ -4111,6 +4915,7 @@ interface CadtoolConfigImportStats {
     designPoints: number;
     connectors: number;
     motions: number;
+    contacts: number;
     ribSlices: number;
     fluidPorts: number;
     skipped: number;
@@ -4126,6 +4931,7 @@ const DEFAULT_IMPORT_STATS: CadtoolConfigImportStats = {
     designPoints: 0,
     connectors: 0,
     motions: 0,
+    contacts: 0,
     ribSlices: 0,
     fluidPorts: 0,
     skipped: 0,
@@ -4543,9 +5349,22 @@ function resetCanvasInteraction(): void {
     editingFrameTarget = null;
     frameEditPickIntent = 'placement';
     markerDraftPickIntent = 'placement';
+    jointDraftPickStage = 'part1';
+    designPointPickIntent = 'placement';
     canvasInteractionMode = 'none';
     markerCreationPanelActive = false;
+    jointCreationPanelActive = false;
+    motionCreationPanelActive = false;
     refFrameCreationPanelActive = false;
+    designPointCreationPanelActive = false;
+    contactCreationPanelActive = false;
+    motionCreationMode = 'fast';
+    designPointCreationMode = 'pick';
+    designPointCalcMode = 'midpoint';
+    designPointDraft = null;
+    jointDraft = null;
+    motionDraft = null;
+    contactDraft = null;
     clearMarkerDraftPreview();
     viewer?.setSelectionEnabled(true);
     setCanvasCursor('default');
@@ -4579,6 +5398,9 @@ function buildShapeNameToIdMap(): Map<string, string> {
 }
 
 function resolveShapeRef(value: string, shapeNameToId: Map<string, string>): { resolved: string; matched: boolean } {
+    if (value.trim().toLowerCase() === 'ground') {
+        return { resolved: GROUND_PART_ID, matched: true };
+    }
     const mapped = shapeNameToId.get(value);
     if (mapped) {
         return { resolved: mapped, matched: true };
@@ -4587,6 +5409,7 @@ function resolveShapeRef(value: string, shapeNameToId: Map<string, string>): { r
 }
 
 function clearCadtoolRuntimeEntities(): void {
+    clearContactPartHighlights();
     if (viewer) {
         createdMarkers.forEach(marker => {
             viewer.removeFrame(marker.id);
@@ -4594,11 +5417,22 @@ function clearCadtoolRuntimeEntities(): void {
         createdRefFrames.forEach((refFrame) => {
             viewer.removeFrame(refFrame.id);
         });
+        mbsDesignPoints.forEach((designPoint) => {
+            viewer.removeFrame(designPoint.id);
+        });
+        mbsJoints.forEach((joint) => {
+            viewer.removeJoint(joint.id);
+        });
+        Array.from(contactVisuals.keys()).forEach((contactId) => {
+            removeContactVisual(contactId);
+        });
     }
 
     createdMarkers.length = 0;
     createdRefFrames.clear();
     mbsDesignPoints.clear();
+    mbsContacts.clear();
+    contactVisuals.clear();
     frameCreationHistory.length = 0;
     resetCanvasInteraction();
     groupDesignState = createEmptyGroupDesignState(getAllLeafPartIds());
@@ -4606,6 +5440,12 @@ function clearCadtoolRuntimeEntities(): void {
     activeSelectionKey = null;
     selectedShapeId = null;
     selectedGroupId = null;
+    selectedMarkerId = null;
+    selectedRefFrameId = null;
+    selectedJointId = null;
+    selectedMotionId = null;
+    selectedDesignPointId = null;
+    selectedContactId = null;
     mbsJoints.clear();
     mbsMotions.clear();
     fluidSlices.clear();
@@ -4902,17 +5742,26 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const designPoint: MbsDesignPointEntity = {
             id: nextEntityId('designPoint', mbsDesignPoints.size),
-            name,
+            name: getUniqueDesignPointName(name),
             groupId,
             markerRefId,
-            position,
+            position: clampDesignPointPosition(position),
             direction: parsedDirection ?? (markerRefEntity ? orientationToDirection(markerRefEntity.orientation) : undefined),
-            size: sizeValue,
+            size: clampDesignPointSize(sizeValue),
             isDirectionReverse,
             offsetValue,
             createdAt: new Date().toISOString()
         };
         mbsDesignPoints.set(designPoint.id, designPoint);
+        viewer?.addFrame({
+            id: designPoint.id,
+            name: designPoint.name,
+            position: designPoint.position,
+            orientation: createOrientationFromNormal(designPoint.direction ?? { x: 0, y: 0, z: 1 }),
+            size: clampDesignPointSize(designPoint.size),
+            visible: true,
+            isPrimary: false
+        });
         stats.designPoints += 1;
     });
 
@@ -4944,15 +5793,28 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             addImportWarning(stats, `connector "${name}" references unknown part2 "${part2}", keeping raw reference.`);
         }
 
+        const parsedPosition = parseVector3(entry.position) ?? calculateShapeWorldCenter(resolvedPart1.resolved);
+        const parsedDirection = resolveConnectorDirection({
+            inferenceEnabled: typeof entry.inferenceEnabled === 'boolean' ? entry.inferenceEnabled : true,
+            pickedDirection: parseVector3(entry.direction),
+            reverseDirection: typeof entry.zAxisReversed === 'boolean' ? entry.zAxisReversed : false
+        });
+
         const joint: MbsJointEntity = {
             id: nextEntityId('joint', mbsJoints.size),
             name,
-            jointType: connectorType,
+            jointType: normalizeConnectorType(connectorType),
             part1: resolvedPart1.resolved,
             part2: resolvedPart2.resolved,
+            position: parsedPosition,
+            direction: parsedDirection,
+            iconSize: typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize) ? entry.iconSize : pendingJointIconSize,
+            inferenceEnabled: typeof entry.inferenceEnabled === 'boolean' ? entry.inferenceEnabled : true,
+            zAxisReversed: typeof entry.zAxisReversed === 'boolean' ? entry.zAxisReversed : false,
             createdAt: new Date().toISOString()
         };
         mbsJoints.set(joint.id, joint);
+        viewer?.addJoint(buildJointViewerData(joint));
         stats.connectors += 1;
     });
 
@@ -4974,15 +5836,103 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             return;
         }
 
+        const normalizedMotionType = normalizeMotionType(motionType);
+        const jointRef = Array.from(mbsJoints.values()).find((joint) => joint.id === connectorRef || joint.name === connectorRef) ?? null;
+        if (!jointRef) {
+            addImportWarning(stats, `motion "${name}" references unknown connector "${connectorRef}", keeping raw reference.`);
+        } else if (!isDriveCompatibleJointType(jointRef.jointType)) {
+            addImportWarning(stats, `motion "${name}" references connector "${connectorRef}" which is not drive-compatible.`);
+        }
+
+        const driveMode = normalizeMotionDriveMode(
+            toNonEmptyString(entry.driveMode) ?? toNonEmptyString(entry.functionType),
+            normalizedMotionType
+        );
+
         const motion: MbsMotionEntity = {
             id: nextEntityId('motion', mbsMotions.size),
             name,
-            motionType,
-            connectorRef,
+            motionType: normalizedMotionType,
+            driveMode,
+            connectorRef: jointRef?.id ?? connectorRef,
+            iconSize: typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize) ? entry.iconSize : pendingMotionIconSize,
+            visible: typeof entry.visible === 'boolean'
+                ? entry.visible
+                : (typeof entry.visibility === 'boolean' ? entry.visibility : true),
+            phiStart: typeof entry.phiStart === 'number'
+                ? entry.phiStart
+                : (typeof entry.start === 'number' ? entry.start : 0),
+            wStart: typeof entry.wStart === 'number'
+                ? entry.wStart
+                : (typeof entry.w === 'number' ? entry.w : 0),
             createdAt: new Date().toISOString()
         };
         mbsMotions.set(motion.id, motion);
         stats.motions += 1;
+    });
+
+    const contacts = getConfigArray(data, 'contact', stats);
+    contacts.forEach((entry, index) => {
+        if (!isJsonRecord(entry)) {
+            stats.skipped += 1;
+            addImportWarning(stats, `contact[${index}] is not an object and was skipped.`);
+            return;
+        }
+
+        const name = toNonEmptyString(entry.name);
+        const partA = toNonEmptyString(entry.partA);
+        const partB = toNonEmptyString(entry.partB);
+        if (!name || !partA || !partB) {
+            stats.skipped += 1;
+            addImportWarning(stats, `contact[${index}] is missing required fields and was skipped.`);
+            return;
+        }
+
+        const resolvedPartA = resolveShapeRef(partA, shapeNameToId);
+        const resolvedPartB = resolveShapeRef(partB, shapeNameToId);
+        if (!resolvedPartA.matched && loadedShapes.size > 0) {
+            addImportWarning(stats, `contact "${name}" references unknown partA "${partA}", keeping raw reference.`);
+        }
+        if (!resolvedPartB.matched && loadedShapes.size > 0) {
+            addImportWarning(stats, `contact "${name}" references unknown partB "${partB}", keeping raw reference.`);
+        }
+
+        const params = isJsonRecord(entry.params) ? entry.params : null;
+        const featureARecord = isJsonRecord(entry.featureA) ? entry.featureA : null;
+        const featureBRecord = isJsonRecord(entry.featureB) ? entry.featureB : null;
+        const anchorA = getShapeContactAnchor(resolvedPartA.resolved);
+        const anchorB = getShapeContactAnchor(resolvedPartB.resolved);
+
+        const contact: MbsContactEntity = {
+            id: nextEntityId('contact', mbsContacts.size),
+            name,
+            contactType: (
+                toNonEmptyString(entry.contactType)
+                ?? toNonEmptyString(params?.contactType)
+                ?? 'pointPoint'
+            ) as ContactType,
+            partA: resolvedPartA.resolved,
+            partB: resolvedPartB.resolved,
+            featureA: {
+                shapeId: resolvedPartA.resolved,
+                position: parseVector3(featureARecord?.position) ?? anchorA.position,
+                normal: normalizeVector(parseVector3(featureARecord?.direction)) ?? anchorA.normal
+            },
+            featureB: {
+                shapeId: resolvedPartB.resolved,
+                position: parseVector3(featureBRecord?.position) ?? anchorB.position,
+                normal: normalizeVector(parseVector3(featureBRecord?.direction)) ?? anchorB.normal
+            },
+            iconSize: typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize)
+                ? Math.max(1, entry.iconSize)
+                : pendingContactSize,
+            visible: typeof entry.visibility === 'boolean' ? entry.visibility : true,
+            createdAt: new Date().toISOString()
+        };
+
+        mbsContacts.set(contact.id, contact);
+        upsertContactVisual(contact);
+        stats.contacts += 1;
     });
 
     const ribSlices = getConfigArray(data, 'ribSlice', stats);
@@ -5056,10 +6006,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
     updateModelTree();
     setStatus('Ready');
     setStatusInfo(
-        `CADTool config imported: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}`
+        `CADTool config imported: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}, contacts=${stats.contacts}`
     );
 
-    const summary = `CADTool config import complete${sourceLabel}: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}, ribSlices=${stats.ribSlices}, fluidPorts=${stats.fluidPorts}, skipped=${stats.skipped}.`;
+    const summary = `CADTool config import complete${sourceLabel}: groups=${stats.groups}, markers=${stats.markers}, designPoints=${stats.designPoints}, connectors=${stats.connectors}, motions=${stats.motions}, contacts=${stats.contacts}, ribSlices=${stats.ribSlices}, fluidPorts=${stats.fluidPorts}, skipped=${stats.skipped}.`;
     notifyInfo(summary);
 
     if (stats.warningCount > 0) {
@@ -5077,6 +6027,9 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 function resolvePartRefName(shapeId: string | undefined): string {
     if (!shapeId) {
         return '';
+    }
+    if (shapeId === GROUND_PART_ID) {
+        return 'Ground';
     }
     return loadedShapes.get(shapeId)?.name ?? shapeId;
 }
@@ -5144,14 +6097,42 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
         })),
         connector: Array.from(mbsJoints.values()).map(joint => ({
             name: joint.name,
-            connectorType: joint.jointType,
+            connectorType: normalizeConnectorType(joint.jointType),
             part1: resolvePartRefName(joint.part1),
-            part2: resolvePartRefName(joint.part2)
+            part2: resolvePartRefName(joint.part2),
+            position: joint.position,
+            direction: joint.direction,
+            iconSize: joint.iconSize,
+            inferenceEnabled: joint.inferenceEnabled,
+            zAxisReversed: joint.zAxisReversed
         })),
         motion: Array.from(mbsMotions.values()).map(motion => ({
             name: motion.name,
             motionType: motion.motionType,
-            connectorRef: motion.connectorRef
+            connectorRef: mbsJoints.get(motion.connectorRef)?.name ?? motion.connectorRef,
+            driveMode: motion.driveMode,
+            iconSize: motion.iconSize,
+            visible: motion.visible,
+            phiStart: motion.phiStart,
+            wStart: motion.wStart
+        })),
+        contact: Array.from(mbsContacts.values()).map((contact) => ({
+            name: contact.name,
+            partA: resolvePartRefName(contact.partA),
+            partB: resolvePartRefName(contact.partB),
+            iconSize: contact.iconSize,
+            visibility: contact.visible,
+            featureA: {
+                position: cloneVec3(contact.featureA.position),
+                direction: cloneVec3(contact.featureA.normal)
+            },
+            featureB: {
+                position: cloneVec3(contact.featureB.position),
+                direction: cloneVec3(contact.featureB.normal)
+            },
+            params: {
+                contactType: contact.contactType
+            }
         })),
         fluidPort: Array.from(fluidPorts.values()).map(port => ({
             name: port.name,
@@ -5180,7 +6161,7 @@ function exportCadtoolConfig(): void {
 
         setStatus('Ready');
         setStatusInfo(
-            `CADTool config exported: groups=${exportData.group.length}, markers=${exportData.marker.length}, designPoints=${exportData.designPoint.length}, connectors=${exportData.connector.length}, motions=${exportData.motion.length}`
+            `CADTool config exported: groups=${exportData.group.length}, markers=${exportData.marker.length}, designPoints=${exportData.designPoint.length}, connectors=${exportData.connector.length}, motions=${exportData.motion.length}, contacts=${exportData.contact.length}`
         );
     } catch (error) {
         console.error('Failed to export CADTool config:', error);
@@ -5543,6 +6524,276 @@ function renderCustomProperties(title: string, rows: Array<{ label: string; valu
     propsEl.innerHTML = lines.join('');
 }
 
+function sanitizeDesignPointName(name: string, fallback: string): string {
+    const normalized = name.trim().replace(/[^A-Za-z0-9_]/g, '_');
+    if (normalized.length === 0) {
+        return fallback;
+    }
+    return /^[A-Za-z_]/.test(normalized) ? normalized : `_${normalized}`;
+}
+
+function collectReservedEntityNames(ignoreDesignPointId?: string): Set<string> {
+    const names = new Set<string>();
+    loadedShapes.forEach((shape) => names.add(shape.name));
+    listGroups().forEach((group) => names.add(group.name));
+    createdMarkers.forEach((marker) => names.add(marker.name));
+    Array.from(createdRefFrames.values()).forEach((refFrame) => names.add(refFrame.name));
+    Array.from(mbsDesignPoints.values())
+        .filter((point) => point.id !== ignoreDesignPointId)
+        .forEach((point) => names.add(point.name));
+    Array.from(mbsJoints.values()).forEach((joint) => names.add(joint.name));
+    Array.from(mbsMotions.values()).forEach((motion) => names.add(motion.name));
+    Array.from(fluidSlices.values()).forEach((slice) => names.add(slice.name));
+    Array.from(fluidPorts.values()).forEach((port) => names.add(port.name));
+    return names;
+}
+
+function getUniqueDesignPointName(desiredName: string, ignoreDesignPointId?: string): string {
+    const fallback = `DesignPoint${mbsDesignPoints.size + 1}`;
+    const normalized = sanitizeDesignPointName(desiredName, fallback);
+    const reservedNames = collectReservedEntityNames(ignoreDesignPointId);
+    if (!reservedNames.has(normalized)) {
+        return normalized;
+    }
+
+    let index = 1;
+    while (reservedNames.has(`${normalized}_${index}`)) {
+        index += 1;
+    }
+    return `${normalized}_${index}`;
+}
+
+function clampDesignPointSize(value: number): number {
+    const rounded = Math.round(Number.isFinite(value) ? value : pendingDesignPointSize);
+    return Math.min(50000, Math.max(1, rounded));
+}
+
+function clampDesignPointPosition(position: Vec3): Vec3 {
+    const clampAxis = (value: number): number => Math.min(1000, Math.max(-1000, Number.isFinite(value) ? value : 0));
+    return {
+        x: clampAxis(position.x),
+        y: clampAxis(position.y),
+        z: clampAxis(position.z)
+    };
+}
+
+function calculateMidpoint(pointA: Vec3, pointB: Vec3): Vec3 {
+    return {
+        x: (pointA.x + pointB.x) / 2,
+        y: (pointA.y + pointB.y) / 2,
+        z: (pointA.z + pointB.z) / 2
+    };
+}
+
+function calculateOffsetPoint(basePoint: Vec3, direction: Vec3, offsetValue: number, reverse = false): Vec3 {
+    const normalized = normalizeVector(direction);
+    if (!normalized) {
+        throw new Error('Offset direction is invalid.');
+    }
+    const distance = Number.isFinite(offsetValue) ? offsetValue : 0;
+    const sign = reverse ? -1 : 1;
+    return {
+        x: basePoint.x + normalized.x * distance * sign,
+        y: basePoint.y + normalized.y * distance * sign,
+        z: basePoint.z + normalized.z * distance * sign
+    };
+}
+
+function intersectLineWithPlane(
+    linePoint: Vec3,
+    lineDirection: Vec3,
+    planePoint: Vec3,
+    planeNormal: Vec3
+): Vec3 {
+    const direction = normalizeVector(lineDirection);
+    const normal = normalizeVector(planeNormal);
+    if (!direction || !normal) {
+        throw new Error('Intersection feature is invalid.');
+    }
+    const denominator = direction.x * normal.x + direction.y * normal.y + direction.z * normal.z;
+    if (Math.abs(denominator) <= 1e-6) {
+        throw new Error('Selected line and plane do not intersect.');
+    }
+    const t = (
+        (planePoint.x - linePoint.x) * normal.x
+        + (planePoint.y - linePoint.y) * normal.y
+        + (planePoint.z - linePoint.z) * normal.z
+    ) / denominator;
+    return {
+        x: linePoint.x + direction.x * t,
+        y: linePoint.y + direction.y * t,
+        z: linePoint.z + direction.z * t
+    };
+}
+
+function intersectLineWithLine(lineA: DesignPointFeatureLine, lineB: DesignPointFeatureLine): Vec3 {
+    const p1 = lineA.point;
+    const p2 = lineB.point;
+    const d1 = normalizeVector(lineA.direction);
+    const d2 = normalizeVector(lineB.direction);
+    if (!d1 || !d2) {
+        throw new Error('Selected line feature is invalid.');
+    }
+
+    const w0 = subtractVec3(p1, p2);
+    const a = d1.x * d1.x + d1.y * d1.y + d1.z * d1.z;
+    const b = d1.x * d2.x + d1.y * d2.y + d1.z * d2.z;
+    const c = d2.x * d2.x + d2.y * d2.y + d2.z * d2.z;
+    const d = d1.x * w0.x + d1.y * w0.y + d1.z * w0.z;
+    const e = d2.x * w0.x + d2.y * w0.y + d2.z * w0.z;
+    const denominator = a * c - b * b;
+    if (Math.abs(denominator) <= 1e-6) {
+        throw new Error('Selected line features are parallel or nearly parallel.');
+    }
+
+    const s = (b * e - c * d) / denominator;
+    const t = (a * e - b * d) / denominator;
+    const pointA = {
+        x: p1.x + d1.x * s,
+        y: p1.y + d1.y * s,
+        z: p1.z + d1.z * s
+    };
+    const pointB = {
+        x: p2.x + d2.x * t,
+        y: p2.y + d2.y * t,
+        z: p2.z + d2.z * t
+    };
+    const gap = Math.sqrt(
+        Math.pow(pointA.x - pointB.x, 2)
+        + Math.pow(pointA.y - pointB.y, 2)
+        + Math.pow(pointA.z - pointB.z, 2)
+    );
+    if (gap > 1e-3) {
+        throw new Error('Selected line features do not share a stable intersection.');
+    }
+    return calculateMidpoint(pointA, pointB);
+}
+
+function calculateIntersectionPoint(featureA: DesignPointFeature, featureB: DesignPointFeature): Vec3 {
+    if (featureA.kind === 'line' && featureB.kind === 'line') {
+        return intersectLineWithLine(featureA, featureB);
+    }
+    if (featureA.kind === 'line' && featureB.kind === 'plane') {
+        return intersectLineWithPlane(featureA.point, featureA.direction, featureB.point, featureB.normal);
+    }
+    if (featureA.kind === 'plane' && featureB.kind === 'line') {
+        return intersectLineWithPlane(featureB.point, featureB.direction, featureA.point, featureA.normal);
+    }
+    throw new Error('Two plane features do not produce a single design point.');
+}
+
+function getFrameReferenceOptions(): Array<{ value: string; text: string }> {
+    return [
+        { value: '', text: '(无)' },
+        ...createdMarkers.map((marker) => ({ value: marker.id, text: `标架: ${marker.name}` })),
+        ...Array.from(createdRefFrames.values()).map((refFrame) => ({ value: refFrame.id, text: `参考标架: ${refFrame.name}` }))
+    ];
+}
+
+function getFrameReferenceLabel(frameId?: string): string {
+    if (!frameId) {
+        return '(无)';
+    }
+    const marker = createdMarkers.find((item) => item.id === frameId);
+    if (marker) {
+        return `标架: ${marker.name}`;
+    }
+    const refFrame = createdRefFrames.get(frameId);
+    if (refFrame) {
+        return `参考标架: ${refFrame.name}`;
+    }
+    return frameId;
+}
+
+function createLooseDesignPointDraft(): DesignPointDraft {
+    return {
+        name: getUniqueDesignPointName(`DesignPoint${mbsDesignPoints.size + 1}`),
+        groupId: '__unassigned__',
+        hostShapeId: '__unassigned__',
+        position: { x: 0, y: 0, z: 0 },
+        direction: { x: 0, y: 0, z: 1 },
+        markerRefId: resolveLatestExistingFrameFromHistory()?.id,
+        size: pendingDesignPointSize,
+        isDirectionReverse: false,
+        offsetValue: 0
+    };
+}
+
+function createEmptyDesignPointDraft(shape: LoadedShape): DesignPointDraft {
+    const owner = resolveFrameOwnerForShape(shape.id);
+    return {
+        name: getUniqueDesignPointName(`DesignPoint${mbsDesignPoints.size + 1}`),
+        groupId: owner.id,
+        hostShapeId: shape.id,
+        position: { x: 0, y: 0, z: 0 },
+        direction: { x: 0, y: 0, z: 1 },
+        markerRefId: resolveLatestExistingFrameFromHistory()?.id,
+        size: pendingDesignPointSize,
+        isDirectionReverse: false,
+        offsetValue: 0
+    };
+}
+
+function recalculateDesignPointDraft(draft: DesignPointDraft, silent = false): boolean {
+    try {
+        if (designPointCreationMode === 'pick') {
+            if (draft.isDirectionReverse) {
+                const reversed = normalizeVector({
+                    x: -draft.direction.x,
+                    y: -draft.direction.y,
+                    z: -draft.direction.z
+                });
+                draft.direction = reversed ?? draft.direction;
+            }
+            draft.position = clampDesignPointPosition(draft.position);
+            return true;
+        }
+
+        if (designPointCalcMode === 'midpoint') {
+            if (!draft.firstPoint || !draft.secondPoint) {
+                return false;
+            }
+            draft.position = clampDesignPointPosition(calculateMidpoint(draft.firstPoint, draft.secondPoint));
+            const midpointDirection = normalizeVector(subtractVec3(draft.secondPoint, draft.firstPoint));
+            if (midpointDirection) {
+                draft.direction = midpointDirection;
+            }
+            return true;
+        }
+
+        if (designPointCalcMode === 'offset') {
+            if (!draft.basePoint) {
+                return false;
+            }
+            draft.position = clampDesignPointPosition(
+                calculateOffsetPoint(draft.basePoint, draft.direction, draft.offsetValue, draft.isDirectionReverse)
+            );
+            return true;
+        }
+
+        if (!draft.featureA || !draft.featureB) {
+            return false;
+        }
+        draft.position = clampDesignPointPosition(calculateIntersectionPoint(draft.featureA, draft.featureB));
+        if (draft.featureA.kind === 'line') {
+            draft.direction = draft.featureA.direction;
+        } else if (draft.featureB.kind === 'line') {
+            draft.direction = draft.featureB.direction;
+        } else {
+            draft.direction = draft.featureA.normal;
+        }
+        return true;
+    } catch (error) {
+        if (!silent) {
+            vscode.postMessage({
+                command: 'alert',
+                text: error instanceof Error ? error.message : `Design point calculation failed: ${error}`
+            });
+        }
+        return false;
+    }
+}
+
 // ============================================================================
 // Options Panel Builders
 // ============================================================================
@@ -5658,7 +6909,15 @@ function buildSelectedList(items: Array<{ name: string }>): string {
 }
 
 function closeOptionsPanel(): void {
-    if (canvasInteractionMode !== 'none' || markerCreationPanelActive || refFrameCreationPanelActive) {
+    if (
+        canvasInteractionMode !== 'none'
+        || markerCreationPanelActive
+        || jointCreationPanelActive
+        || refFrameCreationPanelActive
+        || motionCreationPanelActive
+        || designPointCreationPanelActive
+        || contactCreationPanelActive
+    ) {
         resetCanvasInteraction();
     }
     setPanelMode('properties', '属性');
@@ -6091,47 +7350,517 @@ function renderRefFrameCreationPanel(): void {
     });
 }
 
-function renderDesignPointOptionsPanel(name: string, position: Vec3): void {
+function syncDesignPointDraftFromPanel(): DesignPointDraft | null {
+    if (!designPointDraft) {
+        return null;
+    }
+
+    const nameInput = document.getElementById('opt-dp-name') as HTMLInputElement | null;
+    const sizeInput = document.getElementById('opt-dp-size') as HTMLInputElement | null;
+    const offsetInput = document.getElementById('opt-dp-offset') as HTMLInputElement | null;
+    const reverseInput = document.getElementById('opt-dp-reverse') as HTMLInputElement | null;
+    const markerRefSelect = document.getElementById('opt-dp-marker-ref') as HTMLSelectElement | null;
+
+    designPointDraft.name = nameInput?.value?.trim() || designPointDraft.name;
+    designPointDraft.size = clampDesignPointSize(Number.parseFloat(sizeInput?.value ?? `${designPointDraft.size}`));
+    designPointDraft.offsetValue = Number.parseFloat(offsetInput?.value ?? `${designPointDraft.offsetValue}`) || 0;
+    designPointDraft.isDirectionReverse = reverseInput?.checked ?? false;
+    designPointDraft.markerRefId = markerRefSelect?.value || undefined;
+
+    if (designPointCreationMode === 'pick') {
+        designPointDraft.position = clampDesignPointPosition(readVec3FromInputs('opt-dp-pos'));
+        designPointDraft.direction = normalizeVector(readVec3FromInputs('opt-dp-dir')) ?? designPointDraft.direction;
+    }
+
+    return designPointDraft;
+}
+
+function finalizeDesignPointDraft(): void {
+    const draft = syncDesignPointDraftFromPanel();
+    if (!draft) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Design point draft is not ready.'
+        });
+        return;
+    }
+
+    if (draft.groupId === '__unassigned__' || draft.hostShapeId === '__unassigned__') {
+        vscode.postMessage({
+            command: 'alert',
+            text: '请先在三维视图中拾取设计点所属零件。'
+        });
+        return;
+    }
+
+    if (!recalculateDesignPointDraft(draft)) {
+        vscode.postMessage({
+            command: 'alert',
+            text: '请先完成设计点所需的拾取或计算参数。'
+        });
+        return;
+    }
+
+    const designPoint: MbsDesignPointEntity = {
+        id: nextEntityId('designPoint', mbsDesignPoints.size),
+        name: getUniqueDesignPointName(draft.name),
+        groupId: draft.groupId,
+        position: clampDesignPointPosition(draft.position),
+        direction: normalizeVector(draft.direction) ?? { x: 0, y: 0, z: 1 },
+        markerRefId: draft.markerRefId,
+        size: clampDesignPointSize(draft.size),
+        isDirectionReverse: draft.isDirectionReverse,
+        offsetValue: draft.offsetValue,
+        createdAt: new Date().toISOString()
+    };
+    mbsDesignPoints.set(designPoint.id, designPoint);
+    pendingDesignPointSize = designPoint.size;
+    viewer?.addFrame({
+        id: designPoint.id,
+        name: designPoint.name,
+        position: designPoint.position,
+        orientation: createOrientationFromNormal(designPoint.direction ?? { x: 0, y: 0, z: 1 }),
+        size: clampDesignPointSize(designPoint.size),
+        visible: true,
+        isPrimary: false
+    });
+    updateModelTree();
+    selectSelection({ kind: 'designPoint', id: designPoint.id });
+    setStatusInfo(`Design point created: ${designPoint.name}`);
+    vscode.postMessage({
+        command: 'alert',
+        text: `Design point "${designPoint.name}" created successfully.`
+    });
+
+    const nextShape = loadedShapes.get(draft.hostShapeId) ?? (selectedShapeId ? loadedShapes.get(selectedShapeId) ?? null : null);
+    if (nextShape) {
+        designPointDraft = createEmptyDesignPointDraft(nextShape);
+        designPointDraft.size = pendingDesignPointSize;
+        designPointDraft.markerRefId = designPoint.markerRefId;
+        designPointDraft.offsetValue = designPoint.offsetValue;
+    } else {
+        designPointDraft = null;
+    }
+    renderDesignPointOptionsPanel();
+}
+
+function renderDesignPointOptionsPanel(): void {
+    const draft = designPointDraft;
+    if (!draft) {
+        closeOptionsPanel();
+        return;
+    }
+
     setPanelMode('options', '选项-设计点');
     const propsEl = document.getElementById('properties-panel');
-    if (!propsEl) return;
+    if (!propsEl) {
+        return;
+    }
+    designPointCreationPanelActive = true;
+
+    const calcModeOptions = [
+        { value: 'midpoint', text: '中点模式' },
+        { value: 'offset', text: '偏移模式' },
+        { value: 'intersection', text: '交点模式' }
+    ];
+    const pointText = (value?: Vec3): string => value ? formatVec3(value) : '(未选择)';
+    const featureText = (value?: DesignPointFeature): string => value ? `${value.label} ${formatVec3(value.point)}` : '(未选择)';
+    const pickSection = designPointCreationMode === 'pick'
+        ? `${buildVec3Input('opt-dp-pos', '位置（全局坐标）', draft.position.x, draft.position.y, draft.position.z)}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-dp-dir', '方向（单位向量）', draft.direction.x, draft.direction.y, draft.direction.z)}
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-dp-pick-placement" class="opt-btn-secondary">拾取位置与方向</button>
+        </div>`
+        : `${buildDropdown('opt-dp-calc-mode', '计算方式', designPointCalcMode, calcModeOptions)}
+        ${buildSeparator()}
+        ${designPointCalcMode === 'midpoint'
+            ? `<div class="opt-label">第一个点：${pointText(draft.firstPoint)}</div>
+                <div class="opt-label">第二个点：${pointText(draft.secondPoint)}</div>
+                ${buildSeparator()}
+                <div class="opt-btn-row">
+                    <button id="opt-dp-pick-first" class="opt-btn-secondary">拾取第一个点</button>
+                    <button id="opt-dp-pick-second" class="opt-btn-secondary">拾取第二个点</button>
+                </div>`
+            : designPointCalcMode === 'offset'
+                ? `<div class="opt-label">参考点：${pointText(draft.basePoint)}</div>
+                    <div class="opt-label">参考方向：${formatVec3(draft.direction)}</div>
+                    ${buildSeparator()}
+                    <div class="opt-btn-row">
+                        <button id="opt-dp-pick-base" class="opt-btn-secondary">拾取参考点</button>
+                        <button id="opt-dp-pick-direction" class="opt-btn-secondary">拾取参考方向</button>
+                    </div>`
+                : `<div class="opt-label">特征一：${featureText(draft.featureA)}</div>
+                    <div class="opt-label">特征二：${featureText(draft.featureB)}</div>
+                    ${buildSeparator()}
+                    <div class="opt-btn-row">
+                        <button id="opt-dp-pick-feature-a" class="opt-btn-secondary">拾取特征一</button>
+                        <button id="opt-dp-pick-feature-b" class="opt-btn-secondary">拾取特征二</button>
+                    </div>`}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-dp-pos', '计算结果位置', draft.position.x, draft.position.y, draft.position.z)}
+        ${buildSeparator()}
+        ${buildVec3Input('opt-dp-dir', '计算结果方向', draft.direction.x, draft.direction.y, draft.direction.z)}
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-dp-calc" class="opt-btn-secondary">计算</button>
+        </div>`;
 
     propsEl.innerHTML = `<div class="opt-section">
-        ${buildNameInput('opt-dp-name', name)}
+        ${buildNameInput('opt-dp-name', draft.name)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-dp-size">图标大小</label>
+            <input id="opt-dp-size" class="opt-input" type="number" min="1" max="50000" step="1" value="${clampDesignPointSize(draft.size)}" />
+        </div>
         ${buildSeparator()}
         ${buildTabBar([
-            { id: 'pick', text: '拾取', active: true },
-            { id: 'calc', text: '计算', active: false }
+            { id: 'pick', text: '拾取', active: designPointCreationMode === 'pick' },
+            { id: 'calc', text: '计算', active: designPointCreationMode === 'calc' }
         ])}
         ${buildSeparator()}
-        ${buildVec3Input('opt-dp-pos', '位置', position.x, position.y, position.z)}
+        ${buildDropdown('opt-dp-marker-ref', '参考标架', draft.markerRefId ?? '', getFrameReferenceOptions())}
         ${buildSeparator()}
-        ${buildModeSwitch()}
+        <div class="opt-row">
+            <label for="opt-dp-reverse">反向</label>
+            <input id="opt-dp-reverse" type="checkbox"${draft.isDirectionReverse ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="opt-dp-offset">偏移值</label>
+            <input id="opt-dp-offset" class="opt-input" type="number" step="0.01" value="${draft.offsetValue.toFixed(4)}" />
+        </div>
+        ${buildSeparator()}
+        ${pickSection}
+        ${buildSeparator()}
+        ${buildActionButtons('opt-dp-confirm', '添加', 'opt-dp-cancel')}
     </div>`;
 
-    bindModeSwitchEvents(propsEl);
-    bindTabBarEvents(propsEl);
+    document.getElementById('opt-dp-confirm')?.addEventListener('click', () => {
+        finalizeDesignPointDraft();
+    });
+    document.getElementById('opt-dp-cancel')?.addEventListener('click', () => {
+        closeOptionsPanel();
+    });
+    document.getElementById('opt-dp-pick-placement')?.addEventListener('click', () => {
+        designPointPickIntent = 'placement';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on a face to place the design point');
+    });
+    document.querySelectorAll<HTMLElement>('[data-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+            syncDesignPointDraftFromPanel();
+            const tabId = button.dataset.tab;
+            designPointCreationMode = tabId === 'calc' ? 'calc' : 'pick';
+            renderDesignPointOptionsPanel();
+        });
+    });
+    document.getElementById('opt-dp-calc-mode')?.addEventListener('change', (event) => {
+        syncDesignPointDraftFromPanel();
+        const nextMode = (event.currentTarget as HTMLSelectElement).value;
+        if (nextMode === 'midpoint' || nextMode === 'offset' || nextMode === 'intersection') {
+            designPointCalcMode = nextMode;
+        }
+        renderDesignPointOptionsPanel();
+    });
+    document.getElementById('opt-dp-calc')?.addEventListener('click', () => {
+        const currentDraft = syncDesignPointDraftFromPanel();
+        if (!currentDraft) {
+            return;
+        }
+        if (recalculateDesignPointDraft(currentDraft)) {
+            renderDesignPointOptionsPanel();
+        }
+    });
+    document.getElementById('opt-dp-pick-first')?.addEventListener('click', () => {
+        designPointPickIntent = 'firstPoint';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on the first point');
+    });
+    document.getElementById('opt-dp-pick-second')?.addEventListener('click', () => {
+        designPointPickIntent = 'secondPoint';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on the second point');
+    });
+    document.getElementById('opt-dp-pick-base')?.addEventListener('click', () => {
+        designPointPickIntent = 'basePoint';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on the reference point');
+    });
+    document.getElementById('opt-dp-pick-direction')?.addEventListener('click', () => {
+        designPointPickIntent = 'direction';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on a point, line or face to derive direction');
+    });
+    document.getElementById('opt-dp-pick-feature-a')?.addEventListener('click', () => {
+        designPointPickIntent = 'featureA';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on the first intersection feature');
+    });
+    document.getElementById('opt-dp-pick-feature-b')?.addEventListener('click', () => {
+        designPointPickIntent = 'featureB';
+        canvasInteractionMode = 'createDesignPoint';
+        setCanvasCursor('crosshair');
+        setStatus('Click on the second intersection feature');
+    });
+}
+
+function renderDesignPointPropertiesPanel(designPointId: string): void {
+    const point = mbsDesignPoints.get(designPointId);
+    const propsEl = document.getElementById('properties-panel');
+    if (!point || !propsEl) {
+        updatePropertiesPanel(null);
+        return;
+    }
+
+    setPanelMode('properties', '属性-设计点');
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('prop-dp-name', point.name)}
+        ${buildSeparator()}
+        ${createPropertyRow('类型', '设计点', { boxed: true })}
+        ${createPropertyRow('所属对象', frameOwnerDisplayName(point.groupId), { boxed: true })}
+        ${createPropertyRow('参考标架', getFrameReferenceLabel(point.markerRefId), { boxed: true })}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="prop-dp-size">图标大小</label>
+            <input id="prop-dp-size" class="opt-input" type="number" min="1" max="50000" step="1" value="${clampDesignPointSize(point.size)}" />
+        </div>
+        ${buildSeparator()}
+        ${buildVec3Input('prop-dp-pos', '位置（全局坐标）', point.position.x, point.position.y, point.position.z)}
+        ${buildSeparator()}
+        ${buildVec3Input('prop-dp-dir', '方向（单位向量）', point.direction?.x ?? 0, point.direction?.y ?? 0, point.direction?.z ?? 1)}
+        ${buildSeparator()}
+        ${buildDropdown('prop-dp-marker-ref', '参考标架', point.markerRefId ?? '', getFrameReferenceOptions())}
+        <div class="opt-row">
+            <label for="prop-dp-reverse">反向</label>
+            <input id="prop-dp-reverse" type="checkbox"${point.isDirectionReverse ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="prop-dp-offset">偏移值</label>
+            <input id="prop-dp-offset" class="opt-input" type="number" step="0.01" value="${point.offsetValue.toFixed(4)}" />
+        </div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="prop-dp-save" class="opt-btn-primary">保存修改</button>
+        </div>
+    </div>`;
+
+    document.getElementById('prop-dp-save')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('prop-dp-name') as HTMLInputElement | null;
+        const sizeInput = document.getElementById('prop-dp-size') as HTMLInputElement | null;
+        const markerRefSelect = document.getElementById('prop-dp-marker-ref') as HTMLSelectElement | null;
+        const reverseInput = document.getElementById('prop-dp-reverse') as HTMLInputElement | null;
+        const offsetInput = document.getElementById('prop-dp-offset') as HTMLInputElement | null;
+        point.name = getUniqueDesignPointName(nameInput?.value ?? point.name, point.id);
+        point.size = clampDesignPointSize(Number.parseFloat(sizeInput?.value ?? `${point.size}`) || point.size);
+        point.position = clampDesignPointPosition(readVec3FromInputs('prop-dp-pos'));
+        point.direction = normalizeVector(readVec3FromInputs('prop-dp-dir')) ?? point.direction ?? { x: 0, y: 0, z: 1 };
+        point.markerRefId = markerRefSelect?.value || undefined;
+        point.isDirectionReverse = reverseInput?.checked ?? false;
+        point.offsetValue = Number.parseFloat(offsetInput?.value ?? `${point.offsetValue}`) || 0;
+        syncDesignPointEntityToViewer(point.id);
+        updateModelTree();
+        renderDesignPointPropertiesPanel(point.id);
+    });
 }
 
 const JOINT_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
-    { value: 'Revolute', text: 'Revolute（旋转）' },
-    { value: 'Prismatic', text: 'Prismatic（平移）' },
-    { value: 'Cylindrical', text: 'Cylindrical（圆柱）' },
-    { value: 'Spherical', text: 'Spherical（球）' },
-    { value: 'Universal', text: 'Universal（万向）' },
-    { value: 'Screw', text: 'Screw（螺旋）' },
-    { value: 'Planar', text: 'Planar（平面）' },
-    { value: 'Fixed', text: 'Fixed（固定）' }
+    { value: 'revolute', text: 'Revolute（旋转）' },
+    { value: 'prismatic', text: 'Prismatic（平移）' },
+    { value: 'cylindrical', text: 'Cylindrical（圆柱）' },
+    { value: 'spherical', text: 'Spherical（球）' },
+    { value: 'universal', text: 'Universal（万向）' },
+    { value: 'screw', text: 'Screw（螺旋）' },
+    { value: 'planar', text: 'Planar（平面）' },
+    { value: 'fixed', text: 'Fixed（固定）' }
 ];
 
-function renderJointOptionsPanel(name: string, jointType: string, part1Name: string, part2Name: string, position: Vec3, direction: Vec3): void {
+function createDefaultJointDraft(jointType: string): JointDraft {
+    const normalizedType = normalizeConnectorType(jointType);
+    return {
+        name: `${normalizedType}_${mbsJoints.size + 1}`,
+        jointType: normalizedType,
+        position: { x: 0, y: 0, z: 0 },
+        direction: { ...DEFAULT_CONNECTOR_DIRECTION },
+        iconSize: pendingJointIconSize,
+        inferenceEnabled: jointFeatureInferenceEnabled,
+        zAxisReversed: false
+    };
+}
+
+function syncJointDraftFromInputs(): void {
+    if (!jointDraft) {
+        return;
+    }
+
+    const nameInput = document.getElementById('opt-joint-name') as HTMLInputElement | null;
+    const typeInput = document.getElementById('opt-joint-type') as HTMLSelectElement | null;
+    const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
+    const inferenceInput = document.getElementById('opt-joint-inference') as HTMLInputElement | null;
+    const reverseInput = document.getElementById('opt-joint-reverse') as HTMLInputElement | null;
+
+    jointDraft.name = nameInput?.value?.trim() || jointDraft.name;
+    jointDraft.jointType = normalizeConnectorType(typeInput?.value, normalizeConnectorType(jointDraft.jointType));
+    jointDraft.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${jointDraft.iconSize}`) || jointDraft.iconSize);
+    jointDraft.inferenceEnabled = inferenceInput?.checked ?? jointDraft.inferenceEnabled;
+    jointDraft.zAxisReversed = reverseInput?.checked ?? jointDraft.zAxisReversed;
+    pendingJointIconSize = jointDraft.iconSize;
+    jointFeatureInferenceEnabled = jointDraft.inferenceEnabled;
+
+    if (jointCreationMode === 'standard') {
+        jointDraft.position = readVec3FromInputs('opt-joint-pos');
+        jointDraft.direction = resolveConnectorDirection({
+            inferenceEnabled: true,
+            pickedDirection: normalizeVector(readVec3FromInputs('opt-joint-dir')),
+            reverseDirection: jointDraft.zAxisReversed
+        });
+    }
+}
+
+function recomputeJointDraftPlacement(): void {
+    if (!jointDraft) {
+        return;
+    }
+
+    const part1Pick = jointDraft.part1Pick;
+    const part2Pick = jointDraft.part2Pick;
+    const nextDirection = resolveConnectorDirection({
+        inferenceEnabled: jointDraft.inferenceEnabled,
+        pickedDirection: part2Pick?.direction ?? part1Pick?.direction ?? DEFAULT_CONNECTOR_DIRECTION,
+        reverseDirection: jointDraft.zAxisReversed
+    });
+
+    if (part1Pick && part2Pick) {
+        jointDraft.position = {
+            x: (part1Pick.position.x + part2Pick.position.x) / 2,
+            y: (part1Pick.position.y + part2Pick.position.y) / 2,
+            z: (part1Pick.position.z + part2Pick.position.z) / 2
+        };
+        jointDraft.direction = nextDirection;
+        return;
+    }
+
+    if (part1Pick) {
+        jointDraft.position = cloneVec3(part1Pick.position);
+        jointDraft.direction = nextDirection;
+    }
+}
+
+function finalizeJointDraft(): boolean {
+    if (!jointDraft) {
+        return false;
+    }
+
+    syncJointDraftFromInputs();
+    const validation = validateConnectorParticipants(jointDraft.part1, jointDraft.part2);
+    if (!validation.valid) {
+        vscode.postMessage({
+            command: 'alert',
+            text: validation.reason ?? '连接创建失败。'
+        });
+        return false;
+    }
+
+    const joint: MbsJointEntity = {
+        id: nextEntityId('joint', mbsJoints.size),
+        name: jointDraft.name,
+        jointType: normalizeConnectorType(jointDraft.jointType),
+        part1: jointDraft.part1!,
+        part2: jointDraft.part2!,
+        position: cloneVec3(jointDraft.position),
+        direction: resolveConnectorDirection({
+            inferenceEnabled: true,
+            pickedDirection: jointDraft.direction,
+            reverseDirection: jointDraft.zAxisReversed
+        }),
+        iconSize: jointDraft.iconSize,
+        inferenceEnabled: jointDraft.inferenceEnabled,
+        zAxisReversed: jointDraft.zAxisReversed,
+        createdAt: new Date().toISOString()
+    };
+
+    mbsJoints.set(joint.id, joint);
+    viewer?.addJoint(buildJointViewerData(joint));
+    updateModelTree();
+    selectSelection({ kind: 'joint', id: joint.id });
+
+    const nextType = jointDraft.jointType;
+    jointDraft = createDefaultJointDraft(nextType);
+    jointCreationPanelActive = true;
+    jointDraftPickStage = 'part1';
+    renderJointOptionsPanel();
+    setStatus('请选择零件 1');
+    setStatusInfo(`Connection created: ${joint.name}`);
+    return true;
+}
+
+function setJointDraftGroundTarget(): void {
+    if (!jointDraft) {
+        return;
+    }
+    syncJointDraftFromInputs();
+    if (!jointDraft.part1) {
+        vscode.postMessage({
+            command: 'alert',
+            text: '请先在三维视图中选择零件 1。'
+        });
+        return;
+    }
+    jointDraft.part2 = GROUND_PART_ID;
+    jointDraft.part2Pick = undefined;
+    jointDraftPickStage = 'part2';
+    recomputeJointDraftPlacement();
+    if (jointCreationMode === 'fast') {
+        finalizeJointDraft();
+        return;
+    }
+    renderJointOptionsPanel();
+    setStatus('可调整位置/方向后点击添加');
+    setStatusInfo('零件 2 已设置为 Ground。');
+}
+
+function renderJointOptionsPanel(): void {
+    jointCreationPanelActive = true;
     setPanelMode('options', '选项-连接');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
+    if (!jointDraft) {
+        jointDraft = createDefaultJointDraft('revolute');
+    }
+
+    const draft = jointDraft;
+    const part1Name = resolvePartRefName(draft.part1);
+    const part2Name = resolvePartRefName(draft.part2);
+    const stageText = draft.part1
+        ? (draft.part2 ? '已完成零件选择，可继续调整参数或连续创建。' : '下一步：在三维视图中拾取零件 2，或使用 Ground。')
+        : '下一步：在三维视图中拾取零件 1。';
+    const modeRow = `<div class="opt-mode-row">
+        <button id="opt-joint-mode-fast" class="${jointCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">闪电模式</button>
+        <button id="opt-joint-mode-standard" class="${jointCreationMode === 'standard' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">标准模式</button>
+    </div>`;
+
     propsEl.innerHTML = `<div class="opt-section">
-        ${buildNameInput('opt-joint-name', name)}
-        ${buildDropdown('opt-joint-type', '类型', jointType, JOINT_TYPE_OPTIONS)}
+        ${buildNameInput('opt-joint-name', draft.name)}
+        ${buildDropdown('opt-joint-type', '类型', normalizeConnectorType(draft.jointType), JOINT_TYPE_OPTIONS)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-joint-size">图标大小</label>
+            <input id="opt-joint-size" class="opt-input" type="number" min="1" max="200" step="1" value="${Math.max(1, Math.round(draft.iconSize))}" />
+        </div>
+        ${buildSeparator()}
+        ${modeRow}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-joint-inference">智能推理</label>
+            <input id="opt-joint-inference" type="checkbox"${draft.inferenceEnabled ? ' checked' : ''} />
+        </div>
         ${buildSeparator()}
         <div class="opt-label" style="color: #DC2626; font-weight: 500;">零件 1</div>
         <div id="opt-joint-part1" class="opt-part-selector${part1Name ? ' has-value' : ''}">
@@ -6141,51 +7870,585 @@ function renderJointOptionsPanel(name: string, jointType: string, part1Name: str
         <div id="opt-joint-part2" class="opt-part-selector${part2Name ? ' has-value' : ''}">
             <span>${part2Name || '🖱 点击选择零件 2'}</span>
         </div>
+        <div class="opt-btn-row">
+            <button id="opt-joint-ground" class="opt-btn-secondary">零件 2 = Ground</button>
+        </div>
         ${buildSeparator()}
-        ${buildVec3Input('opt-joint-pos', '位置', position.x, position.y, position.z)}
-        ${buildVec3Input('opt-joint-dir', '方向', direction.x, direction.y, direction.z)}
+        <div class="opt-hint">${stageText}</div>
+        ${jointCreationMode === 'standard' ? `${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-joint-reverse">Z 轴反向</label>
+            <input id="opt-joint-reverse" type="checkbox"${draft.zAxisReversed ? ' checked' : ''} />
+        </div>
         ${buildSeparator()}
-        ${buildModeSwitch()}
+        ${buildVec3Input('opt-joint-pos', '位置（全局坐标）', draft.position.x, draft.position.y, draft.position.z)}
+        ${buildVec3Input('opt-joint-dir', '方向（单位向量）', draft.direction.x, draft.direction.y, draft.direction.z)}
+        ${buildSeparator()}
+        ${buildActionButtons('opt-joint-confirm', '添加', 'opt-joint-cancel')}` : `${buildSeparator()}
+        <div class="opt-hint">当前为闪电模式，完成零件 1 和零件 2 拾取后会立即创建连接。</div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-joint-cancel" class="opt-btn-secondary">取消</button>
+        </div>`}
     </div>`;
 
-    bindModeSwitchEvents(propsEl);
+    document.getElementById('opt-joint-mode-fast')?.addEventListener('click', () => {
+        syncJointDraftFromInputs();
+        jointCreationMode = 'fast';
+        renderJointOptionsPanel();
+    });
+    document.getElementById('opt-joint-mode-standard')?.addEventListener('click', () => {
+        syncJointDraftFromInputs();
+        jointCreationMode = 'standard';
+        renderJointOptionsPanel();
+    });
+    document.getElementById('opt-joint-ground')?.addEventListener('click', () => {
+        setJointDraftGroundTarget();
+    });
+    document.getElementById('opt-joint-cancel')?.addEventListener('click', () => {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+    });
+    document.getElementById('opt-joint-confirm')?.addEventListener('click', () => {
+        finalizeJointDraft();
+    });
 }
 
-const MOTION_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
-    { value: 'constant', text: '匀速运动' },
-    { value: 'sinusoidal', text: '正弦运动' },
-    { value: 'ramp', text: '斜坡运动' },
-    { value: 'custom', text: '自定义' }
+const MOTION_TYPE_OPTIONS: Array<{ value: MotionType; text: string }> = [
+    { value: 'rotational', text: '旋转驱动' },
+    { value: 'translational', text: '平移驱动' }
 ];
 
-function renderMotionOptionsPanel(name: string, motionType: string, connectorRef: string): void {
+const ROTATIONAL_DRIVE_MODE_OPTIONS: Array<{ value: MotionDriveMode; text: string }> = [
+    { value: 'angle', text: '角度' },
+    { value: 'angularVelocity', text: '角速度' },
+    { value: 'angularAcceleration', text: '角加速度' }
+];
+
+const TRANSLATIONAL_DRIVE_MODE_OPTIONS: Array<{ value: MotionDriveMode; text: string }> = [
+    { value: 'displacement', text: '位移' },
+    { value: 'velocity', text: '速度' },
+    { value: 'acceleration', text: '加速度' }
+];
+
+const CONTACT_TYPE_OPTIONS: Array<{ value: ContactType; text: string }> = [
+    { value: 'pointPoint', text: '点点接触' },
+    { value: 'pointSurface', text: '点面接触' }
+];
+
+function normalizeMotionType(value: string | null | undefined, fallback: MotionType = 'rotational'): MotionType {
+    if (value === 'translational' || value === 'displacement' || value === 'velocity' || value === 'acceleration') {
+        return 'translational';
+    }
+    if (value === 'rotational' || value === 'angle' || value === 'angularVelocity' || value === 'angularAcceleration') {
+        return 'rotational';
+    }
+    return fallback;
+}
+
+function defaultMotionDriveMode(motionType: MotionType): MotionDriveMode {
+    return motionType === 'translational' ? 'displacement' : 'angle';
+}
+
+function getMotionDriveModeOptions(motionType: MotionType): Array<{ value: MotionDriveMode; text: string }> {
+    return motionType === 'translational'
+        ? TRANSLATIONAL_DRIVE_MODE_OPTIONS
+        : ROTATIONAL_DRIVE_MODE_OPTIONS;
+}
+
+function normalizeMotionDriveMode(value: string | null | undefined, motionType: MotionType): MotionDriveMode {
+    const allowed = new Set(getMotionDriveModeOptions(motionType).map((item) => item.value));
+    if (value && allowed.has(value as MotionDriveMode)) {
+        return value as MotionDriveMode;
+    }
+    return defaultMotionDriveMode(motionType);
+}
+
+function isDriveCompatibleJointType(jointType: string): boolean {
+    const normalized = normalizeConnectorType(jointType);
+    return normalized === 'revolute' || normalized === 'prismatic' || normalized === 'cylindrical';
+}
+
+function isMotionTypeCompatibleWithJoint(motionType: MotionType, jointType: string): boolean {
+    const normalized = normalizeConnectorType(jointType);
+    if (motionType === 'rotational') {
+        return normalized === 'revolute' || normalized === 'cylindrical';
+    }
+    return normalized === 'prismatic' || normalized === 'cylindrical';
+}
+
+function resolveMotionTypeLabel(motionType: MotionType): string {
+    return MOTION_TYPE_OPTIONS.find((item) => item.value === motionType)?.text ?? motionType;
+}
+
+function resolveMotionConnectorLabel(connectorRef: string | undefined): string {
+    if (!connectorRef) {
+        return '🖱 选择转动/移动连接';
+    }
+
+    const joint = mbsJoints.get(connectorRef);
+    if (!joint) {
+        return connectorRef;
+    }
+
+    const jointTypeLabel = JOINT_TYPE_OPTIONS.find((item) => item.value === normalizeConnectorType(joint.jointType))?.text
+        ?? normalizeConnectorType(joint.jointType);
+    return `${joint.name} (${jointTypeLabel})`;
+}
+
+function createDefaultMotionDraft(motionType: MotionType = motionCreationPreset): MotionDraft {
+    const normalizedType = normalizeMotionType(motionType, motionCreationPreset);
+    return {
+        name: `${normalizedType === 'translational' ? 'TranslationalDrive' : 'RotationalDrive'}${mbsMotions.size + 1}`,
+        motionType: normalizedType,
+        driveMode: defaultMotionDriveMode(normalizedType),
+        connectorRef: undefined,
+        iconSize: pendingMotionIconSize,
+        visible: true,
+        phiStart: 0,
+        wStart: 0
+    };
+}
+
+function syncMotionSizeInputs(nextValue: number): void {
+    const rounded = Math.max(1, Math.min(50000, Math.round(nextValue)));
+    const sizeInput = document.getElementById('opt-motion-size') as HTMLInputElement | null;
+    const sizeRangeInput = document.getElementById('opt-motion-size-range') as HTMLInputElement | null;
+    if (sizeInput) {
+        sizeInput.value = `${rounded}`;
+    }
+    if (sizeRangeInput) {
+        sizeRangeInput.value = `${Math.max(1, Math.min(500, rounded))}`;
+    }
+}
+
+function updateMotionDraftSize(nextValue: number): number {
+    const normalized = Math.max(1, Math.min(50000, Math.round(nextValue)));
+    pendingMotionIconSize = normalized;
+    if (motionDraft) {
+        motionDraft.iconSize = normalized;
+    }
+    syncMotionSizeInputs(normalized);
+    return normalized;
+}
+
+function syncMotionDraftFromInputs(): MotionDraft {
+    const currentDraft = motionDraft ?? createDefaultMotionDraft();
+    const nameInput = document.getElementById('opt-motion-name') as HTMLInputElement | null;
+    const driveModeInput = document.getElementById('opt-motion-drive-mode') as HTMLSelectElement | null;
+    const sizeInput = document.getElementById('opt-motion-size') as HTMLInputElement | null;
+    const visibleInput = document.getElementById('opt-motion-visible') as HTMLInputElement | null;
+    const phiInput = document.getElementById('opt-motion-phi') as HTMLInputElement | null;
+    const wInput = document.getElementById('opt-motion-w') as HTMLInputElement | null;
+
+    const nextMotionType = currentDraft.motionType;
+    const nextDraft: MotionDraft = {
+        ...currentDraft,
+        name: nameInput?.value.trim() || currentDraft.name,
+        motionType: nextMotionType,
+        driveMode: normalizeMotionDriveMode(driveModeInput?.value, nextMotionType),
+        iconSize: Math.max(1, Number.parseFloat(sizeInput?.value ?? `${currentDraft.iconSize}`) || currentDraft.iconSize),
+        visible: visibleInput?.checked ?? currentDraft.visible,
+        phiStart: Number.parseFloat(phiInput?.value ?? `${currentDraft.phiStart}`) || 0,
+        wStart: Number.parseFloat(wInput?.value ?? `${currentDraft.wStart}`) || 0
+    };
+
+    pendingMotionIconSize = nextDraft.iconSize;
+    motionCreationPreset = nextDraft.motionType;
+    motionDraft = nextDraft;
+    return nextDraft;
+}
+
+function createMotionFromDraft(): boolean {
+    const draft = syncMotionDraftFromInputs();
+    if (!draft.connectorRef) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a revolute, prismatic, or cylindrical joint first.'
+        });
+        setStatus('请选择连接');
+        renderMotionOptionsPanel();
+        return false;
+    }
+
+    const joint = mbsJoints.get(draft.connectorRef);
+    if (!joint) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Selected joint no longer exists.'
+        });
+        draft.connectorRef = undefined;
+        renderMotionOptionsPanel();
+        return false;
+    }
+    if (!isDriveCompatibleJointType(joint.jointType)) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Only revolute, prismatic, or cylindrical joints can be driven.'
+        });
+        setStatus('当前连接不支持驱动');
+        renderMotionOptionsPanel();
+        return false;
+    }
+    if (!isMotionTypeCompatibleWithJoint(draft.motionType, joint.jointType)) {
+        const expectedType = draft.motionType === 'rotational'
+            ? 'revolute/cylindrical'
+            : 'prismatic/cylindrical';
+        vscode.postMessage({
+            command: 'alert',
+            text: `The selected joint is incompatible with this drive. Expected ${expectedType}.`
+        });
+        setStatus('当前连接与驱动类型不匹配');
+        renderMotionOptionsPanel();
+        return false;
+    }
+
+    const id = nextEntityId('motion', mbsMotions.size);
+    const motion: MbsMotionEntity = {
+        id,
+        name: draft.name,
+        motionType: draft.motionType,
+        driveMode: normalizeMotionDriveMode(draft.driveMode, draft.motionType),
+        connectorRef: joint.id,
+        iconSize: Math.max(1, draft.iconSize),
+        visible: draft.visible,
+        phiStart: draft.phiStart,
+        wStart: draft.wStart,
+        createdAt: new Date().toISOString()
+    };
+
+    mbsMotions.set(id, motion);
+    pendingMotionIconSize = motion.iconSize;
+    updateModelTree();
+    selectSelection({ kind: 'motion', id });
+    renderMotionPropertiesPanel(id);
+    setStatus('Ready');
+    setStatusInfo(`Motion created: ${motion.name}`);
+
+    if (motionCreationMode === 'fast') {
+        motionDraft = createDefaultMotionDraft(motion.motionType);
+        renderMotionOptionsPanel();
+        setStatus('继续选择连接以创建驱动');
+        return true;
+    }
+
+    resetCanvasInteraction();
+    return true;
+}
+
+function applyMotionConnectorSelection(jointId: string): void {
+    if (!motionCreationPanelActive) {
+        return;
+    }
+
+    const joint = mbsJoints.get(jointId);
+    if (!joint) {
+        return;
+    }
+    if (!isDriveCompatibleJointType(joint.jointType)) {
+        setStatusInfo('Only revolute, prismatic, and cylindrical joints can be used as drive connectors.');
+        renderMotionOptionsPanel();
+        return;
+    }
+
+    const draft = syncMotionDraftFromInputs();
+    if (!isMotionTypeCompatibleWithJoint(draft.motionType, joint.jointType)) {
+        setStatusInfo(
+            draft.motionType === 'rotational'
+                ? '请选择转动或圆柱连接来创建旋转驱动。'
+                : '请选择移动或圆柱连接来创建平移驱动。'
+        );
+        renderMotionOptionsPanel();
+        return;
+    }
+    draft.connectorRef = joint.id;
+    motionDraft = draft;
+    renderMotionOptionsPanel();
+    setStatusInfo(`Drive connector selected: ${joint.name}`);
+
+    if (motionCreationMode === 'fast') {
+        createMotionFromDraft();
+    } else {
+        setStatus('点击“添加”完成驱动创建');
+    }
+}
+
+function startMotionCreation(motionTypeRaw: string): void {
+    const motionType = normalizeMotionType(motionTypeRaw, motionCreationPreset);
+    if (canvasInteractionMode === 'createMotion' && motionCreationPanelActive && motionCreationPreset === motionType) {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+        setStatus('Ready');
+        return;
+    }
+
+    resetCanvasInteraction();
+    canvasInteractionMode = 'createMotion';
+    motionCreationPanelActive = true;
+    motionCreationPreset = motionType;
+    motionCreationMode = 'fast';
+    motionDraft = createDefaultMotionDraft(motionType);
+    renderMotionOptionsPanel();
+    setStatus('请选择转动/移动连接');
+    setStatusInfo('Drive creation mode active');
+}
+
+function renderMotionOptionsPanel(): void {
     setPanelMode('options', '选项-驱动');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
+    const draft = motionDraft ?? createDefaultMotionDraft();
+    motionDraft = draft;
+    motionCreationPreset = draft.motionType;
+    pendingMotionIconSize = draft.iconSize;
+    const addButton = motionCreationMode === 'standard'
+        ? '<button id="opt-motion-add" class="opt-btn-primary">添加</button>'
+        : '';
+
     propsEl.innerHTML = `<div class="opt-section">
-        ${buildNameInput('opt-motion-name', name)}
-        ${buildDropdown('opt-motion-type', '类型', motionType, MOTION_TYPE_OPTIONS)}
+        ${buildNameInput('opt-motion-name', draft.name)}
+        ${createPropertyRow('类型', resolveMotionTypeLabel(draft.motionType), { boxed: true })}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-motion-visible">可见性</label>
+            <input id="opt-motion-visible" type="checkbox"${draft.visible ? ' checked' : ''} />
+        </div>
+        <div class="opt-row">
+            <label for="opt-motion-size">图标大小</label>
+            <input id="opt-motion-size" class="opt-input" type="number" min="1" max="50000" step="1" value="${Math.max(1, Math.round(draft.iconSize))}" />
+        </div>
+        <div class="opt-row">
+            <label for="opt-motion-size-range">大小滑条</label>
+            <input id="opt-motion-size-range" type="range" min="1" max="500" step="1" value="${Math.max(1, Math.min(500, Math.round(draft.iconSize)))}" />
+        </div>
+        <div class="opt-hint">支持 Alt + 鼠标滚轮快速调节图标大小</div>
         ${buildSeparator()}
         <div class="opt-label">连接器</div>
-        <div id="opt-motion-connector" class="opt-part-selector${connectorRef ? ' has-value' : ''}">
-            <span>${connectorRef || '🖱 选择连接器'}</span>
+        <div id="opt-motion-connector" class="opt-part-selector${draft.connectorRef ? ' has-value' : ''}">
+            <span>${resolveMotionConnectorLabel(draft.connectorRef)}</span>
         </div>
+        <div class="opt-hint">请选择转动、移动或圆柱连接。闪电模式下选择后立即创建，标准模式下需要点击“添加”。</div>
         ${buildSeparator()}
-        ${buildSectionHeader('驱动参数')}
+        ${buildDropdown('opt-motion-drive-mode', '驱动类型', draft.driveMode, getMotionDriveModeOptions(draft.motionType))}
+        ${buildSeparator()}
         <div class="opt-row">
             <label for="opt-motion-phi">phi.start</label>
-            <input id="opt-motion-phi" class="opt-input" type="number" step="0.01" value="0" />
+            <input id="opt-motion-phi" class="opt-input" type="number" step="0.01" value="${draft.phiStart}" />
         </div>
         <div class="opt-row">
             <label for="opt-motion-w">w.start</label>
-            <input id="opt-motion-w" class="opt-input" type="number" step="0.01" value="0" />
+            <input id="opt-motion-w" class="opt-input" type="number" step="0.01" value="${draft.wStart}" />
         </div>
         ${buildSeparator()}
-        ${buildModeSwitch()}
+        <div class="opt-mode-row">
+            <button id="opt-motion-mode-fast" class="${motionCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">⚡ 闪电模式</button>
+            <button id="opt-motion-mode-standard" class="${motionCreationMode === 'standard' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">📐 标准模式</button>
+        </div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-motion-reset" class="opt-btn-secondary">重置</button>
+            <button id="opt-motion-cancel" class="opt-btn-secondary">取消</button>
+            ${addButton}
+        </div>
     </div>`;
 
-    bindModeSwitchEvents(propsEl);
+    const nameInput = document.getElementById('opt-motion-name') as HTMLInputElement | null;
+    nameInput?.addEventListener('input', () => {
+        if (motionDraft) {
+            motionDraft.name = nameInput.value.trim() || motionDraft.name;
+        }
+    });
+
+    const driveModeInput = document.getElementById('opt-motion-drive-mode') as HTMLSelectElement | null;
+    driveModeInput?.addEventListener('change', () => {
+        if (!motionDraft) {
+            return;
+        }
+        motionDraft.driveMode = normalizeMotionDriveMode(driveModeInput.value, motionDraft.motionType);
+    });
+
+    const sizeInput = document.getElementById('opt-motion-size') as HTMLInputElement | null;
+    sizeInput?.addEventListener('input', () => {
+        updateMotionDraftSize(Number.parseFloat(sizeInput.value));
+    });
+    const sizeRangeInput = document.getElementById('opt-motion-size-range') as HTMLInputElement | null;
+    sizeRangeInput?.addEventListener('input', () => {
+        updateMotionDraftSize(Number.parseFloat(sizeRangeInput.value));
+    });
+
+    document.getElementById('opt-motion-mode-fast')?.addEventListener('click', () => {
+        syncMotionDraftFromInputs();
+        motionCreationMode = 'fast';
+        renderMotionOptionsPanel();
+    });
+    document.getElementById('opt-motion-mode-standard')?.addEventListener('click', () => {
+        syncMotionDraftFromInputs();
+        motionCreationMode = 'standard';
+        renderMotionOptionsPanel();
+    });
+    document.getElementById('opt-motion-reset')?.addEventListener('click', () => {
+        motionDraft = createDefaultMotionDraft(motionDraft?.motionType ?? motionCreationPreset);
+        renderMotionOptionsPanel();
+        setStatus('请选择转动/移动连接');
+        setStatusInfo('Drive draft reset.');
+    });
+    document.getElementById('opt-motion-cancel')?.addEventListener('click', () => {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+        setStatus('Ready');
+    });
+    document.getElementById('opt-motion-add')?.addEventListener('click', () => {
+        createMotionFromDraft();
+    });
+}
+
+function createDefaultContactDraft(contactType: ContactType = contactCreationPreset): ContactDraft {
+    return {
+        name: `Contact${mbsContacts.size + 1}`,
+        contactType,
+        iconSize: pendingContactSize
+    };
+}
+
+function contactFeatureLabel(feature: ContactFeatureRef | undefined): string {
+    if (!feature) {
+        return '🖱 在三维视图中选择面';
+    }
+    const shapeName = loadedShapes.get(feature.shapeId)?.name ?? feature.shapeId;
+    return `${shapeName} @ (${feature.position.x.toFixed(2)}, ${feature.position.y.toFixed(2)}, ${feature.position.z.toFixed(2)})`;
+}
+
+function syncContactSizeInputs(nextValue: number): void {
+    const numberInput = document.getElementById('opt-contact-size') as HTMLInputElement | null;
+    const rangeInput = document.getElementById('opt-contact-size-range') as HTMLInputElement | null;
+    const rounded = Math.max(1, Math.round(nextValue));
+    if (numberInput) {
+        numberInput.value = `${rounded}`;
+    }
+    if (rangeInput) {
+        rangeInput.value = `${rounded}`;
+    }
+}
+
+function updateContactDraftSize(nextValue: number): number {
+    const normalized = Math.max(1, Math.min(50000, Math.round(nextValue)));
+    pendingContactSize = normalized;
+    if (contactDraft) {
+        contactDraft.iconSize = normalized;
+    }
+    syncContactSizeInputs(normalized);
+    return normalized;
+}
+
+function resetContactDraftFeatures(): void {
+    if (!contactDraft) {
+        return;
+    }
+    contactDraft.featureA = undefined;
+    contactDraft.featureB = undefined;
+}
+
+function renderContactOptionsPanel(): void {
+    setPanelMode('options', '选项-接触');
+    const propsEl = document.getElementById('properties-panel');
+    if (!propsEl) return;
+
+    const draft = contactDraft ?? createDefaultContactDraft();
+    contactDraft = draft;
+    contactCreationPreset = draft.contactType;
+    pendingContactSize = draft.iconSize;
+
+    const addButton = contactCreationMode === 'standard'
+        ? '<button id="opt-contact-add" class="opt-btn-primary">添加</button>'
+        : '';
+
+    propsEl.innerHTML = `<div class="opt-section">
+        ${buildNameInput('opt-contact-name', draft.name)}
+        ${buildDropdown('opt-contact-type', '类型', draft.contactType, CONTACT_TYPE_OPTIONS)}
+        ${buildSeparator()}
+        <div class="opt-row">
+            <label for="opt-contact-size">图标大小</label>
+            <input id="opt-contact-size" class="opt-input" type="number" min="1" max="50000" step="1" value="${Math.max(1, Math.round(draft.iconSize))}" />
+        </div>
+        <div class="opt-row">
+            <label for="opt-contact-size-range">大小滑条</label>
+            <input id="opt-contact-size-range" type="range" min="1" max="500" step="1" value="${Math.max(1, Math.min(500, Math.round(draft.iconSize)))}" />
+        </div>
+        <div class="opt-hint">支持 Alt + 鼠标滚轮快速调节图标大小</div>
+        ${buildSeparator()}
+        <div class="opt-label" style="color: #2563EB; font-weight: 600;">特征 1</div>
+        <div id="opt-contact-feature-a" class="opt-part-selector${draft.featureA ? ' has-value' : ''}">
+            <span>${contactFeatureLabel(draft.featureA)}</span>
+        </div>
+        <div class="opt-label" style="color: #2563EB; font-weight: 600;">特征 2</div>
+        <div id="opt-contact-feature-b" class="opt-part-selector${draft.featureB ? ' has-value' : ''}">
+            <span>${contactFeatureLabel(draft.featureB)}</span>
+        </div>
+        <div class="opt-hint">${contactCreationMode === 'fast' ? '闪电模式下，选择完第二个特征后立即创建。' : '标准模式下，选择完两个特征后点击添加。'}</div>
+        ${buildSeparator()}
+        <div class="opt-mode-row">
+            <button id="opt-contact-mode-fast" class="${contactCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">⚡ 闪电模式</button>
+            <button id="opt-contact-mode-standard" class="${contactCreationMode === 'standard' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">📐 标准模式</button>
+        </div>
+        ${buildSeparator()}
+        <div class="opt-btn-row">
+            <button id="opt-contact-reset" class="opt-btn-secondary">重置</button>
+            <button id="opt-contact-cancel" class="opt-btn-secondary">取消</button>
+            ${addButton}
+        </div>
+    </div>`;
+
+    const nameInput = document.getElementById('opt-contact-name') as HTMLInputElement | null;
+    nameInput?.addEventListener('input', () => {
+        if (contactDraft) {
+            contactDraft.name = nameInput.value.trim() || contactDraft.name;
+        }
+    });
+
+    const typeInput = document.getElementById('opt-contact-type') as HTMLSelectElement | null;
+    typeInput?.addEventListener('change', () => {
+        if (contactDraft) {
+            contactDraft.contactType = (typeInput.value as ContactType) || contactDraft.contactType;
+            contactCreationPreset = contactDraft.contactType;
+        }
+    });
+
+    const updateSize = (value: number): void => {
+        updateContactDraftSize(value);
+    };
+
+    const sizeInput = document.getElementById('opt-contact-size') as HTMLInputElement | null;
+    sizeInput?.addEventListener('input', () => {
+        updateSize(Number.parseFloat(sizeInput.value));
+    });
+    const sizeRangeInput = document.getElementById('opt-contact-size-range') as HTMLInputElement | null;
+    sizeRangeInput?.addEventListener('input', () => {
+        updateSize(Number.parseFloat(sizeRangeInput.value));
+    });
+
+    document.getElementById('opt-contact-mode-fast')?.addEventListener('click', () => {
+        contactCreationMode = 'fast';
+        renderContactOptionsPanel();
+    });
+    document.getElementById('opt-contact-mode-standard')?.addEventListener('click', () => {
+        contactCreationMode = 'standard';
+        renderContactOptionsPanel();
+    });
+    document.getElementById('opt-contact-reset')?.addEventListener('click', () => {
+        contactDraft = createDefaultContactDraft(contactDraft?.contactType ?? contactCreationPreset);
+        renderContactOptionsPanel();
+        setStatus('请选择特征 1');
+        setStatusInfo('Contact draft reset.');
+    });
+    document.getElementById('opt-contact-cancel')?.addEventListener('click', () => {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+        setStatus('Ready');
+    });
+    document.getElementById('opt-contact-add')?.addEventListener('click', () => {
+        createContactFromDraft();
+    });
 }
 
 function collectLeafShapeIds(shapes: LoadedShape[]): string[] {
@@ -6314,26 +8577,18 @@ function handleUngroupGroup(): void {
 }
 
 function handleCreateJoint(jointType: string): void {
-    const participants = resolveJointParticipants();
-    const part1Name = participants ? activeShapeName(participants.part1) : '';
-    const part2Name = participants ? activeShapeName(participants.part2) : '';
-    const name = `${jointType || 'joint'}_${mbsJoints.size + 1}`;
-    const position: Vec3 = { x: 0, y: 0, z: 0 };
-    const direction: Vec3 = { x: 0, y: 0, z: 1 };
-
-    renderJointOptionsPanel(name, jointType || 'Revolute', part1Name, part2Name, position, direction);
+    startJointCreation(jointType);
 }
 
 function handleCreateMotion(motionType: string): void {
-    const latestJoint = Array.from(mbsJoints.values()).at(-1);
-    const connectorRef = latestJoint?.name ?? '';
-    const name = `${motionType || 'motion'}_${mbsMotions.size + 1}`;
-
-    renderMotionOptionsPanel(name, motionType || 'constant', connectorRef);
+    startMotionCreation(motionType);
 }
 
 function handleMotionProperties(): void {
-    const target = Array.from(mbsMotions.values()).at(-1);
+    const activeMotionId = getActiveMotionId();
+    const target = activeMotionId
+        ? (mbsMotions.get(activeMotionId) ?? null)
+        : (Array.from(mbsMotions.values()).at(-1) ?? null);
     if (!target) {
         vscode.postMessage({
             command: 'alert',
@@ -6342,13 +8597,277 @@ function handleMotionProperties(): void {
         return;
     }
 
-    renderCustomProperties('Motion Properties', [
-        { label: 'ID', value: target.id },
-        { label: 'Name', value: target.name },
-        { label: 'Motion Type', value: target.motionType },
-        { label: 'Connector Ref', value: target.connectorRef },
-        { label: 'Created', value: target.createdAt }
-    ]);
+    renderMotionPropertiesPanel(target.id);
+}
+
+function getContactFeatureFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): ContactFeatureRef {
+    return {
+        shapeId: selectedShape.id,
+        position: cloneVec3(position),
+        normal: normalizeVector(cloneVec3(normal)) ?? { x: 0, y: 0, z: 1 }
+    };
+}
+
+function getShapeContactAnchor(shapeId: string): ContactFeatureRef {
+    const shape = loadedShapes.get(shapeId);
+    if (shape?.meshData) {
+        const center = calculateShapeCenter(shape);
+        return {
+            shapeId,
+            position: { x: center.x, y: center.y, z: center.z },
+            normal: { x: 0, y: 0, z: 1 }
+        };
+    }
+    return {
+        shapeId,
+        position: { x: 0, y: 0, z: 0 },
+        normal: { x: 0, y: 0, z: 1 }
+    };
+}
+
+function createContactVisual(contact: MbsContactEntity): THREE.Group | null {
+    const pointA = new THREE.Vector3(contact.featureA.position.x, contact.featureA.position.y, contact.featureA.position.z);
+    const pointB = new THREE.Vector3(contact.featureB.position.x, contact.featureB.position.y, contact.featureB.position.z);
+    const direction = new THREE.Vector3().subVectors(pointB, pointA);
+    const distance = direction.length();
+    if (!Number.isFinite(distance) || distance <= 1e-6 || !viewer) {
+        return null;
+    }
+
+    const radius = Math.max(0.6, contact.iconSize * 0.04);
+    const material = new THREE.MeshPhongMaterial({
+        color: 0x22c55e,
+        emissive: 0x16a34a,
+        emissiveIntensity: 0.18,
+        transparent: true,
+        opacity: contact.visible ? 0.9 : 0.15
+    });
+    const sphereGeometry = new THREE.SphereGeometry(radius, 16, 16);
+    const centerGeometry = new THREE.SphereGeometry(radius * 1.3, 20, 20);
+    const cylinderGeometry = new THREE.CylinderGeometry(radius * 0.45, radius * 0.45, distance, 12, 1, false);
+
+    const group = new THREE.Group();
+    group.name = `contact_${contact.id}`;
+
+    const sphereA = new THREE.Mesh(sphereGeometry, material.clone());
+    sphereA.position.copy(pointA);
+    group.add(sphereA);
+
+    const sphereB = new THREE.Mesh(sphereGeometry, material.clone());
+    sphereB.position.copy(pointB);
+    group.add(sphereB);
+
+    const connector = new THREE.Mesh(cylinderGeometry, material.clone());
+    const midpoint = new THREE.Vector3().addVectors(pointA, pointB).multiplyScalar(0.5);
+    connector.position.copy(midpoint);
+    connector.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+    group.add(connector);
+
+    const core = new THREE.Mesh(centerGeometry, material.clone());
+    core.position.copy(midpoint);
+    group.add(core);
+
+    group.visible = contact.visible;
+    group.userData = {
+        contactId: contact.id,
+        contactName: contact.name,
+        selectionAppearance: 'contact'
+    };
+
+    viewer.getScene().add(group);
+    viewer.registerSelectableObject(contact.id, group);
+    contactVisuals.set(contact.id, group);
+    return group;
+}
+
+function removeContactVisual(contactId: string): void {
+    const group = contactVisuals.get(contactId);
+    if (!group || !viewer) {
+        return;
+    }
+
+    viewer.unregisterSelectableObject(contactId);
+    viewer.getScene().remove(group);
+    group.traverse((child) => {
+        const disposable = child as THREE.Object3D & {
+            geometry?: THREE.BufferGeometry;
+            material?: THREE.Material | THREE.Material[];
+        };
+        disposable.geometry?.dispose();
+        if (Array.isArray(disposable.material)) {
+            disposable.material.forEach((material) => material.dispose());
+        } else {
+            disposable.material?.dispose();
+        }
+    });
+    contactVisuals.delete(contactId);
+}
+
+function upsertContactVisual(contact: MbsContactEntity): void {
+    removeContactVisual(contact.id);
+    createContactVisual(contact);
+}
+
+function handleContactProperties(): void {
+    const contactId = getActiveContactId();
+    if (!contactId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No contact selected.'
+        });
+        return;
+    }
+    renderContactPropertiesPanel(contactId);
+}
+
+function createContactFromDraft(): void {
+    const draft = contactDraft;
+    if (!draft?.featureA || !draft.featureB) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please pick feature 1 and feature 2 first.'
+        });
+        return;
+    }
+    if (draft.featureA.shapeId === draft.featureB.shapeId) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please pick two different parts for contact creation.'
+        });
+        return;
+    }
+
+    const contact: MbsContactEntity = {
+        id: nextEntityId('contact', mbsContacts.size),
+        name: draft.name.trim() || `Contact${mbsContacts.size + 1}`,
+        contactType: draft.contactType,
+        partA: draft.featureA.shapeId,
+        partB: draft.featureB.shapeId,
+        featureA: {
+            shapeId: draft.featureA.shapeId,
+            position: cloneVec3(draft.featureA.position),
+            normal: cloneVec3(draft.featureA.normal)
+        },
+        featureB: {
+            shapeId: draft.featureB.shapeId,
+            position: cloneVec3(draft.featureB.position),
+            normal: cloneVec3(draft.featureB.normal)
+        },
+        iconSize: Math.max(1, draft.iconSize),
+        visible: true,
+        createdAt: new Date().toISOString()
+    };
+
+    mbsContacts.set(contact.id, contact);
+    upsertContactVisual(contact);
+    updateModelTree();
+    selectSelection({ kind: 'contact', id: contact.id });
+    setStatusInfo(`Contact created: ${contact.name}`);
+
+    contactDraft = createDefaultContactDraft(draft.contactType);
+    renderContactOptionsPanel();
+    setStatus('请选择特征 1');
+}
+
+function handleContactPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
+    const nextFeature = getContactFeatureFromPlacement(selectedShape, position, normal);
+    if (!contactDraft) {
+        contactDraft = createDefaultContactDraft(contactCreationPreset);
+    }
+
+    if (!contactDraft.featureA || (contactDraft.featureA && contactDraft.featureB)) {
+        contactDraft.featureA = nextFeature;
+        contactDraft.featureB = undefined;
+        renderContactOptionsPanel();
+        setStatus('请选择特征 2');
+        setStatusInfo(`Feature 1 selected: ${selectedShape.name}`);
+        return;
+    }
+
+    contactDraft.featureB = nextFeature;
+    renderContactOptionsPanel();
+    setStatusInfo(`Feature 2 selected: ${selectedShape.name}`);
+    if (contactCreationMode === 'fast') {
+        createContactFromDraft();
+    } else {
+        setStatus('点击“添加”完成接触创建');
+    }
+}
+
+function startContactCreation(contactType: ContactType): void {
+    if (canvasInteractionMode === 'createContact' && contactCreationPanelActive && contactCreationPreset === contactType) {
+        resetCanvasInteraction();
+        closeOptionsPanel();
+        setStatus('Ready');
+        return;
+    }
+
+    resetCanvasInteraction();
+    canvasInteractionMode = 'createContact';
+    contactCreationPanelActive = true;
+    contactCreationPreset = contactType;
+    contactDraft = createDefaultContactDraft(contactType);
+    viewer?.setSelectionEnabled(false);
+    renderContactOptionsPanel();
+    setCanvasCursor('crosshair');
+    setStatus('请选择特征 1');
+    setStatusInfo('Contact creation mode active');
+}
+
+function deleteContactById(contactId: string): boolean {
+    const contact = mbsContacts.get(contactId);
+    if (!contact) {
+        return false;
+    }
+
+    if (selectedContactId === contactId || getActiveContactId() === contactId) {
+        selectSelection(null);
+    }
+    selectedNodeIds.delete(toContactSelectionKey(contactId));
+    mbsContacts.delete(contactId);
+    removeContactVisual(contactId);
+    updateModelTree();
+    setStatusInfo(`Contact deleted: ${contact.name}`);
+    return true;
+}
+
+function deleteJointById(jointId: string): boolean {
+    const joint = mbsJoints.get(jointId);
+    if (!joint) {
+        return false;
+    }
+
+    Array.from(mbsMotions.values())
+        .filter((motion) => motion.connectorRef === jointId)
+        .forEach((motion) => {
+            deleteMotionById(motion.id);
+        });
+
+    if (selectedJointId === jointId || getActiveJointId() === jointId) {
+        selectSelection(null);
+    }
+    selectedNodeIds.delete(toJointSelectionKey(jointId));
+    mbsJoints.delete(jointId);
+    viewer?.removeJoint(jointId);
+    updateModelTree();
+    setStatusInfo(`Joint deleted: ${joint.name}`);
+    return true;
+}
+
+function deleteMotionById(motionId: string): boolean {
+    const motion = mbsMotions.get(motionId);
+    if (!motion) {
+        return false;
+    }
+
+    if (selectedMotionId === motionId || getActiveMotionId() === motionId) {
+        selectSelection(null);
+    }
+    selectedNodeIds.delete(toMotionSelectionKey(motionId));
+    mbsMotions.delete(motionId);
+    updateModelTree();
+    setStatusInfo(`Motion deleted: ${motion.name}`);
+    return true;
 }
 
 function runExportCheck(): void {
@@ -6533,28 +9052,45 @@ function startRefFrameCreation(): void {
     setStatusInfo('Reference marker creation mode active');
 }
 
+function startJointCreation(jointType: string): void {
+    resetCanvasInteraction();
+    jointDraft = createDefaultJointDraft(jointType);
+    jointDraftPickStage = 'part1';
+    jointCreationPanelActive = true;
+    canvasInteractionMode = 'createJoint';
+    selectSelection(null);
+    viewer?.setSelectionEnabled(false);
+    renderJointOptionsPanel();
+    setStatus('请选择零件 1');
+    setStatusInfo(`Connection creation mode active: ${normalizeConnectorType(jointType)}`);
+    setCanvasCursor('crosshair');
+}
+
 /**
  * Start design point creation mode
  */
 function startDesignPointCreation(): void {
-    if (!selectedShapeId) {
-        vscode.postMessage({
-            command: 'alert',
-            text: 'Please select a part first to create a design point.'
-        });
-        return;
-    }
-
     resetCanvasInteraction();
+    const targetShape = selectedShapeId
+        ? loadedShapes.get(selectedShapeId) ?? null
+        : (shapeSelectionHistory.at(-1) ? loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null : null);
+    if (targetShape) {
+        selectedShapeId = targetShape.id;
+        rememberShapeSelection(targetShape.id);
+        designPointDraft = createEmptyDesignPointDraft(targetShape);
+    } else {
+        designPointDraft = createLooseDesignPointDraft();
+    }
+    designPointCreationPanelActive = true;
+    designPointCreationMode = 'pick';
+    designPointCalcMode = 'midpoint';
+    designPointPickIntent = 'placement';
     canvasInteractionMode = 'createDesignPoint';
-    setStatus('Click on a face to create design point');
+    viewer?.setSelectionEnabled(false);
+    setStatus('Click on a face to pick design point placement');
     setStatusInfo('Design point creation mode active');
     setCanvasCursor('crosshair');
-
-    vscode.postMessage({
-        command: 'alert',
-        text: 'Click on a face to place the design point.'
-    });
+    renderDesignPointOptionsPanel();
 }
 
 /**
@@ -6606,7 +9142,7 @@ function startFrameEditModeForTarget(
 function resolveFacePlacement(
     event: MouseEvent,
     options?: { silent?: boolean; enableInference?: boolean }
-): { selectedShape: LoadedShape; position: Vec3; normal: Vec3; guide: MarkerGuideData | null } | null {
+): { selectedShape: LoadedShape; position: Vec3; normal: Vec3; guide: MarkerGuideData | null; feature: DesignPointFeature | null } | null {
     if (!viewer || !occt) {
         return null;
     }
@@ -6823,18 +9359,37 @@ function resolveFacePlacement(
         selectedShape,
         position: inferredPlacement.position,
         normal: inferredPlacement.normal,
-        guide: inferredPlacement.guide
+        guide: inferredPlacement.guide,
+        feature: worldSnapPoint && worldSnapDirection
+            ? {
+                kind: 'line',
+                point: worldSnapPoint,
+                direction: worldSnapDirection,
+                label: snapKind === 'cylinder-axis' ? '轴线' : '直线'
+            }
+            : {
+                kind: 'plane',
+                point: inferredPlacement.position,
+                normal: inferredPlacement.normal,
+                label: '平面'
+            }
     };
 }
 
 function handleCanvasPointerMove(event: MouseEvent): void {
     const markerPlacementActive = canvasInteractionMode === 'createMarker' && markerCreationPanelActive;
+    const jointPlacementActive = canvasInteractionMode === 'createJoint' && jointCreationPanelActive;
     const frameEditActive = canvasInteractionMode === 'editFrame' && editingFrameTarget !== null;
-    if (!markerPlacementActive && !frameEditActive) {
+    if (!markerPlacementActive && !jointPlacementActive && !frameEditActive) {
         return;
     }
 
-    const placement = resolveFacePlacement(event, { silent: true, enableInference: true });
+    const placement = resolveFacePlacement(event, {
+        silent: true,
+        enableInference: jointPlacementActive
+            ? jointFeatureInferenceEnabled
+            : true
+    });
     if (!placement) {
         if (markerPlacementActive && !markerDraft) {
             clearMarkerDraftPreview();
@@ -6921,28 +9476,124 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
     setStatusInfo(`Marker created: ${marker.name}`);
 }
 
-function createDesignPointFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
-    const latestFrame = resolveLatestExistingFrameFromHistory();
-    const designPoint: MbsDesignPointEntity = {
-        id: nextEntityId('designPoint', mbsDesignPoints.size),
-        name: `DesignPoint${mbsDesignPoints.size + 1}`,
-        groupId: resolveOwningGroupId(selectedShape.id) ?? selectedShape.id,
-        position: cloneVec3(position),
-        direction: normalizeVector(cloneVec3(normal)) ?? { x: 0, y: 0, z: 1 },
-        markerRefId: latestFrame?.id,
-        size: -1,
-        isDirectionReverse: false,
-        offsetValue: 0,
-        createdAt: new Date().toISOString()
-    };
-    mbsDesignPoints.set(designPoint.id, designPoint);
+function createJointFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): void {
+    if (!jointDraft) {
+        return;
+    }
 
-    renderDesignPointOptionsPanel(designPoint.name, designPoint.position);
-    setStatusInfo(`Design point created: ${designPoint.name}`);
-    vscode.postMessage({
-        command: 'alert',
-        text: `Design point "${designPoint.name}" created successfully.`
-    });
+    syncJointDraftFromInputs();
+    const pickedDirection = jointDraft.inferenceEnabled
+        ? normal
+        : DEFAULT_CONNECTOR_DIRECTION;
+    const pick: JointDraftPick = {
+        partId: selectedShape.id,
+        position: cloneVec3(position),
+        direction: cloneVec3(pickedDirection)
+    };
+
+    if (jointDraftPickStage === 'part1') {
+        jointDraft.part1 = selectedShape.id;
+        jointDraft.part1Pick = pick;
+        jointDraft.part2 = undefined;
+        jointDraft.part2Pick = undefined;
+        jointDraftPickStage = 'part2';
+        recomputeJointDraftPlacement();
+        renderJointOptionsPanel();
+        setStatus('请选择零件 2');
+        setStatusInfo(`零件 1 已选择：${selectedShape.name}`);
+        return;
+    }
+
+    jointDraft.part2 = selectedShape.id;
+    jointDraft.part2Pick = pick;
+    const validation = validateConnectorParticipants(jointDraft.part1, jointDraft.part2);
+    if (!validation.valid) {
+        jointDraft.part2 = undefined;
+        jointDraft.part2Pick = undefined;
+        vscode.postMessage({
+            command: 'alert',
+            text: validation.reason ?? '连接创建失败。'
+        });
+        renderJointOptionsPanel();
+        return;
+    }
+
+    recomputeJointDraftPlacement();
+    if (jointCreationMode === 'fast') {
+        finalizeJointDraft();
+        return;
+    }
+
+    renderJointOptionsPanel();
+    setStatus('可调整位置/方向后点击添加');
+    setStatusInfo(`零件 2 已选择：${selectedShape.name}`);
+}
+
+function createDesignPointFromPlacement(
+    selectedShape: LoadedShape,
+    position: Vec3,
+    normal: Vec3,
+    feature: DesignPointFeature | null
+): void {
+    const draft = designPointDraft ?? createEmptyDesignPointDraft(selectedShape);
+    const owner = resolveFrameOwnerForShape(selectedShape.id);
+    draft.groupId = owner.id;
+    draft.hostShapeId = selectedShape.id;
+    draft.position = cloneVec3(position);
+    draft.direction = normalizeVector(cloneVec3(normal)) ?? draft.direction;
+    draft.markerRefId = draft.markerRefId ?? resolveLatestExistingFrameFromHistory()?.id;
+
+    switch (designPointCreationMode) {
+        case 'pick':
+            designPointPickIntent = 'placement';
+            setStatusInfo('Design point placement updated.');
+            break;
+        case 'calc':
+            if (designPointCalcMode === 'midpoint') {
+                if (designPointPickIntent === 'firstPoint') {
+                    draft.firstPoint = cloneVec3(position);
+                    setStatusInfo('First point selected.');
+                } else if (designPointPickIntent === 'secondPoint') {
+                    draft.secondPoint = cloneVec3(position);
+                    setStatusInfo('Second point selected.');
+                }
+            } else if (designPointCalcMode === 'offset') {
+                if (designPointPickIntent === 'basePoint') {
+                    draft.basePoint = cloneVec3(position);
+                    setStatusInfo('Reference point selected.');
+                } else if (designPointPickIntent === 'direction') {
+                    draft.direction = normalizeVector(cloneVec3(normal)) ?? draft.direction;
+                    setStatusInfo('Reference direction selected.');
+                }
+            } else if (designPointPickIntent === 'featureA') {
+                if (!feature) {
+                    vscode.postMessage({
+                        command: 'alert',
+                        text: 'Selected feature cannot be used for intersection.'
+                    });
+                } else {
+                    draft.featureA = feature;
+                    setStatusInfo('First feature selected.');
+                }
+            } else if (designPointPickIntent === 'featureB') {
+                if (!feature) {
+                    vscode.postMessage({
+                        command: 'alert',
+                        text: 'Selected feature cannot be used for intersection.'
+                    });
+                } else {
+                    draft.featureB = feature;
+                    setStatusInfo('Second feature selected.');
+                }
+            }
+            recalculateDesignPointDraft(draft, true);
+            break;
+        default:
+            break;
+    }
+
+    designPointDraft = draft;
+    renderDesignPointOptionsPanel();
 }
 
 function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
@@ -7007,7 +9658,11 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
 function handleCanvasClick(event: MouseEvent): void {
     if (canvasInteractionMode === 'none') return;
 
-    const placement = resolveFacePlacement(event);
+    const placement = resolveFacePlacement(event, {
+        enableInference: canvasInteractionMode === 'createJoint'
+            ? jointFeatureInferenceEnabled
+            : undefined
+    });
     if (!placement) return;
 
     let completed = false;
@@ -7015,9 +9670,14 @@ function handleCanvasClick(event: MouseEvent): void {
         case 'createMarker':
             createMarkerFromPlacement(placement.selectedShape, placement.position, placement.normal);
             break;
+        case 'createJoint':
+            createJointFromPlacement(placement.selectedShape, placement.position, placement.normal);
+            break;
+        case 'createContact':
+            handleContactPlacement(placement.selectedShape, placement.position, placement.normal);
+            break;
         case 'createDesignPoint':
-            createDesignPointFromPlacement(placement.selectedShape, placement.position, placement.normal);
-            completed = true;
+            createDesignPointFromPlacement(placement.selectedShape, placement.position, placement.normal, placement.feature);
             break;
         case 'editFrame':
             completed = editFrameFromPlacement(placement.position, placement.normal);
@@ -7089,7 +9749,17 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             break;
         }
         case 'createDesignPoint': {
+            if (canvasInteractionMode === 'createDesignPoint') {
+                closeOptionsPanel();
+                setStatus('Ready');
+                return;
+            }
             startDesignPointCreation();
+            break;
+        }
+        case 'createContact': {
+            const contactType = (params.contactType as ContactType | undefined) ?? 'pointPoint';
+            startContactCreation(contactType);
             break;
         }
         case 'editFrame': {
@@ -7191,9 +9861,61 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             handleCreateJoint(jointType);
             break;
         }
+        case 'deleteJoint': {
+            const activeId = getActiveJointId();
+            if (!activeId) {
+                vscode.postMessage({
+                    command: 'alert',
+                    text: 'No joint selected.'
+                });
+                return;
+            }
+            deleteJointById(activeId);
+            break;
+        }
+        case 'jointProperties': {
+            const activeId = getActiveJointId();
+            if (!activeId) {
+                vscode.postMessage({
+                    command: 'alert',
+                    text: 'No joint selected.'
+                });
+                return;
+            }
+            renderJointPropertiesPanel(activeId);
+            break;
+        }
         case 'createMotion': {
             const motionType = params.motionType as string;
             handleCreateMotion(motionType);
+            break;
+        }
+        case 'deleteMotion': {
+            const activeId = getActiveMotionId();
+            if (!activeId) {
+                vscode.postMessage({
+                    command: 'alert',
+                    text: 'No motion selected.'
+                });
+                return;
+            }
+            deleteMotionById(activeId);
+            break;
+        }
+        case 'deleteContact': {
+            const activeId = getActiveContactId();
+            if (!activeId) {
+                vscode.postMessage({
+                    command: 'alert',
+                    text: 'No contact selected.'
+                });
+                return;
+            }
+            deleteContactById(activeId);
+            break;
+        }
+        case 'contactProperties': {
+            handleContactProperties();
             break;
         }
         case 'motionProperties': {
@@ -7308,6 +10030,27 @@ async function initViewer(): Promise<void> {
         // Add pointer listeners for marker creation/editing
         container.addEventListener('mousemove', handleCanvasPointerMove);
         container.addEventListener('click', handleCanvasClick);
+        container.addEventListener('wheel', (event) => {
+            if (!event.altKey) {
+                return;
+            }
+            if (contactCreationPanelActive) {
+                event.preventDefault();
+                const delta = event.deltaY < 0 ? 1 : -1;
+                const nextSize = updateContactDraftSize(pendingContactSize + delta);
+                renderContactOptionsPanel();
+                setStatusInfo(`Contact icon size: ${nextSize}`);
+                return;
+            }
+            if (!motionCreationPanelActive) {
+                return;
+            }
+            event.preventDefault();
+            const delta = event.deltaY < 0 ? 1 : -1;
+            const nextSize = updateMotionDraftSize(pendingMotionIconSize + delta);
+            renderMotionOptionsPanel();
+            setStatusInfo(`Motion icon size: ${nextSize}`);
+        }, { passive: false });
 
         applyRenderConfigToViewer();
     }
@@ -7360,10 +10103,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 || target.tagName === 'SELECT'
                 || target.isContentEditable)
         );
+        if (event.key === 'Escape' && !isTypingTarget) {
+            if (
+                canvasInteractionMode !== 'none'
+                || markerCreationPanelActive
+                || jointCreationPanelActive
+                || motionCreationPanelActive
+                || refFrameCreationPanelActive
+                || designPointDraft
+                || contactCreationPanelActive
+            ) {
+                event.preventDefault();
+                closeOptionsPanel();
+                setStatus('Ready');
+            }
+            return;
+        }
         if (event.key !== 'Delete' || isTypingTarget) {
             return;
         }
-        if (getSelectedShapeIds().length === 0 && getSelectedGroupIds().length === 0) {
+        if (
+            selectedNodeIds.size === 0
+        ) {
             return;
         }
         event.preventDefault();
@@ -7406,6 +10167,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (actionId.startsWith('createMotion_')) {
                 params.motionType = actionId.replace('createMotion_', '');
                 handleMbsAction('createMotion', params);
+            } else if (actionId.startsWith('createContact_')) {
+                params.contactType = actionId.replace('createContact_', '');
+                handleMbsAction('createContact', params);
             } else {
                 handleMbsAction(actionId, params);
             }

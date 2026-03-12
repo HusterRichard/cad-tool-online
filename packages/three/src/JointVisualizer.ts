@@ -14,6 +14,8 @@ export interface JointData {
     type: MbsJointType;
     position: Vec3;
     axis: Vec3;
+    size?: number;
+    selected?: boolean;
     currentValue?: number[];
     limits?: { lower: number[]; upper: number[] };
 }
@@ -36,6 +38,7 @@ export class JointVisualizer {
         [MbsJointType.Planar]: 0xffff00,      // 黄色 - 平面
         [MbsJointType.Fixed]: 0x666666,       // 灰色 - 固定
     };
+    private static readonly JOINT_SELECTED_EMISSIVE = 0x58a6ff;
 
     constructor(scene: THREE.Scene, options: JointVisualizerOptions = {}) {
         this.scene = scene;
@@ -51,7 +54,7 @@ export class JointVisualizer {
      */
     private createRevoluteJoint(data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = data.size && data.size > 0 ? data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Revolute];
 
         // 圆环表示旋转
@@ -83,7 +86,7 @@ export class JointVisualizer {
      */
     private createPrismaticJoint(data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = data.size && data.size > 0 ? data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Prismatic];
 
         // 双箭头表示平移
@@ -122,7 +125,7 @@ export class JointVisualizer {
      */
     private createCylindricalJoint(_data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Cylindrical];
 
         // 圆柱体
@@ -152,7 +155,7 @@ export class JointVisualizer {
      */
     private createSphericalJoint(_data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Spherical];
 
         // 球体
@@ -189,7 +192,7 @@ export class JointVisualizer {
      */
     private createUniversalJoint(_data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Universal];
 
         // 十字形
@@ -224,7 +227,7 @@ export class JointVisualizer {
      */
     private createPlanarJoint(_data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Planar];
 
         // 平面
@@ -269,7 +272,7 @@ export class JointVisualizer {
      */
     private createFixedJoint(_data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = this.options.jointSize;
+        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
         const color = JointVisualizer.JOINT_COLORS[MbsJointType.Fixed];
 
         // 立方体表示固定
@@ -303,6 +306,22 @@ export class JointVisualizer {
         group.add(line2);
 
         return group;
+    }
+
+    private applySelectionAppearance(group: THREE.Group, selected: boolean): void {
+        group.scale.setScalar(selected ? 1.12 : 1);
+        group.traverse((child) => {
+            const material = (child as THREE.Mesh).material;
+            if (material instanceof THREE.MeshPhongMaterial) {
+                material.emissive.setHex(selected ? JointVisualizer.JOINT_SELECTED_EMISSIVE : 0x000000);
+                material.opacity = selected ? 0.95 : Math.min(material.opacity, 0.8);
+                material.transparent = material.opacity < 1;
+            } else if (material instanceof THREE.MeshBasicMaterial) {
+                material.opacity = selected ? 0.95 : 0.8;
+                material.transparent = material.opacity < 1;
+            }
+        });
+        group.userData.jointSelected = selected;
     }
 
     /**
@@ -351,8 +370,10 @@ export class JointVisualizer {
         group.userData = {
             jointId: data.id,
             jointName: data.name,
-            jointType: data.type
+            jointType: data.type,
+            jointSelected: Boolean(data.selected)
         };
+        this.applySelectionAppearance(group, Boolean(data.selected));
 
         return group;
     }
@@ -420,6 +441,13 @@ export class JointVisualizer {
         const group = this.joints.get(id);
         if (group) {
             group.visible = visible;
+        }
+    }
+
+    setJointSelected(id: string, selected: boolean): void {
+        const group = this.joints.get(id);
+        if (group) {
+            this.applySelectionAppearance(group, selected);
         }
     }
 

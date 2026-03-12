@@ -459,16 +459,16 @@ export class CadEditorPanel {
                 });
                 break;
 
-            case 'fluidTankSlice':
-            case 'fluidPort':
+            case 'createContact_pointPoint':
+            case 'createContact_pointSurface':
             case 'measureTool':
             case 'surfaceThicken':
             case 'planarRingProcess':
             case 'cleanGroup':
             case 'createDefaultGroup': {
                 const actionMessages: Record<string, string> = {
-                    fluidTankSlice: 'Creating fluid tank slice',
-                    fluidPort: 'Creating fluid port',
+                    createContact_pointPoint: 'Creating point-point contact',
+                    createContact_pointSurface: 'Creating point-surface contact',
                     measureTool: 'Running measurement tool',
                     surfaceThicken: 'Running surface thicken',
                     planarRingProcess: 'Running planar ring process',
@@ -477,10 +477,14 @@ export class CadEditorPanel {
                 };
 
                 vscode.window.showInformationMessage(actionMessages[action] ?? `Executing action: ${action}`);
-                this._panel.webview.postMessage({
+                const message: Record<string, unknown> = {
                     command: 'mbsAction',
-                    action: action
-                });
+                    action: action.startsWith('createContact_') ? 'createContact' : action
+                };
+                if (action === 'createContact_pointPoint' || action === 'createContact_pointSurface') {
+                    message.contactType = action === 'createContact_pointSurface' ? 'pointSurface' : 'pointPoint';
+                }
+                this._panel.webview.postMessage(message);
                 break;
             }
 
@@ -1720,11 +1724,11 @@ export class CadEditorPanel {
 
             <div class="ribbon-tab-group">
                 <div class="ribbon-tab-content">
-                    <button class="ribbon-btn" data-action-id="fluidTankSlice">
+                    <button class="ribbon-btn" data-action-id="createContact_pointPoint">
                         <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_point.svg" alt="点点接触"></span>
                         <span class="ribbon-btn-text">点点接触</span>
                     </button>
-                    <button class="ribbon-btn" data-action-id="fluidPort">
+                    <button class="ribbon-btn" data-action-id="createContact_pointSurface">
                         <span class="ribbon-btn-icon"><img src="${icons32}/force_cad_contact_point_surface.svg" alt="点面接触"></span>
                         <span class="ribbon-btn-text">点面接触</span>
                     </button>

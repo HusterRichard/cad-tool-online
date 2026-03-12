@@ -424,3 +424,96 @@ test('single-part synthetic group disambiguates duplicate part labels with a suf
 
   assert.match(source, /const normalizedLabel = shape\.name === parentGroupName \? `\$\{shape\.name\}_1` : shape\.name;/);
 });
+
+test('motion and joint model tree nodes carry selection keys for direct selection', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /connectionsCategory\.children = Array\.from\(mbsJoints\.values\(\)\)\.map\(\(joint\) => \(\{[\s\S]*selectionKey: toJointSelectionKey\(joint\.id\)/);
+  assert.match(source, /motionsCategory\.children = Array\.from\(mbsMotions\.values\(\)\)\.map\(\(motion\) => \(\{[\s\S]*selectionKey: toMotionSelectionKey\(motion\.id\)/);
+});
+
+test('motion options panel exposes fast standard creation modes and connector-driven controls', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderMotionOptionsPanelMatch = source.match(/function renderMotionOptionsPanel\(\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderMotionOptionsPanelMatch, 'expected to find renderMotionOptionsPanel implementation');
+
+  const panelSource = renderMotionOptionsPanelMatch[0];
+  assert.match(panelSource, /id="opt-motion-size"/);
+  assert.match(panelSource, /id="opt-motion-size-range"/);
+  assert.match(panelSource, /id="opt-motion-mode-fast"/);
+  assert.match(panelSource, /id="opt-motion-mode-standard"/);
+  assert.match(panelSource, /id="opt-motion-reset"/);
+  assert.match(panelSource, /id="opt-motion-cancel"/);
+  assert.match(panelSource, /opt-motion-add/);
+  assert.match(panelSource, /请选择转动、移动或圆柱连接/);
+  assert.match(panelSource, /支持 Alt \+ 鼠标滚轮快速调节图标大小/);
+});
+
+test('motion properties panel exposes editable drive fields while keeping the motion type read-only', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderMotionPropertiesPanelMatch = source.match(/function renderMotionPropertiesPanel\(motionId: string\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderMotionPropertiesPanelMatch, 'expected to find renderMotionPropertiesPanel implementation');
+
+  const panelSource = renderMotionPropertiesPanelMatch[0];
+  assert.match(panelSource, /buildNameInput\('prop-motion-name'/);
+  assert.match(panelSource, /createPropertyRow\('类型', resolveMotionTypeLabel\(motion\.motionType\), \{ boxed: true \}\)/);
+  assert.match(panelSource, /id="prop-motion-visible"/);
+  assert.match(panelSource, /id="prop-motion-size"/);
+  assert.match(panelSource, /prop-motion-drive-mode/);
+  assert.match(panelSource, /id="prop-motion-phi"/);
+  assert.match(panelSource, /id="prop-motion-w"/);
+  assert.doesNotMatch(panelSource, /prop-motion-type/);
+});
+
+test('motion creation import and export persist drive-specific fields', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const createMotionFromDraftMatch = source.match(/function createMotionFromDraft\(\): boolean \{[\s\S]*?\n\}/);
+
+  assert.ok(createMotionFromDraftMatch, 'expected to find createMotionFromDraft implementation');
+
+  const createMotionFromDraftSource = createMotionFromDraftMatch[0];
+  assert.match(createMotionFromDraftSource, /driveMode: normalizeMotionDriveMode\(draft\.driveMode, draft\.motionType\)/);
+  assert.match(createMotionFromDraftSource, /iconSize: Math\.max\(1, draft\.iconSize\)/);
+  assert.match(createMotionFromDraftSource, /visible: draft\.visible/);
+  assert.match(createMotionFromDraftSource, /phiStart: draft\.phiStart/);
+  assert.match(createMotionFromDraftSource, /wStart: draft\.wStart/);
+  assert.match(source, /toNonEmptyString\(entry\.driveMode\) \?\? toNonEmptyString\(entry\.functionType\)/);
+  assert.match(source, /iconSize: typeof entry\.iconSize === 'number' && Number\.isFinite\(entry\.iconSize\) \? entry\.iconSize : pendingMotionIconSize/);
+  assert.match(source, /visible: typeof entry\.visible === 'boolean'/);
+  assert.match(source, /phiStart: typeof entry\.phiStart === 'number'/);
+  assert.match(source, /wStart: typeof entry\.wStart === 'number'/);
+  assert.match(source, /driveMode: motion\.driveMode/);
+  assert.match(source, /iconSize: motion\.iconSize/);
+  assert.match(source, /visible: motion\.visible/);
+  assert.match(source, /phiStart: motion\.phiStart/);
+  assert.match(source, /wStart: motion\.wStart/);
+});
+
+test('motion connector selection enforces joint compatibility for rotational and translational drives', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /function isMotionTypeCompatibleWithJoint\(motionType: MotionType, jointType: string\): boolean \{/);
+  assert.match(source, /return normalized === 'revolute' \|\| normalized === 'cylindrical';/);
+  assert.match(source, /return normalized === 'prismatic' \|\| normalized === 'cylindrical';/);
+  assert.match(source, /if \(!isMotionTypeCompatibleWithJoint\(draft\.motionType, joint\.jointType\)\) \{/);
+});
+
+test('motion creation supports Alt plus mouse wheel icon sizing and delete key removal', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /const nextSize = updateMotionDraftSize\(pendingMotionIconSize \+ delta\);/);
+  assert.match(source, /setStatusInfo\(`Motion icon size: \$\{nextSize\}`\);/);
+  assert.match(source, /if \(\s*selectedNodeIds\.size === 0\s*\) \{\s*return;\s*\}/);
+  assert.match(source, /handleMbsAction\('deleteSelection', \{\}\);/);
+});
+
+test('delete selection handles joints alongside motions contacts and design points', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /const selectedJointIds = getSelectedJointIds\(\);/);
+  assert.match(source, /Select one or more design points, joints, motions, contacts, parts or groups first\./);
+  assert.match(source, /selectedJointIds\.forEach\(\(jointId\) => \{\s*if \(deleteJointById\(jointId\)\) \{\s*deletedJointCount \+= 1;/);
+  assert.match(source, /Deleted \$\{deletedDesignPointCount\} design point\(s\), \$\{deletedJointCount\} joint\(s\), \$\{deletedMotionCount\} motion\(s\), \$\{deletedContactCount\} contact\(s\), \$\{deletedPartCount\} part\(s\) and \$\{groupDeleteResult\.deletedCount\} group\(s\)\./);
+});
