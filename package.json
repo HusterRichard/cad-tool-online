@@ -113,6 +113,10 @@
     "build:wasm:debug": "cd packages/geo/cpp && cmake --preset debug && cmake --build --preset debug",
     "setup:git-rules": "node scripts/setup-git-rules.mjs",
     "check:ribbon-icons": "node scripts/check-ribbon-action-icons.mjs --file cadtoolonline.pen --out docs/data/RIBBON_ICON_ACCEPTANCE.json",
+    "test": "pnpm --filter @cadtool-online/core test:run && pnpm --filter @cadtool-online/geo test:run && pnpm --filter @cadtool-online/three test:run && pnpm test:root:run",
+    "test:root": "node packages/geo/node_modules/vitest/vitest.mjs --config tests/vitest.config.ts",
+    "test:root:run": "node packages/geo/node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts",
+    "test:root:coverage": "node packages/geo/node_modules/vitest/vitest.mjs run --coverage --config tests/vitest.config.ts",
     "vscode:prepublish": "pnpm run build:all",
     "package": "pnpm run build:all && vsce package --no-dependencies --skip-license --baseContentUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/blob/main/ --baseImagesUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/raw/main/"
   },

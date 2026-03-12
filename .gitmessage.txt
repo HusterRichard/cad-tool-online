@@ -1,12 +1,18 @@
-# 提交标题格式：
-# <type>: <task id><简要描述>
-# 示例：feat: T013 新增装配体导入校验
-# 规则来源：.claude/rules/git-workflow.md
+# Commit title format:
+# <type>: <task id> <summary>
 #
-# 常用 type：feat / fix / refactor / docs / test / chore / perf / ci
+# Rules:
+# - task id is required
+# - if there is no real task id, use T000
+# - use Conventional Commit types
 #
-# 正文建议说明关键改动与影响：
-# - ...
-# - ...
+# Examples:
+# feat: T013 新增装配体导入校验
+# fix: T102 修复 STEP 层级名称解析
+# chore: T000 统一提交消息校验规则
+#
+# Recommended body:
+# - key change 1
+# - key change 2
 #
 # Co-authored-by: <Name>

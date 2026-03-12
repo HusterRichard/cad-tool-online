@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { invokeViewerMethod } from '../../../src/webview/viewerCapabilities';
 
 describe('invokeViewerMethod', () => {
