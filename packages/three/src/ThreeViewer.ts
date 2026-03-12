@@ -100,6 +100,7 @@ export class ThreeViewer {
     private markerGuideGroup: THREE.Group | null = null;
     private markerGuideMaterial: THREE.LineBasicMaterial | null = null;
     private selectionBoundsGroup: THREE.Group | null = null;
+    private hoverBoundsGroup: THREE.Group | null = null;
 
     private readonly onResizeHandler: () => void;
     private readonly onControlStartHandler: () => void;
@@ -673,7 +674,7 @@ export class ThreeViewer {
         return lineSegments;
     }
 
-    private buildSelectionBoundsHelper(bounds: SelectionBoundsBox): THREE.Box3Helper | null {
+    private buildSelectionBoundsHelper(bounds: SelectionBoundsBox, color: number = 0x00d1ff): THREE.Box3Helper | null {
         const min = new THREE.Vector3(
             Math.min(bounds.min.x, bounds.max.x),
             Math.min(bounds.min.y, bounds.max.y),
@@ -696,7 +697,7 @@ export class ThreeViewer {
             return null;
         }
 
-        const helper = new THREE.Box3Helper(new THREE.Box3(min, max), 0x00d1ff);
+        const helper = new THREE.Box3Helper(new THREE.Box3(min, max), color);
         const material = Array.isArray(helper.material) ? helper.material[0] : helper.material;
         material.depthTest = false;
         material.depthWrite = false;
@@ -725,6 +726,25 @@ export class ThreeViewer {
         });
         this.scene.remove(this.selectionBoundsGroup);
         this.selectionBoundsGroup = null;
+    }
+
+    private clearHoverBoundsBoxInternal(): void {
+        if (!this.hoverBoundsGroup) {
+            return;
+        }
+
+        this.hoverBoundsGroup.traverse((child) => {
+            if (child instanceof THREE.LineSegments) {
+                child.geometry.dispose();
+                if (Array.isArray(child.material)) {
+                    child.material.forEach((material) => material.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+        this.scene.remove(this.hoverBoundsGroup);
+        this.hoverBoundsGroup = null;
     }
 
     clearMarkerGuide(): void {
@@ -1090,6 +1110,7 @@ export class ThreeViewer {
         this.controls.removeEventListener('end', this.onControlEndHandler);
         this.clearMarkerGuide();
         this.clearSelectionBoundsBoxesInternal();
+        this.clearHoverBoundsBoxInternal();
         this.meshes.forEach((_mesh, id) => this.removeMesh(id));
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();
@@ -1161,6 +1182,24 @@ export class ThreeViewer {
 
         group.renderOrder = 7;
         this.selectionBoundsGroup = group;
+        this.scene.add(group);
+    }
+
+    setHoverBoundsBox(box: SelectionBoundsBox | null): void {
+        this.clearHoverBoundsBoxInternal();
+        if (!box) {
+            return;
+        }
+
+        const helper = this.buildSelectionBoundsHelper(box, 0xffb300);
+        if (!helper) {
+            return;
+        }
+
+        const group = new THREE.Group();
+        group.add(helper);
+        group.renderOrder = 8;
+        this.hoverBoundsGroup = group;
         this.scene.add(group);
     }
 

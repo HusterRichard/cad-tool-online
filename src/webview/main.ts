@@ -1005,6 +1005,17 @@ function syncViewerSelectionFromState(): void {
         .filter((meshId): meshId is string => Boolean(meshId))
         .forEach((meshId) => targetIds.add(meshId));
 
+    getSelectedGroupIds().forEach((groupId) => {
+        collectGroupPartIdsRecursive(groupId).forEach((partId) => {
+            const shape = loadedShapes.get(partId);
+            if (!shape) return;
+            collectMeshBackedShapeIds(shape).forEach((sid) => {
+                const meshId = loadedShapes.get(sid)?.meshId;
+                if (meshId) targetIds.add(meshId);
+            });
+        });
+    });
+
     getSelectedMarkerIds().forEach((markerId) => targetIds.add(markerId));
     getSelectedRefFrameIds().forEach((refFrameId) => targetIds.add(refFrameId));
     getSelectedJointIds().forEach((jointId) => targetIds.add(jointId));
@@ -1029,6 +1040,41 @@ function syncViewerSelectionFromState(): void {
     }
 
     syncViewerGroupBoundsFromState();
+}
+
+let hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function handleTreeNodeHover(nodeData: ModelTreeNode): void {
+    if (hoverDebounceTimer) clearTimeout(hoverDebounceTimer);
+    hoverDebounceTimer = setTimeout(() => {
+        if (!viewer) return;
+        let bounds: { min: Vec3; max: Vec3 } | null = null;
+
+        if (nodeData.groupId) {
+            bounds = computeGroupBounds(nodeData.groupId);
+        } else if (nodeData.shapeId) {
+            const shape = loadedShapes.get(nodeData.shapeId);
+            if (shape) {
+                const box = computeShapeBounds(shape);
+                if (box) {
+                    bounds = {
+                        min: { x: box.min.x, y: box.min.y, z: box.min.z },
+                        max: { x: box.max.x, y: box.max.y, z: box.max.z },
+                    };
+                }
+            }
+        }
+
+        viewer.setHoverBoundsBox(bounds);
+    }, 50);
+}
+
+function handleTreeNodeHoverEnd(): void {
+    if (hoverDebounceTimer) {
+        clearTimeout(hoverDebounceTimer);
+        hoverDebounceTimer = null;
+    }
+    viewer?.setHoverBoundsBox(null);
 }
 
 function applyShapeVisualColor(shapeId: string, color: string | undefined): void {
@@ -3604,6 +3650,15 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
                 selectSelection(parsed);
             }
             showTreeContextMenu(event.clientX, event.clientY, nodeData);
+        });
+    }
+
+    if (nodeData.selectionKey && (nodeData.groupId || nodeData.shapeId)) {
+        node.addEventListener('mouseenter', () => {
+            handleTreeNodeHover(nodeData);
+        });
+        node.addEventListener('mouseleave', () => {
+            handleTreeNodeHoverEnd();
         });
     }
 
