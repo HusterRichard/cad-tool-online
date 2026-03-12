@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD Scene Delivery"
+  short_description: "Deliver CadToolOnline scenes end to end"
+  default_prompt: "Use $cad-scene-delivery to complete one CadToolOnline scene from an SCxx request through PRD, plan, QA, implementation, tests, and validation."

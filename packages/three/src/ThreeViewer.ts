@@ -61,6 +61,11 @@ export type MarkerGuideData =
         snapCircleCenter?: Vec3;
     };
 
+export interface SelectionBoundsBox {
+    min: Vec3;
+    max: Vec3;
+}
+
 export class ThreeViewer {
     private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
@@ -94,6 +99,7 @@ export class ThreeViewer {
     private edgeMaterial: LineMaterial | null = null;
     private markerGuideGroup: THREE.Group | null = null;
     private markerGuideMaterial: THREE.LineBasicMaterial | null = null;
+    private selectionBoundsGroup: THREE.Group | null = null;
 
     private readonly onResizeHandler: () => void;
     private readonly onControlStartHandler: () => void;
@@ -667,6 +673,60 @@ export class ThreeViewer {
         return lineSegments;
     }
 
+    private buildSelectionBoundsHelper(bounds: SelectionBoundsBox): THREE.Box3Helper | null {
+        const min = new THREE.Vector3(
+            Math.min(bounds.min.x, bounds.max.x),
+            Math.min(bounds.min.y, bounds.max.y),
+            Math.min(bounds.min.z, bounds.max.z)
+        );
+        const max = new THREE.Vector3(
+            Math.max(bounds.min.x, bounds.max.x),
+            Math.max(bounds.min.y, bounds.max.y),
+            Math.max(bounds.min.z, bounds.max.z)
+        );
+
+        if (
+            !Number.isFinite(min.x)
+            || !Number.isFinite(min.y)
+            || !Number.isFinite(min.z)
+            || !Number.isFinite(max.x)
+            || !Number.isFinite(max.y)
+            || !Number.isFinite(max.z)
+        ) {
+            return null;
+        }
+
+        const helper = new THREE.Box3Helper(new THREE.Box3(min, max), 0x00d1ff);
+        const material = Array.isArray(helper.material) ? helper.material[0] : helper.material;
+        material.depthTest = false;
+        material.depthWrite = false;
+        material.transparent = true;
+        material.opacity = 0.98;
+        material.toneMapped = false;
+        helper.renderOrder = 7;
+        helper.raycast = () => undefined;
+        return helper;
+    }
+
+    private clearSelectionBoundsBoxesInternal(): void {
+        if (!this.selectionBoundsGroup) {
+            return;
+        }
+
+        this.selectionBoundsGroup.traverse((child) => {
+            if (child instanceof THREE.LineSegments) {
+                child.geometry.dispose();
+                if (Array.isArray(child.material)) {
+                    child.material.forEach((material) => material.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+        this.scene.remove(this.selectionBoundsGroup);
+        this.selectionBoundsGroup = null;
+    }
+
     clearMarkerGuide(): void {
         if (!this.markerGuideGroup) {
             return;
@@ -1029,6 +1089,7 @@ export class ThreeViewer {
         this.controls.removeEventListener('start', this.onControlStartHandler);
         this.controls.removeEventListener('end', this.onControlEndHandler);
         this.clearMarkerGuide();
+        this.clearSelectionBoundsBoxesInternal();
         this.meshes.forEach((_mesh, id) => this.removeMesh(id));
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();
@@ -1078,6 +1139,29 @@ export class ThreeViewer {
 
     setSelectionEnabled(enabled: boolean): void {
         this.selectionManager?.setEnabled(enabled);
+    }
+
+    setSelectionBoundsBoxes(boxes: SelectionBoundsBox[]): void {
+        this.clearSelectionBoundsBoxesInternal();
+        if (!Array.isArray(boxes) || boxes.length === 0) {
+            return;
+        }
+
+        const group = new THREE.Group();
+        boxes.forEach((bounds) => {
+            const helper = this.buildSelectionBoundsHelper(bounds);
+            if (helper) {
+                group.add(helper);
+            }
+        });
+
+        if (group.children.length === 0) {
+            return;
+        }
+
+        group.renderOrder = 7;
+        this.selectionBoundsGroup = group;
+        this.scene.add(group);
     }
 
     pickSelectableIdAtScreenPoint(x: number, y: number): string | null {

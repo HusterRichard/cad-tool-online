@@ -11,6 +11,7 @@ import {
     getOrderedChildGroupIds,
     getPartOwnerGroupMap,
     getUniqueGroupName,
+    materializeUngroupedPartsAsGroups,
     importGroupSchema,
     listGroupNodes,
     moveGroupNodes,
@@ -152,6 +153,53 @@ describe('groupDesign', () => {
         expect(state.ungroupedPartIds).toEqual(['p3']);
     });
 
+    it('materializes each ungrouped part into an exclusive imported parent group', () => {
+        const initial = createGroupDesignState({
+            allPartIds: ['p1', 'p2', 'p3'],
+            groups: [
+                {
+                    id: 'g-existing',
+                    name: 'Bolt',
+                    parentGroupId: null,
+                    childGroupIds: [],
+                    memberPartIds: ['p3'],
+                    kind: 'imported',
+                    order: 1,
+                    createdAt: '2026-03-09T00:00:00.000Z'
+                }
+            ]
+        });
+
+        const result = materializeUngroupedPartsAsGroups(initial, {
+            kind: 'imported',
+            resolveGroupName: () => 'Bolt',
+            createGroupId: (partId) => `import_group_${partId}`,
+            now: () => '2026-03-12T00:00:00.000Z'
+        });
+
+        expect(result.createdGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            memberPartIds: group.memberPartIds,
+            kind: group.kind
+        }))).toEqual([
+            {
+                id: 'import_group_p1',
+                name: 'Bolt_1',
+                memberPartIds: ['p1'],
+                kind: 'imported'
+            },
+            {
+                id: 'import_group_p2',
+                name: 'Bolt_2',
+                memberPartIds: ['p2'],
+                kind: 'imported'
+            }
+        ]);
+        expect(getOrderedChildGroupIds(result.state, null)).toEqual(['g-existing', 'import_group_p1', 'import_group_p2']);
+        expect(result.state.ungroupedPartIds).toEqual([]);
+    });
+
     it('renames groups with normalization and collision handling', () => {
         const initial = createGroupDesignState({
             groups: [
@@ -247,7 +295,7 @@ describe('groupDesign', () => {
         expect(movedToTarget.state.ungroupedPartIds).toEqual([]);
     });
 
-    it('ungroups groups by lifting members and children to the parent level', () => {
+    it('ungroups groups by lifting members and children to the root level', () => {
         const initial = createGroupDesignState({
             allPartIds: ['p1', 'p2', 'p3', 'p4'],
             groups: [
@@ -299,9 +347,11 @@ describe('groupDesign', () => {
 
         expect(result.movedParts).toBe(1);
         expect(result.movedGroups).toBe(1);
+        expect(result.parentGroupId).toBeNull();
         expect(getGroupNode(result.state, 'g-mid')).toBeUndefined();
-        expect(getGroupNode(result.state, 'g-root')?.memberPartIds).toEqual(['p1', 'p4', 'p2']);
-        expect(getGroupNode(result.state, 'g-leaf')?.parentGroupId).toBe('g-root');
+        expect(getGroupNode(result.state, 'g-root')?.memberPartIds).toEqual(['p1', 'p4']);
+        expect(getGroupNode(result.state, 'g-leaf')?.parentGroupId).toBeNull();
+        expect(result.state.ungroupedPartIds).toEqual(['p2']);
     });
 
     it('cleans only empty unreferenced groups and deletes only empty safe groups', () => {
