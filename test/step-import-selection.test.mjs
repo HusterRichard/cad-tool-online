@@ -402,7 +402,7 @@ test('model tree uses icon-based expand toggles and compact unified icon sizing'
   assert.match(source, /const TREE_NODE_INDENT_PX = 12;/);
   assert.match(source, /container\.style\.marginLeft = `\$\{Math\.max\(0, level\) \* TREE_NODE_INDENT_PX\}px`;/);
   assert.match(source, /setExpandButtonState\(expandBtn, expandedByDefault\);/);
-  assert.match(source, /const expandedByDefault = nodeData\.kind === 'category';/);
+  assert.match(source, /const expandedByDefault = false;/);
   assert.doesNotMatch(expandIcon, /linearGradient|rect|polyline/i);
   assert.doesNotMatch(collapseIcon, /linearGradient|rect|polyline/i);
   assert.match(expandIcon, /<path[^>]+stroke="#64748B"/i);

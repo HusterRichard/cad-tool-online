@@ -8,7 +8,7 @@ import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
     aggregateMassProperties,
     buildModelBrowserTree,
-    collectLeafShapeIds,
+    cleanEmptyGroups as cleanEmptyGroupsInState,
     DEFAULT_CONNECTOR_DIRECTION,
     createCadtoolErrorNotification,
     findNearestCircularEdge,
@@ -16,6 +16,7 @@ import {
     getUniqueGroupName as getUniqueGroupNameFromState,
     markerCreator,
     normalizeConnectorType,
+    ungroupGroup as ungroupGroupInState,
     resolveConnectorDirection,
     resolveMarkerOwnerRef,
     renameGroupNode as renameGroupNodeInState,
@@ -447,7 +448,7 @@ const mbsGroups = {
         return Object.keys(groupDesignState.groupsById).length;
     },
     clear(): void {
-        groupDesignState = createEmptyGroupDesignState(getAllLeafPartIds());
+        groupDesignState = createEmptyGroupDesignState(getAllGroupablePartIds());
     },
     set(id: string, group: MbsGroupEntity): typeof mbsGroups {
         upsertLegacyGroup(group);
@@ -560,11 +561,11 @@ function parseSelectionKey(selectionKey: string | null): { kind: SelectionKind; 
     };
 }
 
-function getAllLeafPartIds(): string[] {
+function getAllGroupablePartIds(): string[] {
     if (rootShapes.length === 0) {
         return [];
     }
-    return Array.from(new Set(collectLeafShapeIds(rootShapes)));
+    return Array.from(new Set(collectGroupableShapeIds(rootShapes)));
 }
 
 function listGroups(): GroupNode[] {
@@ -602,7 +603,69 @@ function syncUngroupedPartIds(): void {
     listGroups().forEach((group) => {
         group.memberPartIds.forEach((partId) => groupedPartIds.add(partId));
     });
-    groupDesignState.ungroupedPartIds = getAllLeafPartIds().filter((partId) => !groupedPartIds.has(partId));
+    groupDesignState.ungroupedPartIds = getAllGroupablePartIds().filter((partId) => !groupedPartIds.has(partId));
+}
+
+function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
+    const importedGroups: GroupNode[] = [];
+    const importedState = createEmptyGroupDesignState();
+
+    const visit = (shape: LoadedShape, parentGroupId: string | null, order: number): void => {
+        if (shape.type !== 'assembly') {
+            return;
+        }
+
+        const group: GroupNode = {
+            id: `import_group_${shape.id}`,
+            name: getUniqueGroupNameFromState(
+                importedState,
+                sanitizeGroupName(shape.name, `ImportedGroup${importedGroups.length + 1}`)
+            ),
+            parentGroupId,
+            childGroupIds: [],
+            memberPartIds: (shape.children ?? [])
+                .filter((child) => child.type !== 'assembly')
+                .map((child) => child.id),
+            kind: 'imported',
+            order,
+            createdAt: new Date().toISOString()
+        };
+
+        importedState.groupsById[group.id] = {
+            ...group,
+            childGroupIds: [...group.childGroupIds],
+            memberPartIds: [...group.memberPartIds]
+        };
+        importedGroups.push(group);
+
+        let childOrder = 1;
+        (shape.children ?? []).forEach((child) => {
+            if (child.type !== 'assembly') {
+                return;
+            }
+            visit(child, group.id, childOrder);
+            childOrder += 1;
+        });
+    };
+
+    let rootOrder = 1;
+    shapes.forEach((shape) => {
+        if (shape.type !== 'assembly') {
+            return;
+        }
+        visit(shape, null, rootOrder);
+        rootOrder += 1;
+    });
+
+    return importedGroups;
+}
+
+function initializeImportedGroupDesignState(): void {
+    groupDesignState = createEmptyGroupDesignState(getAllGroupablePartIds());
+    const importedGroups = buildImportedGroupsFromShapes(flattenTopLevelAssemblyShapes(rootShapes));
+    importedGroups.forEach((group) => {
+        upsertGroupNode(group);
+    });
 }
 
 function getGroupNode(groupId: string | null | undefined): GroupNode | null {
@@ -1065,6 +1128,7 @@ function renderSelectedGroupProperties(groupId: string): void {
         return;
     }
 
+    setPanelMode('properties', '属性-零件');
     const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
     const massSummary = aggregateGroupMassProperties(groupId);
     const missingText = massSummary && massSummary.missingPartIds.length > 0
@@ -1080,23 +1144,24 @@ function renderSelectedGroupProperties(groupId: string): void {
 
     let html = '';
     html += '<div class="property-section-header">基本属性</div>';
+    html += createPropertyRow('名称', group.name, { boxed: true });
+    html += createPropertyRow('类型', '分组', { boxed: true });
     html += createPropertyRow('ID', group.id, { boxed: true });
-    html += createPropertyRow('Name', group.name, { boxed: true });
-    html += createPropertyRow('Parent', group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : '(root)');
-    html += createPropertyRow('Type', group.kind);
-    html += createPropertyRow('Children', group.childGroupIds.length.toString());
-    html += createPropertyRow('Direct Members', group.memberPartIds.length.toString());
-    html += createPropertyRow('Total Parts', partIds.length.toString());
-    html += createPropertyRow('Created', group.createdAt);
+    html += createPropertyRow('父分组', group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : '物体');
+    html += createPropertyRow('分组类别', group.kind);
+    html += createPropertyRow('子分组数', group.childGroupIds.length.toString());
+    html += createPropertyRow('直属成员数', group.memberPartIds.length.toString());
+    html += createPropertyRow('零件总数', partIds.length.toString());
+    html += createPropertyRow('创建时间', group.createdAt);
     html += '<div class="property-separator"></div>';
     html += '<div class="property-section-header">物理属性</div>';
 
     if (!massSummary) {
         html += createPropertyRow('状态', '不可用');
     } else {
-        html += createPropertyRow('Computed Parts', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
-        html += createPropertyRow('Missing Parts', missingText);
-        html += createPropertyRow('Total Mass', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
+        html += createPropertyRow('已计算零件', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
+        html += createPropertyRow('缺失零件', missingText);
+        html += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
         html += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
         html += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
         html += '<div class="property-sub-header">  质心</div>';
@@ -1519,29 +1584,15 @@ function ungroupSelectedGroup(): { movedGroups: number; movedParts: number; pare
     if (!group || !groupId) {
         throw new Error('Select a group first.');
     }
-    if (isGroupReferenced(groupId)) {
-        throw new Error(`Group "${group.name}" is referenced by design entities.`);
-    }
-
-    const parentGroupId = group.parentGroupId ?? null;
-    const childGroupIds = getOrderedChildGroupIds(groupId);
-    const memberPartIds = [...group.memberPartIds];
-
-    movePartIdsToGroup(memberPartIds, parentGroupId);
-    childGroupIds.forEach((childGroupId) => moveGroupToParent(childGroupId, parentGroupId));
-    removeGroupById(groupId);
-    normalizeSiblingOrders(parentGroupId);
-    if (parentGroupId) {
-        selectSelection({ kind: 'group', id: parentGroupId });
-    } else {
-        selectSelection(null);
-    }
-
-    return {
-        movedGroups: childGroupIds.length,
-        movedParts: memberPartIds.length,
-        parentGroupId
-    };
+    const result = ungroupGroupInState(groupDesignState, groupId, isGroupReferenced);
+    groupDesignState = result.state as GroupDesignState;
+    selectedNodeIds.clear();
+    groupDesignState.selectedNodeIds = [];
+    activeSelectionKey = null;
+    syncSelectedEntitiesFromActive();
+    updateTreeSelectionClasses();
+    updateSelectionPropertiesPanel();
+    return result;
 }
 
 function buildMoveTargetOptions(selectedGroupIds: string[]): Array<{ value: string; text: string }> {
@@ -3337,7 +3388,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
 
     if (nodeData.children && nodeData.children.length > 0) {
-        const expandedByDefault = nodeData.kind === 'category';
+        const expandedByDefault = false;
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
         setExpandButtonState(expandBtn, expandedByDefault);
@@ -3485,7 +3536,8 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     if (nodeData.children && nodeData.children.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'tree-children';
-        childrenContainer.style.display = (nodeData.kind === 'category' || nodeData.kind === 'assembly' || nodeData.kind === 'group') ? 'block' : 'none';
+        const expandedByDefault = false;
+        childrenContainer.style.display = expandedByDefault ? 'block' : 'none';
 
         nodeData.children.forEach((child) => {
             const childNode = createTreeNode(child, level + 1);
@@ -4574,6 +4626,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             result.rootNodes.forEach(root => {
                 rootShapes.push(buildShapeTree(root));
             });
+            initializeImportedGroupDesignState();
 
             showProgress(95, 'Finalizing...');
 
@@ -4662,6 +4715,7 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             applyRenderConfigToViewer();
 
             // Update UI
+            initializeImportedGroupDesignState();
             updateModelTree();
             showProgress(100, 'Complete');
             setStatus('Ready');
@@ -5435,7 +5489,7 @@ function clearCadtoolRuntimeEntities(): void {
     contactVisuals.clear();
     frameCreationHistory.length = 0;
     resetCanvasInteraction();
-    groupDesignState = createEmptyGroupDesignState(getAllLeafPartIds());
+    groupDesignState = createEmptyGroupDesignState(getAllGroupablePartIds());
     selectedNodeIds.clear();
     activeSelectionKey = null;
     selectedShapeId = null;
@@ -8451,10 +8505,10 @@ function renderContactOptionsPanel(): void {
     });
 }
 
-function collectLeafShapeIds(shapes: LoadedShape[]): string[] {
+function collectGroupableShapeIds(shapes: LoadedShape[]): string[] {
     const result: string[] = [];
     const visit = (shape: LoadedShape): void => {
-        if (shape.children && shape.children.length > 0) {
+        if (shape.type === 'assembly' && shape.children && shape.children.length > 0) {
             shape.children.forEach(visit);
             return;
         }
@@ -8520,35 +8574,16 @@ function handleCreateDefaultGroup(): void {
 }
 
 function handleCleanGroup(): void {
-    const blockedIds = new Set<string>();
-    let removedCount = 0;
-
-    while (true) {
-        const removable = listGroups().filter((group) => group.childGroupIds.length === 0 && group.memberPartIds.length === 0);
-        const nextRemovable = removable.filter((group) => {
-            if (isGroupReferenced(group.id)) {
-                blockedIds.add(group.id);
-                return false;
-            }
-            return true;
-        });
-        if (nextRemovable.length === 0) {
-            break;
-        }
-        nextRemovable.forEach((group) => {
-            if (removeGroupById(group.id)) {
-                removedCount += 1;
-            }
-        });
-    }
+    const result = cleanEmptyGroupsInState(groupDesignState, isGroupReferenced);
+    groupDesignState = result.state as GroupDesignState;
     updateModelTree();
-    if (blockedIds.size > 0) {
+    if (result.blockedGroupIds.length > 0) {
         vscode.postMessage({
             command: 'alert',
-            text: `Skipped ${blockedIds.size} referenced empty group(s).`
+            text: `Skipped ${result.blockedGroupIds.length} referenced empty group(s).`
         });
     }
-    setStatusInfo(`Empty groups cleaned: ${removedCount}`);
+    setStatusInfo(`Empty groups cleaned: ${result.removedGroupIds.length}`);
 }
 
 function handleGroupProperties(): void {
@@ -8567,7 +8602,7 @@ function handleUngroupGroup(): void {
     try {
         const result = ungroupSelectedGroup();
         updateModelTree();
-        setStatusInfo(`Ungrouped: moved ${result.movedParts} part(s) and ${result.movedGroups} child group(s).`);
+        setStatusInfo(`Ungrouped to 物体: moved ${result.movedParts} part(s) and ${result.movedGroups} child group(s).`);
     } catch (error) {
         vscode.postMessage({
             command: 'alert',

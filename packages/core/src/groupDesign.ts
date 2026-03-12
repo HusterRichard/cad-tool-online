@@ -443,23 +443,23 @@ export function ungroupGroup(
         throw new Error(`Group "${group.name}" is referenced by design entities.`);
     }
 
-    const parentGroupId = group.parentGroupId ?? null;
     const childGroupIds = [...group.childGroupIds];
     const memberPartIds = [...group.memberPartIds];
 
-    movePartIdsToGroupMutable(nextState, memberPartIds, parentGroupId);
+    movePartIdsToGroupMutable(nextState, memberPartIds, null);
     childGroupIds.forEach((childGroupId) => {
-        moveGroupToParentMutable(nextState, childGroupId, parentGroupId);
+        moveGroupToParentMutable(nextState, childGroupId, null);
     });
 
     delete nextState.groupsById[groupId];
-    normalizeSiblingOrders(nextState, parentGroupId);
+    normalizeSiblingOrders(nextState, group.parentGroupId ?? null);
+    normalizeSiblingOrders(nextState, null);
 
     return {
         state: rebuildState(nextState, allPartIds),
         movedGroups: childGroupIds.length,
         movedParts: memberPartIds.length,
-        parentGroupId
+        parentGroupId: null
     };
 }
 

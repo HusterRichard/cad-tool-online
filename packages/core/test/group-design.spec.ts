@@ -247,7 +247,7 @@ describe('groupDesign', () => {
         expect(movedToTarget.state.ungroupedPartIds).toEqual([]);
     });
 
-    it('ungroups groups by lifting members and children to the parent level', () => {
+    it('ungroups groups by lifting members and children to the root level', () => {
         const initial = createGroupDesignState({
             allPartIds: ['p1', 'p2', 'p3', 'p4'],
             groups: [
@@ -299,9 +299,11 @@ describe('groupDesign', () => {
 
         expect(result.movedParts).toBe(1);
         expect(result.movedGroups).toBe(1);
+        expect(result.parentGroupId).toBeNull();
         expect(getGroupNode(result.state, 'g-mid')).toBeUndefined();
-        expect(getGroupNode(result.state, 'g-root')?.memberPartIds).toEqual(['p1', 'p4', 'p2']);
-        expect(getGroupNode(result.state, 'g-leaf')?.parentGroupId).toBe('g-root');
+        expect(getGroupNode(result.state, 'g-root')?.memberPartIds).toEqual(['p1', 'p4']);
+        expect(getGroupNode(result.state, 'g-leaf')?.parentGroupId).toBeNull();
+        expect(result.state.ungroupedPartIds).toEqual(['p2']);
     });
 
     it('cleans only empty unreferenced groups and deletes only empty safe groups', () => {
