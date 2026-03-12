@@ -72,6 +72,8 @@ pnpm build:all
 pnpm dev               # 多包并行开发
 pnpm lint              # 代码检查
 pnpm format            # 代码格式化
+pnpm test              # 运行包内测试 + 根 tests
+pnpm test:root:run     # 仅运行根 tests（跨包/集成）
 pnpm build:extension   # 构建 VSCode Extension 入口
 pnpm build:webview     # 构建 Webview
 pnpm package           # 生成 VSIX 包
