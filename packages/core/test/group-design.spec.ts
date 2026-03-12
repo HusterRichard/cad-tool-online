@@ -11,6 +11,7 @@ import {
     getOrderedChildGroupIds,
     getPartOwnerGroupMap,
     getUniqueGroupName,
+    materializeUngroupedPartsAsGroups,
     importGroupSchema,
     listGroupNodes,
     moveGroupNodes,
@@ -150,6 +151,53 @@ describe('groupDesign', () => {
         expect(getGroupNode(state, 'g-existing')?.memberPartIds).toEqual([]);
         expect(getGroupNode(state, 'g-new')?.memberPartIds).toEqual(['p1', 'p2']);
         expect(state.ungroupedPartIds).toEqual(['p3']);
+    });
+
+    it('materializes each ungrouped part into an exclusive imported parent group', () => {
+        const initial = createGroupDesignState({
+            allPartIds: ['p1', 'p2', 'p3'],
+            groups: [
+                {
+                    id: 'g-existing',
+                    name: 'Bolt',
+                    parentGroupId: null,
+                    childGroupIds: [],
+                    memberPartIds: ['p3'],
+                    kind: 'imported',
+                    order: 1,
+                    createdAt: '2026-03-09T00:00:00.000Z'
+                }
+            ]
+        });
+
+        const result = materializeUngroupedPartsAsGroups(initial, {
+            kind: 'imported',
+            resolveGroupName: () => 'Bolt',
+            createGroupId: (partId) => `import_group_${partId}`,
+            now: () => '2026-03-12T00:00:00.000Z'
+        });
+
+        expect(result.createdGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            memberPartIds: group.memberPartIds,
+            kind: group.kind
+        }))).toEqual([
+            {
+                id: 'import_group_p1',
+                name: 'Bolt_1',
+                memberPartIds: ['p1'],
+                kind: 'imported'
+            },
+            {
+                id: 'import_group_p2',
+                name: 'Bolt_2',
+                memberPartIds: ['p2'],
+                kind: 'imported'
+            }
+        ]);
+        expect(getOrderedChildGroupIds(result.state, null)).toEqual(['g-existing', 'import_group_p1', 'import_group_p2']);
+        expect(result.state.ungroupedPartIds).toEqual([]);
     });
 
     it('renames groups with normalization and collision handling', () => {

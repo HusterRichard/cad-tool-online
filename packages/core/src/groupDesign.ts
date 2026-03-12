@@ -70,6 +70,20 @@ export interface DeleteGroupsResult {
     blockedMessages: string[];
 }
 
+export interface MaterializeUngroupedPartsAsGroupsInput {
+    partIds?: string[];
+    parentGroupId?: string | null;
+    kind?: GroupKind;
+    resolveGroupName?: (partId: string, index: number) => string;
+    createGroupId?: (partId: string, index: number) => string;
+    now?: () => string;
+}
+
+export interface MaterializeUngroupedPartsAsGroupsResult {
+    state: GroupDesignState;
+    createdGroups: GroupNode[];
+}
+
 export interface GroupSchemaRecord {
     name: string;
     parts?: string[];
@@ -360,6 +374,50 @@ export function createGroupNode(state: GroupDesignState, input: CreateGroupNodeI
     return {
         state: rebuilt,
         group: rebuilt.groupsById[group.id]
+    };
+}
+
+export function materializeUngroupedPartsAsGroups(
+    state: GroupDesignState,
+    input: MaterializeUngroupedPartsAsGroupsInput = {}
+): MaterializeUngroupedPartsAsGroupsResult {
+    const candidatePartIds = Array.from(new Set(input.partIds ?? state.ungroupedPartIds));
+    const allPartIds = Array.from(new Set([...getAllKnownPartIds(state), ...candidatePartIds]));
+    const nextState = cloneState(state, allPartIds);
+    const parentGroupId = input.parentGroupId && nextState.groupsById[input.parentGroupId] ? input.parentGroupId : null;
+    const resolveGroupName = input.resolveGroupName ?? ((partId: string) => partId);
+    const createGroupId = input.createGroupId ?? ((partId: string, index: number) => `auto_group_${sanitizeGroupName(partId, `${index + 1}`)}`);
+    const now = input.now ?? (() => new Date().toISOString());
+    const ungroupedPartIds = new Set(nextState.ungroupedPartIds);
+    const createdGroupIds: string[] = [];
+
+    candidatePartIds.forEach((partId, index) => {
+        if (!ungroupedPartIds.has(partId)) {
+            return;
+        }
+
+        const group: GroupNode = {
+            id: createGroupId(partId, index),
+            name: getUniqueGroupName(nextState, resolveGroupName(partId, index)),
+            parentGroupId,
+            childGroupIds: [],
+            memberPartIds: [partId],
+            kind: input.kind ?? 'default',
+            order: getOrderedSiblingIds(nextState, parentGroupId).length + 1,
+            createdAt: now()
+        };
+
+        nextState.groupsById[group.id] = group;
+        createdGroupIds.push(group.id);
+        ungroupedPartIds.delete(partId);
+    });
+
+    const rebuilt = rebuildState(nextState, allPartIds);
+    return {
+        state: rebuilt,
+        createdGroups: createdGroupIds
+            .map((groupId) => rebuilt.groupsById[groupId])
+            .filter((group): group is GroupNode => Boolean(group))
     };
 }
 

@@ -14,6 +14,7 @@ import {
     findNearestCircularEdge,
     flattenTopLevelAssemblyShapes,
     getUniqueGroupName as getUniqueGroupNameFromState,
+    materializeUngroupedPartsAsGroups,
     markerCreator,
     normalizeConnectorType,
     ungroupGroup as ungroupGroupInState,
@@ -102,6 +103,7 @@ let selectedDesignPointId: string | null = null;
 let selectedContactId: string | null = null;
 let activeSelectionKey: string | null = null;
 const selectedNodeIds = new Set<string>();
+const treeExpandedNodeIds = new Set<string>();
 let treeContextMenuEl: HTMLDivElement | null = null;
 let isSyncingViewerSelection = false;
 
@@ -568,6 +570,22 @@ function getAllGroupablePartIds(): string[] {
     return Array.from(new Set(collectGroupableShapeIds(rootShapes)));
 }
 
+function assignUniqueImportedPartNames(shapes: LoadedShape[]): void {
+    const seenNames = new Map<string, number>();
+    const visit = (shape: LoadedShape): void => {
+        if (shape.type !== 'assembly') {
+            const baseName = shape.name;
+            const occurrenceIndex = seenNames.get(baseName) ?? 0;
+            seenNames.set(baseName, occurrenceIndex + 1);
+            shape.name = occurrenceIndex === 0 ? baseName : `${baseName}_${occurrenceIndex}`;
+        }
+
+        shape.children?.forEach((child) => visit(child));
+    };
+
+    shapes.forEach((shape) => visit(shape));
+}
+
 function listGroups(): GroupNode[] {
     return Object.values(groupDesignState.groupsById)
         .filter((group) => !group.deletedAt)
@@ -611,9 +629,11 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
     const importedState = createEmptyGroupDesignState();
 
     const visit = (shape: LoadedShape, parentGroupId: string | null, order: number): void => {
-        if (shape.type !== 'assembly') {
-            return;
-        }
+        const memberPartIds = shape.type === 'assembly'
+            ? (shape.children ?? [])
+                .filter((child) => child.type !== 'assembly')
+                .map((child) => child.id)
+            : [shape.id];
 
         const group: GroupNode = {
             id: `import_group_${shape.id}`,
@@ -623,9 +643,7 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
             ),
             parentGroupId,
             childGroupIds: [],
-            memberPartIds: (shape.children ?? [])
-                .filter((child) => child.type !== 'assembly')
-                .map((child) => child.id),
+            memberPartIds,
             kind: 'imported',
             order,
             createdAt: new Date().toISOString()
@@ -637,6 +655,10 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
             memberPartIds: [...group.memberPartIds]
         };
         importedGroups.push(group);
+
+        if (shape.type !== 'assembly') {
+            return;
+        }
 
         let childOrder = 1;
         (shape.children ?? []).forEach((child) => {
@@ -666,6 +688,29 @@ function initializeImportedGroupDesignState(): void {
     importedGroups.forEach((group) => {
         upsertGroupNode(group);
     });
+    groupDesignState = materializeUngroupedPartsAsGroups(groupDesignState, {
+        kind: 'imported',
+        resolveGroupName: (partId) => loadedShapes.get(partId)?.name ?? partId,
+        createGroupId: (partId) => `import_group_${partId}`
+    }).state as GroupDesignState;
+}
+
+function updateTreeNodeExpansionState(nodeId: string | undefined, expanded: boolean): void {
+    if (!nodeId) {
+        return;
+    }
+
+    if (expanded) {
+        treeExpandedNodeIds.add(nodeId);
+        return;
+    }
+
+    treeExpandedNodeIds.delete(nodeId);
+}
+
+function resetImportedTreeExpansionState(): void {
+    treeExpandedNodeIds.clear();
+    treeExpandedNodeIds.add('category_objects');
 }
 
 function getGroupNode(groupId: string | null | undefined): GroupNode | null {
@@ -982,6 +1027,8 @@ function syncViewerSelectionFromState(): void {
     } finally {
         isSyncingViewerSelection = false;
     }
+
+    syncViewerGroupBoundsFromState();
 }
 
 function applyShapeVisualColor(shapeId: string, color: string | undefined): void {
@@ -1042,6 +1089,71 @@ function collectGroupPartIdsRecursive(groupId: string, collected: Set<string> = 
     group.memberPartIds.forEach((partId) => collected.add(partId));
     group.childGroupIds.forEach((childGroupId) => collectGroupPartIdsRecursive(childGroupId, collected));
     return collected;
+}
+
+function computeShapeBounds(shape: LoadedShape): THREE.Box3 | null {
+    const box = new THREE.Box3();
+    let hasBounds = false;
+    const point = new THREE.Vector3();
+
+    const visit = (target: LoadedShape): void => {
+        const vertices = target.meshData?.vertices;
+        if (vertices && vertices.length >= 3) {
+            for (let index = 0; index < vertices.length; index += 3) {
+                point.set(vertices[index], vertices[index + 1], vertices[index + 2]);
+                box.expandByPoint(point);
+            }
+            hasBounds = true;
+        }
+
+        target.children?.forEach((child) => visit(child));
+    };
+
+    visit(shape);
+    return hasBounds ? box : null;
+}
+
+function computeGroupBounds(groupId: string): { min: Vec3; max: Vec3 } | null {
+    const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
+    if (partIds.length === 0) {
+        return null;
+    }
+
+    const box = new THREE.Box3();
+    let hasBounds = false;
+    partIds.forEach((partId) => {
+        const shape = loadedShapes.get(partId);
+        if (!shape) {
+            return;
+        }
+        const shapeBounds = computeShapeBounds(shape);
+        if (!shapeBounds) {
+            return;
+        }
+        box.union(shapeBounds);
+        hasBounds = true;
+    });
+
+    if (!hasBounds || box.isEmpty()) {
+        return null;
+    }
+
+    return {
+        min: { x: box.min.x, y: box.min.y, z: box.min.z },
+        max: { x: box.max.x, y: box.max.y, z: box.max.z }
+    };
+}
+
+function syncViewerGroupBoundsFromState(): void {
+    if (!viewer) {
+        return;
+    }
+
+    const groupBounds = getTopLevelSelectedGroupIds(getSelectedGroupIds())
+        .map((groupId) => computeGroupBounds(groupId))
+        .filter((bounds): bounds is { min: Vec3; max: Vec3 } => Boolean(bounds));
+
+    viewer.setSelectionBoundsBoxes(groupBounds);
 }
 
 function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null {
@@ -3349,6 +3461,7 @@ function showTreeContextMenu(x: number, y: number, nodeData: ModelTreeNode): voi
 function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     const container = document.createElement('div');
     container.className = 'tree-node-container';
+    container.dataset.nodeId = nodeData.id;
     container.style.marginLeft = `${Math.max(0, level) * TREE_NODE_INDENT_PX}px`;
 
     const node = document.createElement('div');
@@ -3388,7 +3501,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
 
     if (nodeData.children && nodeData.children.length > 0) {
-        const expandedByDefault = false;
+        const expandedByDefault = treeExpandedNodeIds.has(nodeData.id);
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
         setExpandButtonState(expandBtn, expandedByDefault);
@@ -3536,7 +3649,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     if (nodeData.children && nodeData.children.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'tree-children';
-        const expandedByDefault = false;
+        const expandedByDefault = treeExpandedNodeIds.has(nodeData.id);
         childrenContainer.style.display = expandedByDefault ? 'block' : 'none';
 
         nodeData.children.forEach((child) => {
@@ -3558,6 +3671,7 @@ function toggleNodeExpand(container: HTMLElement): void {
         const isExpanded = childrenContainer.style.display !== 'none';
         childrenContainer.style.display = isExpanded ? 'none' : 'block';
         setExpandButtonState(expandBtn, !isExpanded);
+        updateTreeNodeExpansionState(container.dataset.nodeId, !isExpanded);
     }
 }
 
@@ -4403,6 +4517,7 @@ function expandParentNodes(nodeElement: Element): void {
                 const expandBtn = container.querySelector('.expand-btn') as HTMLElement | null;
                 if (expandBtn) {
                     setExpandButtonState(expandBtn, true);
+                    updateTreeNodeExpansionState(container.dataset.nodeId, true);
                 }
             }
         }
@@ -4626,7 +4741,9 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             result.rootNodes.forEach(root => {
                 rootShapes.push(buildShapeTree(root));
             });
+            assignUniqueImportedPartNames(rootShapes);
             initializeImportedGroupDesignState();
+            resetImportedTreeExpansionState();
 
             showProgress(95, 'Finalizing...');
 
@@ -4715,7 +4832,9 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             applyRenderConfigToViewer();
 
             // Update UI
+            assignUniqueImportedPartNames(rootShapes);
             initializeImportedGroupDesignState();
+            resetImportedTreeExpansionState();
             updateModelTree();
             showProgress(100, 'Complete');
             setStatus('Ready');
@@ -6493,10 +6612,12 @@ function clearScene(): void {
     selectedDensityByShapeId.clear();
     meshIdToShapeId.clear();
     shapeSelectionHistory.length = 0;
+    treeExpandedNodeIds.clear();
     externalModelTreeShapes = [];
     explodeDataMap.clear();
     massPropertiesCoordinator.clear();
     clearCadtoolRuntimeEntities();
+    viewer?.setSelectionBoundsBoxes([]);
 
     // Reset explode state
     if (isExploded) {
@@ -7748,6 +7869,24 @@ function createDefaultJointDraft(jointType: string): JointDraft {
     };
 }
 
+function syncJointSizeInputs(nextValue: number): void {
+    const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
+    const rounded = Math.max(1, Math.min(200, Math.round(nextValue)));
+    if (sizeInput) {
+        sizeInput.value = `${rounded}`;
+    }
+}
+
+function updateJointDraftSize(nextValue: number): number {
+    const normalized = Math.max(1, Math.min(200, Math.round(nextValue)));
+    pendingJointIconSize = normalized;
+    if (jointDraft) {
+        jointDraft.iconSize = normalized;
+    }
+    syncJointSizeInputs(normalized);
+    return normalized;
+}
+
 function syncJointDraftFromInputs(): void {
     if (!jointDraft) {
         return;
@@ -7908,6 +8047,7 @@ function renderJointOptionsPanel(): void {
             <label for="opt-joint-size">图标大小</label>
             <input id="opt-joint-size" class="opt-input" type="number" min="1" max="200" step="1" value="${Math.max(1, Math.round(draft.iconSize))}" />
         </div>
+        <div class="opt-hint">支持 Alt + 鼠标滚轮快速调节图标大小</div>
         ${buildSeparator()}
         ${modeRow}
         ${buildSeparator()}
@@ -7950,6 +8090,10 @@ function renderJointOptionsPanel(): void {
         syncJointDraftFromInputs();
         jointCreationMode = 'fast';
         renderJointOptionsPanel();
+    });
+    const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
+    sizeInput?.addEventListener('input', () => {
+        updateJointDraftSize(Number.parseFloat(sizeInput.value));
     });
     document.getElementById('opt-joint-mode-standard')?.addEventListener('click', () => {
         syncJointDraftFromInputs();
@@ -8568,9 +8712,12 @@ function handleCreateDefaultGroup(): void {
         return;
     }
 
-    const group = createGroupFromParts(`DefaultGroup${mbsGroups.size + 1}`, memberShapeIds, null, 'default');
+    const createdGroups = memberShapeIds
+        .map((shapeId) => loadedShapes.get(shapeId))
+        .filter((shape): shape is LoadedShape => Boolean(shape))
+        .map((shape) => createGroupFromParts(shape.name, [shape.id], null, 'default'));
     updateModelTree();
-    setStatusInfo(`Default group created: ${group.memberPartIds.length} parts`);
+    setStatusInfo(`Default groups created: ${createdGroups.length}`);
 }
 
 function handleCleanGroup(): void {
@@ -10067,6 +10214,13 @@ async function initViewer(): Promise<void> {
         container.addEventListener('click', handleCanvasClick);
         container.addEventListener('wheel', (event) => {
             if (!event.altKey) {
+                return;
+            }
+            if (jointCreationPanelActive) {
+                event.preventDefault();
+                const delta = event.deltaY < 0 ? 1 : -1;
+                const nextSize = updateJointDraftSize(pendingJointIconSize + delta);
+                setStatusInfo(`Connection icon size: ${nextSize}`);
                 return;
             }
             if (contactCreationPanelActive) {

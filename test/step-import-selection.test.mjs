@@ -402,7 +402,7 @@ test('model tree uses icon-based expand toggles and compact unified icon sizing'
   assert.match(source, /const TREE_NODE_INDENT_PX = 12;/);
   assert.match(source, /container\.style\.marginLeft = `\$\{Math\.max\(0, level\) \* TREE_NODE_INDENT_PX\}px`;/);
   assert.match(source, /setExpandButtonState\(expandBtn, expandedByDefault\);/);
-  assert.match(source, /const expandedByDefault = false;/);
+  assert.match(source, /const expandedByDefault = treeExpandedNodeIds\.has\(nodeData\.id\);/);
   assert.doesNotMatch(expandIcon, /linearGradient|rect|polyline/i);
   assert.doesNotMatch(collapseIcon, /linearGradient|rect|polyline/i);
   assert.match(expandIcon, /<path[^>]+stroke="#64748B"/i);
@@ -498,6 +498,20 @@ test('motion connector selection enforces joint compatibility for rotational and
   assert.match(source, /return normalized === 'revolute' \|\| normalized === 'cylindrical';/);
   assert.match(source, /return normalized === 'prismatic' \|\| normalized === 'cylindrical';/);
   assert.match(source, /if \(!isMotionTypeCompatibleWithJoint\(draft\.motionType, joint\.jointType\)\) \{/);
+});
+
+test('joint creation exposes Alt plus mouse wheel icon sizing affordance', async () => {
+  const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+  const renderJointOptionsPanelMatch = source.match(/function renderJointOptionsPanel\(\): void \{[\s\S]*?\n\}/);
+
+  assert.ok(renderJointOptionsPanelMatch, 'expected to find renderJointOptionsPanel implementation');
+
+  const panelSource = renderJointOptionsPanelMatch[0];
+  assert.match(panelSource, /id="opt-joint-size"/);
+  assert.match(panelSource, /支持 Alt \+ 鼠标滚轮快速调节图标大小/);
+  assert.match(source, /function updateJointDraftSize\(nextValue: number\): number \{/);
+  assert.match(source, /const nextSize = updateJointDraftSize\(pendingJointIconSize \+ delta\);/);
+  assert.match(source, /setStatusInfo\(`Connection icon size: \$\{nextSize\}`\);/);
 });
 
 test('motion creation supports Alt plus mouse wheel icon sizing and delete key removal', async () => {
