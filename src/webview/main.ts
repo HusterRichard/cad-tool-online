@@ -1530,6 +1530,7 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
     if (selectedShapeId) {
         rememberShapeSelection(selectedShapeId);
         vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
+        expandAndScrollToTreeNodeBySelector(`.tree-node[data-shape-id="${selectedShapeId}"]`);
     }
 
     if (refFrameCreationPanelActive) {
@@ -4589,6 +4590,28 @@ function expandParentNodes(nodeElement: Element): void {
     }
 }
 
+function expandAndScrollToTreeNode(treeNodeId: string): void {
+    // Defer to next frame so the DOM is fully laid out after updateModelTree()
+    requestAnimationFrame(() => {
+        const container = document.querySelector(`.tree-node-container[data-node-id="${treeNodeId}"]`);
+        if (!container) return;
+        expandParentNodes(container);
+        const treeNode = container.querySelector('.tree-node');
+        if (treeNode) {
+            treeNode.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    });
+}
+
+function expandAndScrollToTreeNodeBySelector(selector: string): void {
+    requestAnimationFrame(() => {
+        const treeNode = document.querySelector(selector);
+        if (!treeNode) return;
+        expandParentNodes(treeNode);
+        treeNode.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+}
+
 // ============================================================================
 // OCCT Initialization
 // ============================================================================
@@ -7373,6 +7396,7 @@ function finalizeMarkerDraft(): void {
     });
     updateModelTree();
     selectSelection({ kind: 'marker', id: marker.id });
+    expandAndScrollToTreeNode(`marker_${marker.id}`);
     viewer?.setSelectionEnabled(false);
     renderMarkerCreationPanel();
     setStatus('Click on a face to create marker');
@@ -7440,6 +7464,7 @@ function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: 
     });
     updateModelTree();
     selectSelection({ kind: 'refFrame', id: refFrame.id });
+    expandAndScrollToTreeNode(`refFrame_${refFrame.id}`);
     renderRefFrameCreationPanel();
     setStatus('Select a basic marker and target part to create reference marker');
     setStatusInfo(`Reference marker created: ${refFrame.name}`);
@@ -8045,6 +8070,7 @@ function finalizeJointDraft(): boolean {
     viewer?.addJoint(buildJointViewerData(joint));
     updateModelTree();
     selectSelection({ kind: 'joint', id: joint.id });
+    expandAndScrollToTreeNode(`conn_${joint.id}`);
 
     const nextType = jointDraft.jointType;
     jointDraft = createDefaultJointDraft(nextType);
@@ -8382,6 +8408,7 @@ function createMotionFromDraft(): boolean {
     pendingMotionIconSize = motion.iconSize;
     updateModelTree();
     selectSelection({ kind: 'motion', id });
+    expandAndScrollToTreeNode(`motion_${id}`);
     renderMotionPropertiesPanel(id);
     setStatus('Ready');
     setStatusInfo(`Motion created: ${motion.name}`);
@@ -9715,6 +9742,7 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
 
     updateModelTree();
     selectSelection({ kind: 'marker', id: marker.id });
+    expandAndScrollToTreeNode(`marker_${marker.id}`);
     viewer?.setSelectionEnabled(false);
     renderMarkerCreationPanel();
     setStatus('Click on a face to create marker');
