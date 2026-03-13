@@ -1138,6 +1138,14 @@ export class ThreeViewer {
     }
 
     /**
+     * 批量选择多个对象，只触发一次 outline 更新
+     */
+    selectMany(ids: string[]): void {
+        this.selectionManager?.selectMany(ids);
+        this.updateOutlineTargets();
+    }
+
+    /**
      * 取消选择
      */
     deselect(id: string): void {
@@ -1191,7 +1199,7 @@ export class ThreeViewer {
             return;
         }
 
-        const helper = this.buildSelectionBoundsHelper(box, 0xffb300);
+        const helper = this.buildSelectionBoundsHelper(box, 0x00e5ff);
         if (!helper) {
             return;
         }

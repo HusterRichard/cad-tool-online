@@ -333,6 +333,26 @@ export class SelectionManager {
         });
     }
 
+    /**
+     * 批量选中多个对象，只触发一次事件回调
+     */
+    selectMany(ids: string[]): void {
+        const added: string[] = [];
+        for (const id of ids) {
+            if (!this.selectableObjects.has(id) || this.selectedIds.has(id)) continue;
+            this.selectedIds.add(id);
+            this.applyHighlightMaterial(id);
+            added.push(id);
+        }
+        if (added.length > 0) {
+            this.emitEvent({
+                type: 'select',
+                objectId: added[added.length - 1],
+                object: this.selectableObjects.get(added[added.length - 1]) ?? null
+            });
+        }
+    }
+
     deselect(id: string): void {
         if (!this.selectedIds.has(id)) return;
 

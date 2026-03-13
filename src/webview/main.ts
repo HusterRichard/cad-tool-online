@@ -1030,11 +1030,10 @@ function syncViewerSelectionFromState(): void {
                 viewer.deselect(id);
             }
         });
-        targetIds.forEach((id) => {
-            if (!currentIds.has(id)) {
-                viewer.select(id);
-            }
-        });
+        const toAdd = Array.from(targetIds).filter((id) => !currentIds.has(id));
+        if (toAdd.length > 0) {
+            viewer.selectMany(toAdd);
+        }
     } finally {
         isSyncingViewerSelection = false;
     }
@@ -1288,17 +1287,6 @@ function renderSelectedGroupProperties(groupId: string): void {
 
     setPanelMode('properties', '属性-零件');
     const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
-    const massSummary = aggregateGroupMassProperties(groupId);
-    const missingText = massSummary && massSummary.missingPartIds.length > 0
-        ? massSummary.missingPartIds.map(activeShapeName).join(', ')
-        : '(none)';
-    const inertiaRows = massSummary
-        ? [
-            [massSummary.inertiaMatrix.m[0], massSummary.inertiaMatrix.m[1], massSummary.inertiaMatrix.m[2]] as [number, number, number],
-            [massSummary.inertiaMatrix.m[3], massSummary.inertiaMatrix.m[4], massSummary.inertiaMatrix.m[5]] as [number, number, number],
-            [massSummary.inertiaMatrix.m[6], massSummary.inertiaMatrix.m[7], massSummary.inertiaMatrix.m[8]] as [number, number, number]
-        ]
-        : null;
 
     let html = '';
     html += '<div class="property-section-header">基本属性</div>';
@@ -1313,30 +1301,49 @@ function renderSelectedGroupProperties(groupId: string): void {
     html += createPropertyRow('创建时间', group.createdAt);
     html += '<div class="property-separator"></div>';
     html += '<div class="property-section-header">物理属性</div>';
-
-    if (!massSummary) {
-        html += createPropertyRow('状态', '不可用');
-    } else {
-        html += createPropertyRow('已计算零件', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
-        html += createPropertyRow('缺失零件', missingText);
-        html += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
-        html += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
-        html += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
-        html += '<div class="property-sub-header">  质心</div>';
-        html += createVectorRow([
-            massSummary.centerOfMass.x,
-            massSummary.centerOfMass.y,
-            massSummary.centerOfMass.z
-        ], 'm');
-        if (inertiaRows) {
-            html += '<div class="property-sub-header">  惯性张量</div>';
-            html += createVectorRow(inertiaRows[0]);
-            html += createVectorRow(inertiaRows[1]);
-            html += createVectorRow(inertiaRows[2], 'kg·m²');
-        }
-    }
+    html += '<div id="group-mass-properties-area">';
+    html += createPropertyRow('状态', '计算中...');
+    html += '</div>';
 
     propsEl.innerHTML = html;
+
+    setTimeout(() => {
+        const massArea = document.getElementById('group-mass-properties-area');
+        if (!massArea) return;
+
+        const massSummary = aggregateGroupMassProperties(groupId);
+        let massHtml = '';
+
+        if (!massSummary) {
+            massHtml += createPropertyRow('状态', '不可用');
+        } else {
+            const missingText = massSummary.missingPartIds.length > 0
+                ? massSummary.missingPartIds.map(activeShapeName).join(', ')
+                : '(none)';
+            const inertiaRows = [
+                [massSummary.inertiaMatrix.m[0], massSummary.inertiaMatrix.m[1], massSummary.inertiaMatrix.m[2]] as [number, number, number],
+                [massSummary.inertiaMatrix.m[3], massSummary.inertiaMatrix.m[4], massSummary.inertiaMatrix.m[5]] as [number, number, number],
+                [massSummary.inertiaMatrix.m[6], massSummary.inertiaMatrix.m[7], massSummary.inertiaMatrix.m[8]] as [number, number, number]
+            ];
+            massHtml += createPropertyRow('已计算零件', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
+            massHtml += createPropertyRow('缺失零件', missingText);
+            massHtml += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
+            massHtml += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
+            massHtml += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
+            massHtml += '<div class="property-sub-header">  质心</div>';
+            massHtml += createVectorRow([
+                massSummary.centerOfMass.x,
+                massSummary.centerOfMass.y,
+                massSummary.centerOfMass.z
+            ], 'm');
+            massHtml += '<div class="property-sub-header">  惯性张量</div>';
+            massHtml += createVectorRow(inertiaRows[0]);
+            massHtml += createVectorRow(inertiaRows[1]);
+            massHtml += createVectorRow(inertiaRows[2], 'kg·m²');
+        }
+
+        massArea.innerHTML = massHtml;
+    }, 0);
 }
 
 function updateSelectionPropertiesPanel(): void {
@@ -1519,6 +1526,7 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
     updateTreeSelectionClasses();
     updateSelectionPropertiesPanel();
     syncContactPartHighlights();
+    syncViewerGroupBoundsFromState();
     if (selectedShapeId) {
         rememberShapeSelection(selectedShapeId);
         vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
