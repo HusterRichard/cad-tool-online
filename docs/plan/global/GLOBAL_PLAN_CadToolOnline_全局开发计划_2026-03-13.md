@@ -1,6 +1,6 @@
-# CadToolOnline Development Plan（对齐 CADTool 2026a 帮助文档）
+# CadToolOnline 全局开发计划（对齐 CADTool 2026a 帮助文档）
 
-日期：2026-03-09  
+日期：2026-03-13  
 项目：CadToolOnline
 
 ## 1. 计划基线
@@ -25,7 +25,7 @@
 - FAQ / 错误码
 - 官方案例与验收场景
 
-结论：旧版 `plan.md` 主要按早期 PRD 粗粒度组织，且文件编码已损坏；新版计划改为“按官方帮助目录分层 + 按当前代码证据标记状态”的结构。
+结论：旧版根目录 `plan.md` 主要按早期 PRD 粗粒度组织，且文件编码已损坏；新版计划改为“按官方帮助目录分层 + 按当前代码证据标记状态”的结构，并统一迁移到 `docs/plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`。
 
 ## 2. 总体目标
 
@@ -284,7 +284,7 @@
 
 - 这是最能反映“是否真正对齐帮助文档”的验收层，但目前还没有成体系落地
 
-## 4. 当前状态快照（2026-03-09）
+## 4. 当前状态快照（2026-03-13）
 
 ### 已有明确代码与测试证据的能力
 
@@ -310,7 +310,91 @@
 - 计划结构仍旧按旧 PRD，而不是按 74 页官方帮助目录
 - 多体设计中“分组”推进较深，但其它对象线没有被同样粒度地拆开
 - FAQ / 错误码 / 案例验收尚未进入主计划的硬里程碑
-- `plan.md` 文本本身已经乱码，不适合作为持续维护基线
+- 根目录旧版 `plan.md` 已迁移到 `docs/plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`，后续应只维护全局计划新路径
+
+### 4.4 SC01-SC60 场景完成情况统计口径
+
+- 数据来源：`docs/prd/global/GLOBAL_PRD_CADToolOnline_三维建模界面重建_2026-03-06.md` 中的 `SC01-SC60` 场景映射表。
+- 判定方式：仅按仓库中可追踪的场景交付资产统计，不以口头状态或帮助页目标态直接判定“已完成”。
+- 完成百分比口径：按场景交付最小文档闭环 `PRD / PLAN / QA` 三项齐备度计算，不直接等同于代码实现完成度。
+- 状态定义：
+  - `场景文档闭环（100%）`：已存在场景 `PRD + PLAN + QA`
+  - `已建 PRD/PLAN（67%）`：已存在场景 `PRD + PLAN`，但尚未看到独立 QA 计划
+  - `已有场景 PRD（33%）`：仅存在独立场景 PRD
+  - `仅全局 PRD 映射（0%）`：当前仅在全局 PRD 中完成场景登记，尚未看到独立场景交付文档
+- 注意：该表反映的是“场景交付资产完成情况”，不是“帮助页目标态已全部实现”的强结论。
+
+### 4.5 场景状态汇总
+
+- `场景文档闭环`：4 / 60（`SC01`、`SC02`、`SC04`、`SC06`）
+- `已建 PRD/PLAN`：2 / 60（`SC05`、`SC13`）
+- `已有场景 PRD`：1 / 60（`SC12`）
+- `仅全局 PRD 映射`：53 / 60
+
+### 4.6 SC01-SC60 场景完成情况总表
+
+| 场景ID | 模块 | 场景名称 | 当前状态 | 当前证据 |
+|---|---|---|---|---|
+| SC01 | 多体设计 | 添加接触 | 场景文档闭环（100%） | PRD / PLAN / QA |
+| SC02 | 多体设计 | 添加连接 | 场景文档闭环（100%） | PRD / PLAN / QA |
+| SC03 | 流体设计 | 添加流体端口 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC04 | 多体设计 | 添加设计点 | 场景文档闭环（100%） | PRD / PLAN / QA |
+| SC05 | 多体设计 | 添加标架及参考标架 | 已建 PRD/PLAN（67%） | PRD / PLAN |
+| SC06 | 多体设计 | 添加驱动 | 场景文档闭环（100%） | PRD / PLAN / QA |
+| SC07 | 设计工具 | 设计工具 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC08 | 模型导入 | 商业 CAD 解析器独立使用 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC09 | 设计工具 | 爆炸视图 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC10 | 模型导入 | 流体模型浏览器 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC11 | 流体设计 | 流体设计 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC12 | 模型导入 | 导入中性格式 CAD 模型 | 已有场景 PRD（33%） | PRD |
+| SC13 | 多体设计 | 对零件进行分组 | 已建 PRD/PLAN（67%） | PRD / PLAN |
+| SC14 | 模型导入 | 导入自定义格式 CAD 模型 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC15 | 模型导入 | 导入 CAD 模型 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC16 | 流体设计 | 设置对象的属性 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC17 | 模型导出 | 管理 CAD 文件 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC18 | 迭代设计 | 迭代设计 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC19 | 模型导入 | 导入商用格式 CAD 模型 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC20 | 多体设计 | 修改材料 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC21 | 模型导出 | 模型导出 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC22 | 模型导入 | 模型导入 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC23 | 设计工具 | 测量 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC24 | 模型导入 | 模型浏览器 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC25 | 多体设计 | 修改未知类型运动副 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC26 | 模型导入 | 多体模型浏览器 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC27 | 多体设计 | 多体设计 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC28 | 多体设计 | 设置对象的属性 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC29 | 迭代设计 | 局部迭代设计 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC30 | 流程介绍 | 流程介绍 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC31 | 流体设计 | 油箱肋板切片 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC32 | 设计工具 | 平面环处理 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC33 | 模型导出 | 保存模型 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC34 | 流体设计 | 简单油箱切片 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC35 | 设计工具 | 曲面加厚 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC36 | 模型导出 | 生成 Modelica 模型 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC37 | 模型导入 | 三维视图 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC38 | 流体设计 | 油箱切片 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC39 | 模型导入 | 工具入口 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC40 | 迭代设计 | 整体迭代设计 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC41 | 错误码 | ERRCADSOFTWARENOTINSTALLED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC42 | 错误码 | PARSERPATHINVALID | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC43 | 错误码 | 错误码 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC44 | 错误码 | ERRDATAEXCHANGE_FAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC45 | 错误码 | ERRCADVERSIONTOOLOW | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC46 | 错误码 | ERROPENCADFILEFAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC47 | 错误码 | ERRCREATEPROCESS_FAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC48 | 错误码 | CADFILEIS_EMPTY | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC49 | 错误码 | ERROPENCADSOFTWAREFAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC50 | 错误码 | ERREXPORTSTEP_FAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC51 | 错误码 | PARSEFILEFAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC52 | 错误码 | ERR_RUNTIME | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC53 | 错误码 | ERRGENERATEFILE_FAILED | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC54 | 生成 Modelica 模型 | 生成 Modelica 模型 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC55 | 模型导入 | 模型导入 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC56 | 建模 | 建模 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC57 | 动画 | 动画 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC58 | 工程复制和移植 | 工程复制和移植 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC59 | 视图与交互 | 视图与交互 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
+| SC60 | 其它 | 常见问题 | 仅全局 PRD 映射（0%） | GLOBAL PRD |
 
 ## 5. 修订后的阶段计划
 
@@ -324,7 +408,7 @@
 
 退出标准：
 
-- `plan.md`、帮助页追踪表、验收口径一致
+- `docs/plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`、帮助页追踪表、验收口径一致
 - 后续每个迭代都能明确指向帮助页来源
 
 状态：`已完成`
@@ -471,7 +555,7 @@
 
 ## 9. 维护机制
 
-- 每次 Sprint 结束更新一次 `plan.md`
+- 每次 Sprint 结束更新一次 `docs/plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`
 - 每次更新必须同时修改“当前状态快照”和“下一迭代重点”
 - 新增能力时，必须补充其对应帮助页来源
 - 不能再新增脱离帮助目录的独立工作包命名
@@ -480,6 +564,6 @@
 
 本次修订完成了三件事：
 
-1. 修复 `plan.md` 编码损坏问题。
+1. 将根目录 `plan.md` 迁移到 `docs/plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`，并修复编码与维护路径问题。
 2. 将计划基线从旧 PRD 切换为 `GLOBAL_INDEX_CADTool_2026a_帮助文档页面索引_2026-03-09.md` 的 74 页帮助目录。
-3. 明确把“分组设计已形成交付证据，但整体验收仍未完成”的真实状态写入主计划。
+3. 补充 `SC01-SC60` 场景完成情况总表，明确当前场景交付资产分布与真实完成状态。

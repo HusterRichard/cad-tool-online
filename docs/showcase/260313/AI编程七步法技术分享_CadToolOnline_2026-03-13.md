@@ -174,7 +174,7 @@ CadToolOnline 的做法，是把这些不确定性前移，并把文档、计划
 
 当前仓库中已经可以看到两类计划资产：
 
-- 全局开发计划基线：`plan.md`
+- 全局开发计划基线：`docs/plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`
 - 场景计划：如 `docs/plan/scenarios/SC01_PLAN_添加接触_2026-03-11.md`
 
 这一步的价值，不是多写一份文档，而是解决 AI 编程里很常见的一个问题：**模型会给你很多正确的建议，但不会天然替你管理顺序和依赖。**
@@ -336,7 +336,7 @@ CadToolOnline 这个项目给我的最大启发是：
 - 七步法配图：[`7-phase.png`](./7-phase.png)
 - 技术架构图：[`cadtoolonline-technical-architecture.svg`](./cadtoolonline-technical-architecture.svg)
 - 全局 PRD：[`GLOBAL_PRD_CADToolOnline_三维建模界面重建_2026-03-06.md`](../../prd/global/GLOBAL_PRD_CADToolOnline_三维建模界面重建_2026-03-06.md)
-- 全局计划基线：[`plan.md`](../../../plan.md)
+- 全局计划基线：[`GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md`](../../plan/global/GLOBAL_PLAN_CadToolOnline_帮助文档对齐开发计划_2026-03-13.md)
 - 场景计划示例：[`SC01_PLAN_添加接触_2026-03-11.md`](../../plan/scenarios/SC01_PLAN_添加接触_2026-03-11.md)
 - 场景 PRD 示例：[`SC01_PRD_添加接触_2026-03-11.md`](../../prd/scenarios/SC01_PRD_添加接触_2026-03-11.md)
 - 场景 QA 示例：[`SC01_QA_添加接触_2026-03-11.md`](../../qa/plans/SC01_QA_添加接触_2026-03-11.md)
