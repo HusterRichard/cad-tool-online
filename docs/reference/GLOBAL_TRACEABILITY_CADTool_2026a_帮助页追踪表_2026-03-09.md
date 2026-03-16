@@ -67,7 +67,7 @@
 | `BuildConnectors.html` | WP-MB | 已落地 | `createJoint_*`、`src/webview/main.ts`、`packages/core/src/connectorDesign.ts`、`packages/three/src/ThreeViewer.ts`、`packages/three/src/JointVisualizer.ts`、`SC02_PRD/PLAN/QA` | `packages/core/test/connector-design.spec.ts`、`test/step-import-selection.test.mjs`、`SC02_QA_添加连接_2026-03-11.md` | 首版连接闭环已落地；完整点/线/面规则矩阵、万向节双叉语义、红蓝双色高亮仍待帮助页级对齐 |
 | `ModifyUnknownConnectors.html` | WP-MB | 未开始 | `plan.md` | - | 尚无明确实现证据 |
 | `BuildMotions.html` | WP-MB | 部分落地 | `createMotion_*` | `RIB-011` `RIB-012` `RIB-013` | 已有基本驱动对象 |
-| `BuildContacts.html` | WP-MB | 入口级 | PRD 场景映射 | - | 尚未见独立接触对象闭环 |
+| `BuildContacts.html` | WP-MB | 部分落地 | `src/panels/CadEditorPanel.ts`、`src/webview/main.ts`、`docs/prd/scenarios/SC01_PRD_添加接触_2026-03-11.md` | `tests/unit/extension/cad-editor-panel.spec.ts` `tests/unit/webview/contact-workflow-source.spec.ts` `docs/qa/plans/SC01_QA_添加接触_2026-03-11.md` | 已具备接触创建、属性、删除、导入导出与入口拦截；严格几何规则与运行级交互自动化仍待补齐 |
 | `ObjectAttribute.html` | WP-MB | 部分落地 | Properties 面板、group aggregation | `SC13_PRD_对零件进行分组_2026-03-11.md` | group 属性较完整，其它对象待补齐 |
 | `MaterialModify.html` | WP-MB | 入口级 | `selectedDensityByShapeId`、质量计算协调器 | `packages/core/test/mass-aggregation.spec.ts` | 用户工作流未形成 |
 | `PlanarLoopConstraints.html` | WP-TOOL | 入口级 | `planarRingProcess` 入口 | `RIB-020` | 仅入口和提示 |

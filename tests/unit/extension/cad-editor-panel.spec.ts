@@ -173,4 +173,32 @@ describe('CadEditorPanel', () => {
             fileContent: new Uint8Array([1, 2, 3, 4])
         });
     });
+
+    it('forwards point-point contact ribbon actions with the normalized contact type', async () => {
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        const handler = mocks.getMessageHandler();
+
+        await handler?.({ command: 'ribbonAction', action: 'createContact_pointPoint' });
+
+        expect(mocks.showInformationMessage).toHaveBeenCalledWith('Creating point-point contact');
+        expect(mocks.webview.postMessage).toHaveBeenCalledWith({
+            command: 'mbsAction',
+            action: 'createContact',
+            contactType: 'pointPoint'
+        });
+    });
+
+    it('forwards point-surface contact ribbon actions with the normalized contact type', async () => {
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        const handler = mocks.getMessageHandler();
+
+        await handler?.({ command: 'ribbonAction', action: 'createContact_pointSurface' });
+
+        expect(mocks.showInformationMessage).toHaveBeenCalledWith('Creating point-surface contact');
+        expect(mocks.webview.postMessage).toHaveBeenCalledWith({
+            command: 'mbsAction',
+            action: 'createContact',
+            contactType: 'pointSurface'
+        });
+    });
 });

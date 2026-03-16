@@ -9074,6 +9074,15 @@ function startContactCreation(contactType: ContactType): void {
         return;
     }
 
+    if (loadedShapes.size === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please load a model first'
+        });
+        setStatusInfo('Load a model before creating contacts');
+        return;
+    }
+
     resetCanvasInteraction();
     canvasInteractionMode = 'createContact';
     contactCreationPanelActive = true;
