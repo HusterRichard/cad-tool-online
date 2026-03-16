@@ -268,7 +268,7 @@ test('marker face placement converts viewer rays through the shape transform', a
 test('cad editor panel serves ribbon icons from svg assets', async () => {
   const panelSource = await readFile(new URL('../src/panels/CadEditorPanel.ts', import.meta.url), 'utf8');
 
-  assert.match(panelSource, /joinPath\(extensionUri, 'public', 'icons', 'svg', '32'\)/);
+  assert.match(panelSource, /joinPath\(extensionUri, 'dist', 'webview', 'icons', 'svg', '32'\)/);
   assert.doesNotMatch(panelSource, /\$\{icons32\}\/[a-z0-9_]+\.png/);
   assert.match(panelSource, /\$\{icons32\}\/cad_import\.svg/);
 });
@@ -277,7 +277,7 @@ test('model tree icons resolve svg files instead of raster png files', async () 
   const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
   const panelSource = await readFile(new URL('../src/panels/CadEditorPanel.ts', import.meta.url), 'utf8');
 
-  assert.match(panelSource, /joinPath\(extensionUri, 'public', 'icons', 'svg', '32'\)/);
+  assert.match(panelSource, /joinPath\(extensionUri, 'dist', 'webview', 'icons', 'svg', '32'\)/);
   assert.match(panelSource, /window\.ICONS_32_BASE = "\$\{icons32\}";/);
   assert.match(source, /function toTreeIconsBase\(base: string\): string/);
   assert.ok(source.includes("return base.replace(/\\/(?:png|svg)\\/32$/i, '/svg/16');"));
@@ -289,6 +289,15 @@ test('model tree icons resolve svg files instead of raster png files', async () 
   assert.match(source, /case 'category_motions':\s*return treeIconPath\('model_tree_motion_dir\.png'\)/);
   assert.match(source, /case 'category_forces':\s*return treeIconPath\('model_tree_force_dir\.png'\)/);
   assert.match(source, /case 'category_materials':\s*return treeIconPath\('model_tree_material_dir\.png'\)/);
+});
+
+test('vsix packaging keeps the full dist webview runtime and excludes source icons', async () => {
+  const ignoreSource = await readFile(new URL('../.vscodeignore', import.meta.url), 'utf8');
+
+  assert.match(ignoreSource, /!dist\/webview\/\*\*/);
+  assert.doesNotMatch(ignoreSource, /^!dist\/webview\/webview\.js$/m);
+  assert.match(ignoreSource, /^public\/\*\*$/m);
+  assert.doesNotMatch(ignoreSource, /^!public\/icons\/png\/32\/\*\*$/m);
 });
 
 test('orbit controls disable damping for immediate camera response', async () => {

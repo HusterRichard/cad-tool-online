@@ -549,7 +549,7 @@ export class CadEditorPanel {
 
         // Get URI for icon resources
         const icons32 = webview.asWebviewUri(
-            vscode.Uri.joinPath(extensionUri, 'public', 'icons', 'svg', '32')
+            vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'icons', 'svg', '32')
         );
         const nonce = this._getNonce();
 

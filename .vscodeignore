@@ -32,7 +32,7 @@ pnpm-lock.yaml
 # Exclude dist by default, then include runtime artifacts only
 dist/**
 !dist/extension.cjs
-!dist/webview/webview.js
+!dist/webview/**
 !dist/wasm/**
 dist/wasm/*.d.ts
 
@@ -60,4 +60,3 @@ CLAUDE.md
 .mcp.json
 .env.example
 public/**
-!public/icons/png/32/**

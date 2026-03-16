@@ -22,7 +22,7 @@ export default defineConfig({
         },
         sourcemap: true,
         minify: 'esbuild',
-        emptyOutDir: false
+        emptyOutDir: true
     },
     worker: {
         format: 'es'
