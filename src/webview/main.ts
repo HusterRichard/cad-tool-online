@@ -84,6 +84,7 @@ interface LoadedShape {
     };
     visible: boolean;
     parent?: LoadedShape;
+    cachedBounds?: { min: Vec3; max: Vec3 };
 }
 
 type RigidTransform = {
@@ -959,11 +960,24 @@ function syncSelectedEntitiesFromActive(): { kind: SelectionKind; id: string } |
     return active;
 }
 
+let prevTreeSelectedNodeIds = new Set<string>();
+
 function updateTreeSelectionClasses(): void {
-    document.querySelectorAll<HTMLElement>('.tree-node[data-selection-key]').forEach((node) => {
-        const selectionKey = node.dataset.selectionKey ?? '';
-        node.classList.toggle('selected', selectedNodeIds.has(selectionKey));
-    });
+    // Remove 'selected' from nodes no longer selected
+    for (const key of prevTreeSelectedNodeIds) {
+        if (!selectedNodeIds.has(key)) {
+            const node = document.querySelector<HTMLElement>(`.tree-node[data-selection-key="${CSS.escape(key)}"]`);
+            node?.classList.remove('selected');
+        }
+    }
+    // Add 'selected' to newly selected nodes
+    for (const key of selectedNodeIds) {
+        if (!prevTreeSelectedNodeIds.has(key)) {
+            const node = document.querySelector<HTMLElement>(`.tree-node[data-selection-key="${CSS.escape(key)}"]`);
+            node?.classList.add('selected');
+        }
+    }
+    prevTreeSelectedNodeIds = new Set(selectedNodeIds);
 }
 
 function isMarkerId(id: string): boolean {
@@ -1022,23 +1036,14 @@ function syncViewerSelectionFromState(): void {
     getSelectedDesignPointIds().forEach((designPointId) => targetIds.add(designPointId));
     getSelectedContactIds().forEach((contactId) => targetIds.add(contactId));
 
-    const currentIds = new Set(viewer.getSelectedIds());
     isSyncingViewerSelection = true;
     try {
-        currentIds.forEach((id) => {
-            if (!targetIds.has(id)) {
-                viewer.deselect(id);
-            }
-        });
-        const toAdd = Array.from(targetIds).filter((id) => !currentIds.has(id));
-        if (toAdd.length > 0) {
-            viewer.selectMany(toAdd);
-        }
+        viewer.replaceSelection(Array.from(targetIds));
     } finally {
         isSyncingViewerSelection = false;
     }
 
-    syncViewerGroupBoundsFromState();
+    scheduleGroupBoundsSync();
 }
 
 let hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1137,6 +1142,13 @@ function collectGroupPartIdsRecursive(groupId: string, collected: Set<string> = 
 }
 
 function computeShapeBounds(shape: LoadedShape): THREE.Box3 | null {
+    if (shape.cachedBounds) {
+        const box = new THREE.Box3();
+        box.min.set(shape.cachedBounds.min.x, shape.cachedBounds.min.y, shape.cachedBounds.min.z);
+        box.max.set(shape.cachedBounds.max.x, shape.cachedBounds.max.y, shape.cachedBounds.max.z);
+        return box;
+    }
+
     const box = new THREE.Box3();
     let hasBounds = false;
     const point = new THREE.Vector3();
@@ -1155,7 +1167,15 @@ function computeShapeBounds(shape: LoadedShape): THREE.Box3 | null {
     };
 
     visit(shape);
-    return hasBounds ? box : null;
+
+    if (hasBounds) {
+        shape.cachedBounds = {
+            min: { x: box.min.x, y: box.min.y, z: box.min.z },
+            max: { x: box.max.x, y: box.max.y, z: box.max.z }
+        };
+        return box;
+    }
+    return null;
 }
 
 function computeGroupBounds(groupId: string): { min: Vec3; max: Vec3 } | null {
@@ -1189,6 +1209,8 @@ function computeGroupBounds(groupId: string): { min: Vec3; max: Vec3 } | null {
     };
 }
 
+let groupBoundsRafId: number | null = null;
+
 function syncViewerGroupBoundsFromState(): void {
     if (!viewer) {
         return;
@@ -1199,6 +1221,16 @@ function syncViewerGroupBoundsFromState(): void {
         .filter((bounds): bounds is { min: Vec3; max: Vec3 } => Boolean(bounds));
 
     viewer.setSelectionBoundsBoxes(groupBounds);
+}
+
+function scheduleGroupBoundsSync(): void {
+    if (groupBoundsRafId !== null) {
+        cancelAnimationFrame(groupBoundsRafId);
+    }
+    groupBoundsRafId = requestAnimationFrame(() => {
+        groupBoundsRafId = null;
+        syncViewerGroupBoundsFromState();
+    });
 }
 
 function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null {
@@ -1300,50 +1332,65 @@ function renderSelectedGroupProperties(groupId: string): void {
     html += createPropertyRow('零件总数', partIds.length.toString());
     html += createPropertyRow('创建时间', group.createdAt);
     html += '<div class="property-separator"></div>';
-    html += '<div class="property-section-header">物理属性</div>';
+    html += '<div class="property-section-header" style="display:flex;align-items:center;justify-content:space-between;">';
+    html += '物理属性';
+    html += '<button id="group-mass-compute-btn" class="compact-btn" style="font-size:11px;padding:1px 8px;cursor:pointer;">计算</button>';
+    html += '</div>';
     html += '<div id="group-mass-properties-area">';
-    html += createPropertyRow('状态', '计算中...');
+    html += createPropertyRow('状态', '未计算');
     html += '</div>';
 
     propsEl.innerHTML = html;
 
-    setTimeout(() => {
+    document.getElementById('group-mass-compute-btn')?.addEventListener('click', () => {
+        const btn = document.getElementById('group-mass-compute-btn');
+        if (btn) {
+            btn.textContent = '计算中...';
+            (btn as HTMLButtonElement).disabled = true;
+        }
+
         const massArea = document.getElementById('group-mass-properties-area');
         if (!massArea) return;
 
-        const massSummary = aggregateGroupMassProperties(groupId);
-        let massHtml = '';
+        setTimeout(() => {
+            const massSummary = aggregateGroupMassProperties(groupId);
+            let massHtml = '';
 
-        if (!massSummary) {
-            massHtml += createPropertyRow('状态', '不可用');
-        } else {
-            const missingText = massSummary.missingPartIds.length > 0
-                ? massSummary.missingPartIds.map(activeShapeName).join(', ')
-                : '(none)';
-            const inertiaRows = [
-                [massSummary.inertiaMatrix.m[0], massSummary.inertiaMatrix.m[1], massSummary.inertiaMatrix.m[2]] as [number, number, number],
-                [massSummary.inertiaMatrix.m[3], massSummary.inertiaMatrix.m[4], massSummary.inertiaMatrix.m[5]] as [number, number, number],
-                [massSummary.inertiaMatrix.m[6], massSummary.inertiaMatrix.m[7], massSummary.inertiaMatrix.m[8]] as [number, number, number]
-            ];
-            massHtml += createPropertyRow('已计算零件', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
-            massHtml += createPropertyRow('缺失零件', missingText);
-            massHtml += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
-            massHtml += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
-            massHtml += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
-            massHtml += '<div class="property-sub-header">  质心</div>';
-            massHtml += createVectorRow([
-                massSummary.centerOfMass.x,
-                massSummary.centerOfMass.y,
-                massSummary.centerOfMass.z
-            ], 'm');
-            massHtml += '<div class="property-sub-header">  惯性张量</div>';
-            massHtml += createVectorRow(inertiaRows[0]);
-            massHtml += createVectorRow(inertiaRows[1]);
-            massHtml += createVectorRow(inertiaRows[2], 'kg·m²');
-        }
+            if (!massSummary) {
+                massHtml += createPropertyRow('状态', '不可用');
+            } else {
+                const missingText = massSummary.missingPartIds.length > 0
+                    ? massSummary.missingPartIds.map(activeShapeName).join(', ')
+                    : '(none)';
+                const inertiaRows = [
+                    [massSummary.inertiaMatrix.m[0], massSummary.inertiaMatrix.m[1], massSummary.inertiaMatrix.m[2]] as [number, number, number],
+                    [massSummary.inertiaMatrix.m[3], massSummary.inertiaMatrix.m[4], massSummary.inertiaMatrix.m[5]] as [number, number, number],
+                    [massSummary.inertiaMatrix.m[6], massSummary.inertiaMatrix.m[7], massSummary.inertiaMatrix.m[8]] as [number, number, number]
+                ];
+                massHtml += createPropertyRow('已计算零件', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
+                massHtml += createPropertyRow('缺失零件', missingText);
+                massHtml += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
+                massHtml += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
+                massHtml += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
+                massHtml += '<div class="property-sub-header">  质心</div>';
+                massHtml += createVectorRow([
+                    massSummary.centerOfMass.x,
+                    massSummary.centerOfMass.y,
+                    massSummary.centerOfMass.z
+                ], 'm');
+                massHtml += '<div class="property-sub-header">  惯性张量</div>';
+                massHtml += createVectorRow(inertiaRows[0]);
+                massHtml += createVectorRow(inertiaRows[1]);
+                massHtml += createVectorRow(inertiaRows[2], 'kg·m²');
+            }
 
-        massArea.innerHTML = massHtml;
-    }, 0);
+            massArea.innerHTML = massHtml;
+            if (btn) {
+                btn.textContent = '重新计算';
+                (btn as HTMLButtonElement).disabled = false;
+            }
+        }, 0);
+    });
 }
 
 function updateSelectionPropertiesPanel(): void {
@@ -1387,6 +1434,7 @@ function selectSelection(
     nextSelection: { kind: SelectionKind; id: string } | null,
     options?: { additive?: boolean; toggle?: boolean; fromViewer?: boolean }
 ): void {
+    const t0 = performance.now();
     const selectionKey = nextSelection
         ? (
             nextSelection.kind === 'shape'
@@ -1423,12 +1471,18 @@ function selectSelection(
 
     syncSelectedEntitiesFromActive();
 
+    const t1 = performance.now();
     updateTreeSelectionClasses();
+    const t2 = performance.now();
     if (!options?.fromViewer) {
         syncViewerSelectionFromState();
     }
+    const t3 = performance.now();
     updateSelectionPropertiesPanel();
+    const t4 = performance.now();
     syncContactPartHighlights();
+    const t5 = performance.now();
+    console.log(`[selectSelection] total=${(t5 - t0).toFixed(1)}ms  tree=${(t2 - t1).toFixed(1)}ms  viewer=${(t3 - t2).toFixed(1)}ms  props=${(t4 - t3).toFixed(1)}ms  contact=${(t5 - t4).toFixed(1)}ms`);
 
     if (motionCreationPanelActive && selectedJointId) {
         applyMotionConnectorSelection(selectedJointId);
@@ -1526,7 +1580,7 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
     updateTreeSelectionClasses();
     updateSelectionPropertiesPanel();
     syncContactPartHighlights();
-    syncViewerGroupBoundsFromState();
+    scheduleGroupBoundsSync();
     if (selectedShapeId) {
         rememberShapeSelection(selectedShapeId);
         vscode.postMessage({ command: 'selectShape', shapeId: selectedShapeId });
@@ -4831,6 +4885,11 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             initializeImportedGroupDesignState();
             resetImportedTreeExpansionState();
 
+            // Preheat bounds cache for all loaded shapes
+            for (const shape of loadedShapes.values()) {
+                computeShapeBounds(shape);
+            }
+
             showProgress(95, 'Finalizing...');
 
             // Fit view to show all shapes
@@ -4897,6 +4956,9 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                     loadedShapes.set(shapeId, shape);
                     rootShapes.push(shape);
                     addedCount++;
+
+                    // Preheat bounds cache
+                    computeShapeBounds(shape);
                 }
 
                 // Update progress (30% to 90% for mesh generation)

@@ -365,6 +365,29 @@ export class SelectionManager {
         });
     }
 
+    /**
+     * 替换当前选中集合，只对差异部分做材质操作，不触发事件（由调用方统一处理）
+     */
+    replaceSelection(newIds: string[]): void {
+        const newSet = new Set(newIds.filter(id => this.selectableObjects.has(id)));
+
+        // 恢复不再选中的
+        for (const id of this.selectedIds) {
+            if (!newSet.has(id)) {
+                this.restoreMaterial(id);
+            }
+        }
+
+        // 高亮新增选中的
+        for (const id of newSet) {
+            if (!this.selectedIds.has(id)) {
+                this.applyHighlightMaterial(id);
+            }
+        }
+
+        this.selectedIds = newSet;
+    }
+
     toggleSelection(id: string): void {
         if (this.selectedIds.has(id)) {
             this.deselect(id);

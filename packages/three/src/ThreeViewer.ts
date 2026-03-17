@@ -560,6 +560,12 @@ export class ThreeViewer {
         this.updateOutlineTargets();
     }
 
+    /** 超过此数量的选中对象时跳过 OutlinePass，避免 GPU 过载 */
+    private static readonly OUTLINE_MAX_OBJECTS = 8;
+
+    /** 选中变更后跳过后处理的帧数（提供即时视觉反馈） */
+    private _postProcessSkipFrames = 0;
+
     private updateOutlineTargets(): void {
         if (!this.outlinePass) {
             return;
@@ -569,7 +575,14 @@ export class ThreeViewer {
             .map(id => this.meshes.get(id))
             .filter((mesh): mesh is THREE.Mesh => Boolean(mesh));
 
-        this.outlinePass.selectedObjects = selectedObjects;
+        if (selectedObjects.length > ThreeViewer.OUTLINE_MAX_OBJECTS) {
+            this.outlinePass.selectedObjects = [];
+        } else {
+            this.outlinePass.selectedObjects = selectedObjects;
+        }
+
+        // 选中变更后跳过 1 帧后处理，让高亮材质即时可见
+        this._postProcessSkipFrames = 1;
     }
 
     private shouldUsePostProcessing(): boolean {
@@ -580,16 +593,29 @@ export class ThreeViewer {
         return true;
     }
 
+    private _lastFrameLog = 0;
+
     private animate(): void {
         requestAnimationFrame(this.animate.bind(this));
         this.controls.update();
         this.updateCameraClippingRange();
 
+        const t0 = performance.now();
         const composer = this.composer;
-        if (this.shouldUsePostProcessing() && composer) {
+        if (this._postProcessSkipFrames > 0) {
+            // 选中切换后跳过后处理，直接渲染以提供即时反馈
+            this._postProcessSkipFrames--;
+            this.renderer.render(this.scene, this.camera);
+        } else if (this.shouldUsePostProcessing() && composer) {
             composer.render();
         } else {
             this.renderer.render(this.scene, this.camera);
+        }
+        const dt = performance.now() - t0;
+        if (dt > 30 && t0 - this._lastFrameLog > 1000) {
+            this._lastFrameLog = t0;
+            const outlineCount = this.outlinePass?.selectedObjects?.length ?? 0;
+            console.warn(`[animate] render=${dt.toFixed(1)}ms  outlineObjects=${outlineCount}`);
         }
     }
 
@@ -1142,6 +1168,16 @@ export class ThreeViewer {
      */
     selectMany(ids: string[]): void {
         this.selectionManager?.selectMany(ids);
+        this.updateOutlineTargets();
+    }
+
+    /**
+     * 替换当前选中集合（批量操作，只触发一次 outline 和视觉同步）
+     */
+    replaceSelection(ids: string[]): void {
+        this.selectionManager?.replaceSelection(ids);
+        this.syncFrameSelectionVisuals();
+        this.syncJointSelectionVisuals();
         this.updateOutlineTargets();
     }
 
