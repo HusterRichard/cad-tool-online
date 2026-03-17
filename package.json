@@ -1,144 +1,146 @@
 {
-  "name": "cadtool-online",
-  "version": "0.1.1",
-  "private": true,
-  "type": "module",
-  "displayName": "CadToolOnline",
-  "description": "Online CAD tool for multi-body dynamics design",
-  "publisher": "cadtool",
-  "repository": {
-    "type": "git",
-    "url": "https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline.git"
-  },
-  "homepage": "https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline",
-  "engines": {
-    "vscode": "^1.80.0",
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onLanguage:json",
-    "onLanguage:jsonc",
-    "onLanguage:modelica",
-    "onCommand:cadtool-online.openEditorFromMenu",
-    "onCommand:cadtool-online.openCadtoolDocs",
-    "onCommand:cadtool-online.exportCadtoolConfig",
-    "onCommand:cadtool-online.importCadtoolConfig",
-    "onCommand:cadtool-online.refreshCadtoolIndex"
-  ],
-  "main": "./dist/extension.cjs",
-  "contributes": {
-    "commands": [
-      {
-        "command": "cadtool-online.openEditor",
-        "title": "Open CAD Editor",
-        "category": "CadToolOnline"
-      },
-      {
-        "command": "cadtool-online.openEditorFromMenu",
-        "title": "CADTool",
-        "category": "CadToolOnline"
-      },
-      {
-        "command": "cadtool-online.openCadtoolDocs",
-        "title": "Open CADTool Docs",
-        "category": "CadToolOnline"
-      },
-      {
-        "command": "cadtool-online.refreshCadtoolIndex",
-        "title": "Refresh CADTool Index",
-        "category": "CadToolOnline"
-      },
-      {
-        "command": "cadtool-online.exportCadtoolConfig",
-        "title": "Export CADTool Config",
-        "category": "CadToolOnline"
-      },
-      {
-        "command": "cadtool-online.importCadtoolConfig",
-        "title": "Import CADTool Config",
-        "category": "CadToolOnline"
-      }
+    "name": "cadtool-online",
+    "version": "0.1.1",
+    "private": true,
+    "type": "module",
+    "displayName": "CadToolOnline",
+    "description": "Online CAD tool for multi-body dynamics design",
+    "publisher": "cadtool",
+    "repository": {
+        "type": "git",
+        "url": "https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline.git"
+    },
+    "homepage": "https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline",
+    "engines": {
+        "vscode": "^1.80.0",
+        "node": ">=18.0.0",
+        "pnpm": ">=8.0.0"
+    },
+    "categories": [
+        "Other"
     ],
-    "jsonValidation": [
-      {
-        "fileMatch": "**/cadtool.config.json",
-        "url": "./schemas/cadtool-config.schema.json"
-      },
-      {
-        "fileMatch": "**/.cadtoolrc.json",
-        "url": "./schemas/cadtool-config.schema.json"
-      }
+    "activationEvents": [
+        "onLanguage:json",
+        "onLanguage:jsonc",
+        "onLanguage:modelica",
+        "onCommand:cadtool-online.openEditorFromMenu",
+        "onCommand:cadtool-online.openCadtoolDocs",
+        "onCommand:cadtool-online.exportCadtoolConfig",
+        "onCommand:cadtool-online.importCadtoolConfig",
+        "onCommand:cadtool-online.refreshCadtoolIndex"
     ],
-    "snippets": [
-      {
-        "language": "json",
-        "path": "./snippets/cadtool.code-snippets"
-      },
-      {
-        "language": "jsonc",
-        "path": "./snippets/cadtool.code-snippets"
-      }
-    ],
-    "menus": {
-      "file/newFile": [
-        {
-          "command": "cadtool-online.openEditorFromMenu",
-          "group": "navigation"
+    "main": "./dist/extension.cjs",
+    "contributes": {
+        "commands": [
+            {
+                "command": "cadtool-online.openEditor",
+                "title": "Open CAD Editor",
+                "category": "CadToolOnline"
+            },
+            {
+                "command": "cadtool-online.openEditorFromMenu",
+                "title": "CADTool",
+                "category": "CadToolOnline"
+            },
+            {
+                "command": "cadtool-online.openCadtoolDocs",
+                "title": "Open CADTool Docs",
+                "category": "CadToolOnline"
+            },
+            {
+                "command": "cadtool-online.refreshCadtoolIndex",
+                "title": "Refresh CADTool Index",
+                "category": "CadToolOnline"
+            },
+            {
+                "command": "cadtool-online.exportCadtoolConfig",
+                "title": "Export CADTool Config",
+                "category": "CadToolOnline"
+            },
+            {
+                "command": "cadtool-online.importCadtoolConfig",
+                "title": "Import CADTool Config",
+                "category": "CadToolOnline"
+            }
+        ],
+        "jsonValidation": [
+            {
+                "fileMatch": "**/cadtool.config.json",
+                "url": "./schemas/cadtool-config.schema.json"
+            },
+            {
+                "fileMatch": "**/.cadtoolrc.json",
+                "url": "./schemas/cadtool-config.schema.json"
+            }
+        ],
+        "snippets": [
+            {
+                "language": "json",
+                "path": "./snippets/cadtool.code-snippets"
+            },
+            {
+                "language": "jsonc",
+                "path": "./snippets/cadtool.code-snippets"
+            }
+        ],
+        "menus": {
+            "file/newFile": [
+                {
+                    "command": "cadtool-online.openEditorFromMenu",
+                    "group": "navigation"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "cadtool-online.openEditorFromMenu",
+                    "when": "true"
+                }
+            ]
         }
-      ],
-      "commandPalette": [
-        {
-          "command": "cadtool-online.openEditorFromMenu",
-          "when": "true"
-        }
-      ]
+    },
+    "scripts": {
+        "build": "pnpm -r build",
+        "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.cjs --external:vscode --format=cjs --platform=node --target=node18 --sourcemap",
+        "build:webview": "vite build",
+        "build:all": "pnpm build:wasm && pnpm build && pnpm build:extension && pnpm build:webview",
+        "web": "pnpm build:webview && node scripts/start-web.mjs",
+        "web:prepare": "pnpm build:webview && node scripts/start-web.mjs --prepare-only",
+        "dev": "pnpm -r --parallel dev",
+        "dev:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.cjs --external:vscode --format=cjs --platform=node --target=node18 --sourcemap --watch",
+        "lint": "eslint packages src --ext .ts,.tsx",
+        "format": "prettier --write \"packages/**/*.{ts,tsx,json}\" \"src/**/*.{ts,tsx}\"",
+        "clean": "pnpm -r clean && rimraf dist",
+        "setup:wasm": "node scripts/setup_wasm_deps.mjs",
+        "build:wasm": "cd packages/geo/cpp && cmake --preset release && cmake --build --preset release",
+        "build:wasm:debug": "cd packages/geo/cpp && cmake --preset debug && cmake --build --preset debug",
+        "setup:git-rules": "node scripts/setup-git-rules.mjs",
+        "check:ribbon-icons": "node scripts/check-ribbon-action-icons.mjs --file cadtoolonline.pen --out docs/data/RIBBON_ICON_ACCEPTANCE.json",
+        "test": "pnpm --filter @cadtool-online/core test:run && pnpm --filter @cadtool-online/geo test:run && pnpm --filter @cadtool-online/three test:run && pnpm test:root:run",
+        "test:root": "node packages/geo/node_modules/vitest/vitest.mjs --config tests/vitest.config.ts",
+        "test:root:run": "node packages/geo/node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts",
+        "test:root:coverage": "node packages/geo/node_modules/vitest/vitest.mjs run --coverage --config tests/vitest.config.ts",
+        "vscode:prepublish": "pnpm run build:all",
+        "package": "pnpm run build:all && vsce package --no-dependencies --skip-license --baseContentUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/blob/main/ --baseImagesUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/raw/main/"
+    },
+    "dependencies": {
+        "@cadtool-online/core": "workspace:*",
+        "@cadtool-online/geo": "workspace:*",
+        "@cadtool-online/three": "workspace:*",
+        "@cadtool-online/ui": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@types/vscode": "^1.80.0",
+        "@typescript-eslint/eslint-plugin": "^7.0.0",
+        "@typescript-eslint/parser": "^7.0.0",
+        "@vscode/vsce": "^2.22.0",
+        "esbuild": "^0.27.3",
+        "eslint": "^8.57.0",
+        "prettier": "^3.2.0",
+        "rimraf": "^5.0.0",
+        "sharp": "^0.34.5",
+        "three": "^0.170.0",
+        "typescript": "^5.3.0",
+        "vite": "^5.4.0"
     }
-  },
-  "scripts": {
-    "build": "pnpm -r build",
-    "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.cjs --external:vscode --format=cjs --platform=node --target=node18 --sourcemap",
-    "build:webview": "vite build",
-    "build:all": "pnpm build:wasm && pnpm build && pnpm build:extension && pnpm build:webview",
-    "dev": "pnpm -r --parallel dev",
-    "dev:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.cjs --external:vscode --format=cjs --platform=node --target=node18 --sourcemap --watch",
-    "lint": "eslint packages src --ext .ts,.tsx",
-    "format": "prettier --write \"packages/**/*.{ts,tsx,json}\" \"src/**/*.{ts,tsx}\"",
-    "clean": "pnpm -r clean && rimraf dist",
-    "setup:wasm": "node scripts/setup_wasm_deps.mjs",
-    "build:wasm": "cd packages/geo/cpp && cmake --preset release && cmake --build --preset release",
-    "build:wasm:debug": "cd packages/geo/cpp && cmake --preset debug && cmake --build --preset debug",
-    "setup:git-rules": "node scripts/setup-git-rules.mjs",
-    "check:ribbon-icons": "node scripts/check-ribbon-action-icons.mjs --file cadtoolonline.pen --out docs/data/RIBBON_ICON_ACCEPTANCE.json",
-    "test": "pnpm --filter @cadtool-online/core test:run && pnpm --filter @cadtool-online/geo test:run && pnpm --filter @cadtool-online/three test:run && pnpm test:root:run",
-    "test:root": "node packages/geo/node_modules/vitest/vitest.mjs --config tests/vitest.config.ts",
-    "test:root:run": "node packages/geo/node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts",
-    "test:root:coverage": "node packages/geo/node_modules/vitest/vitest.mjs run --coverage --config tests/vitest.config.ts",
-    "vscode:prepublish": "pnpm run build:all",
-    "package": "pnpm run build:all && vsce package --no-dependencies --skip-license --baseContentUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/blob/main/ --baseImagesUrl https://git.tongyuan.cc/sysplorer/syscad/aicompetition/CadToolOnline/-/raw/main/"
-  },
-  "dependencies": {
-    "@cadtool-online/core": "workspace:*",
-    "@cadtool-online/geo": "workspace:*",
-    "@cadtool-online/three": "workspace:*",
-    "@cadtool-online/ui": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@types/vscode": "^1.80.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "@vscode/vsce": "^2.22.0",
-    "esbuild": "^0.27.3",
-    "eslint": "^8.57.0",
-    "prettier": "^3.2.0",
-    "rimraf": "^5.0.0",
-    "sharp": "^0.34.5",
-    "three": "^0.170.0",
-    "typescript": "^5.3.0",
-    "vite": "^5.4.0"
-  }
 }
