@@ -3,10 +3,14 @@
 
 import * as THREE from 'three';
 import { ThreeViewer, type JointData, type MarkerGuideData } from '@cadtool-online/three';
-import { MbsJointType, OcctWrapper, type MassProperties, type StepReadResult } from '@cadtool-online/geo';
+import {
+    MbsJointType,
+    OcctWrapper,
+    type MassProperties,
+    type StepReadResult
+} from '@cadtool-online/geo';
 import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
-    aggregateMassProperties,
     buildModelBrowserTree,
     cleanEmptyGroups as cleanEmptyGroupsInState,
     DEFAULT_CONNECTOR_DIRECTION,
@@ -42,6 +46,10 @@ import {
     type RenderConfigState,
     type VisualPreset
 } from './renderConfig';
+import {
+    GroupMassPropertiesCoordinator,
+    type GroupMassSummary
+} from './groupMassPropertiesCoordinator';
 import { invokeViewerMethod } from './viewerCapabilities';
 import { MassPropertiesCoordinator } from './massPropertiesCoordinator';
 import { MassPropertiesWorkerClient } from './massPropertiesWorkerClient';
@@ -138,7 +146,14 @@ let refFrameCreationPanelActive = false;
 let designPointCreationPanelActive = false;
 let designPointCreationMode: 'pick' | 'calc' = 'pick';
 let designPointCalcMode: 'midpoint' | 'offset' | 'intersection' = 'midpoint';
-let designPointPickIntent: 'placement' | 'firstPoint' | 'secondPoint' | 'basePoint' | 'direction' | 'featureA' | 'featureB' = 'placement';
+let designPointPickIntent:
+    | 'placement'
+    | 'firstPoint'
+    | 'secondPoint'
+    | 'basePoint'
+    | 'direction'
+    | 'featureA'
+    | 'featureB' = 'placement';
 let designPointDraft: DesignPointDraft | null = null;
 let motionCreationPanelActive = false;
 let motionCreationMode: 'fast' | 'standard' = 'fast';
@@ -153,7 +168,14 @@ let contactCreationPreset: ContactType = 'pointPoint';
 let activeContactHighlightIds: string[] = [];
 
 type FrameEntityKind = 'marker' | 'refFrame';
-type CanvasInteractionMode = 'none' | 'createMarker' | 'createDesignPoint' | 'createJoint' | 'createMotion' | 'editFrame' | 'createContact';
+type CanvasInteractionMode =
+    | 'none'
+    | 'createMarker'
+    | 'createDesignPoint'
+    | 'createJoint'
+    | 'createMotion'
+    | 'editFrame'
+    | 'createContact';
 let canvasInteractionMode: CanvasInteractionMode = 'none';
 
 const DRAFT_MARKER_ID = '__draft_marker__';
@@ -251,11 +273,17 @@ function normalizeImportedDisplayColor(
     const isNeutralMetal = Math.abs(r - g) <= 10 && Math.abs(g - b) <= 10 && r >= 0xc0;
     const isWarmBodyPaint = r >= 0xd0 && g >= 0x78 && b <= 0x50;
 
-    if (/(tire|tyre|rubber|seat|cushion|damping|damper)/.test(lowerName) && (isNearlyWhite || isNeutralMetal)) {
+    if (
+        /(tire|tyre|rubber|seat|cushion|damping|damper)/.test(lowerName) &&
+        (isNearlyWhite || isNeutralMetal)
+    ) {
         return CAD_DARK_COMPONENT_COLOR;
     }
 
-    if (/(cylinder|rod|shaft|axle|eje|piston|hub|nave|rim)/.test(lowerName) && (isNearlyWhite || isNeutralMetal)) {
+    if (
+        /(cylinder|rod|shaft|axle|eje|piston|hub|nave|rim)/.test(lowerName) &&
+        (isNearlyWhite || isNeutralMetal)
+    ) {
         return CAD_LIGHT_METAL_COLOR;
     }
 
@@ -323,7 +351,15 @@ interface MbsGroupEntity {
 }
 
 type GroupKind = 'manual' | 'default' | 'imported';
-type SelectionKind = 'shape' | 'group' | 'marker' | 'refFrame' | 'joint' | 'motion' | 'designPoint' | 'contact';
+type SelectionKind =
+    | 'shape'
+    | 'group'
+    | 'marker'
+    | 'refFrame'
+    | 'joint'
+    | 'motion'
+    | 'designPoint'
+    | 'contact';
 type ContactType = 'pointPoint' | 'pointSurface';
 type ContactCreationMode = 'fast' | 'standard';
 
@@ -444,6 +480,9 @@ const explodeDataMap: Map<string, ExplodeData> = new Map();
 let renderConfig: RenderConfigState = loadRenderConfigState();
 const massPropertiesWorkerClient = new MassPropertiesWorkerClient(window.WASM_BASE_URL ?? null);
 const massPropertiesCoordinator = new MassPropertiesCoordinator(massPropertiesWorkerClient);
+const groupMassPropertiesCoordinator = new GroupMassPropertiesCoordinator(
+    massPropertiesWorkerClient
+);
 const selectedDensityByShapeId = new Map<string, number>();
 
 const mbsGroups = {
@@ -540,21 +579,23 @@ function toContactSelectionKey(contactId: string): string {
     return `contact:${contactId}`;
 }
 
-function parseSelectionKey(selectionKey: string | null): { kind: SelectionKind; id: string } | null {
+function parseSelectionKey(
+    selectionKey: string | null
+): { kind: SelectionKind; id: string } | null {
     if (!selectionKey) {
         return null;
     }
     const [kind, ...rest] = selectionKey.split(':');
     if (
-        (kind !== 'shape'
-            && kind !== 'group'
-            && kind !== 'marker'
-            && kind !== 'refFrame'
-            && kind !== 'joint'
-            && kind !== 'motion'
-            && kind !== 'designPoint'
-            && kind !== 'contact')
-        || rest.length === 0
+        (kind !== 'shape' &&
+            kind !== 'group' &&
+            kind !== 'marker' &&
+            kind !== 'refFrame' &&
+            kind !== 'joint' &&
+            kind !== 'motion' &&
+            kind !== 'designPoint' &&
+            kind !== 'contact') ||
+        rest.length === 0
     ) {
         return null;
     }
@@ -581,15 +622,15 @@ function assignUniqueImportedPartNames(shapes: LoadedShape[]): void {
             shape.name = occurrenceIndex === 0 ? baseName : `${baseName}_${occurrenceIndex}`;
         }
 
-        shape.children?.forEach((child) => visit(child));
+        shape.children?.forEach(child => visit(child));
     };
 
-    shapes.forEach((shape) => visit(shape));
+    shapes.forEach(shape => visit(shape));
 }
 
 function listGroups(): GroupNode[] {
     return Object.values(groupDesignState.groupsById)
-        .filter((group) => !group.deletedAt)
+        .filter(group => !group.deletedAt)
         .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name));
 }
 
@@ -611,18 +652,20 @@ function toLegacyGroupEntity(group: GroupNode): MbsGroupEntity {
 
 function buildPartOwnerGroupMap(): Map<string, string> {
     const ownerMap = new Map<string, string>();
-    listGroups().forEach((group) => {
-        group.memberPartIds.forEach((partId) => ownerMap.set(partId, group.id));
+    listGroups().forEach(group => {
+        group.memberPartIds.forEach(partId => ownerMap.set(partId, group.id));
     });
     return ownerMap;
 }
 
 function syncUngroupedPartIds(): void {
     const groupedPartIds = new Set<string>();
-    listGroups().forEach((group) => {
-        group.memberPartIds.forEach((partId) => groupedPartIds.add(partId));
+    listGroups().forEach(group => {
+        group.memberPartIds.forEach(partId => groupedPartIds.add(partId));
     });
-    groupDesignState.ungroupedPartIds = getAllGroupablePartIds().filter((partId) => !groupedPartIds.has(partId));
+    groupDesignState.ungroupedPartIds = getAllGroupablePartIds().filter(
+        partId => !groupedPartIds.has(partId)
+    );
 }
 
 function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
@@ -630,11 +673,12 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
     const importedState = createEmptyGroupDesignState();
 
     const visit = (shape: LoadedShape, parentGroupId: string | null, order: number): void => {
-        const memberPartIds = shape.type === 'assembly'
-            ? (shape.children ?? [])
-                .filter((child) => child.type !== 'assembly')
-                .map((child) => child.id)
-            : [shape.id];
+        const memberPartIds =
+            shape.type === 'assembly'
+                ? (shape.children ?? [])
+                      .filter(child => child.type !== 'assembly')
+                      .map(child => child.id)
+                : [shape.id];
 
         const group: GroupNode = {
             id: `import_group_${shape.id}`,
@@ -662,7 +706,7 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
         }
 
         let childOrder = 1;
-        (shape.children ?? []).forEach((child) => {
+        (shape.children ?? []).forEach(child => {
             if (child.type !== 'assembly') {
                 return;
             }
@@ -672,7 +716,7 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
     };
 
     let rootOrder = 1;
-    shapes.forEach((shape) => {
+    shapes.forEach(shape => {
         if (shape.type !== 'assembly') {
             return;
         }
@@ -686,13 +730,13 @@ function buildImportedGroupsFromShapes(shapes: LoadedShape[]): GroupNode[] {
 function initializeImportedGroupDesignState(): void {
     groupDesignState = createEmptyGroupDesignState(getAllGroupablePartIds());
     const importedGroups = buildImportedGroupsFromShapes(flattenTopLevelAssemblyShapes(rootShapes));
-    importedGroups.forEach((group) => {
+    importedGroups.forEach(group => {
         upsertGroupNode(group);
     });
     groupDesignState = materializeUngroupedPartsAsGroups(groupDesignState, {
         kind: 'imported',
-        resolveGroupName: (partId) => loadedShapes.get(partId)?.name ?? partId,
-        createGroupId: (partId) => `import_group_${partId}`
+        resolveGroupName: partId => loadedShapes.get(partId)?.name ?? partId,
+        createGroupId: partId => `import_group_${partId}`
     }).state as GroupDesignState;
 }
 
@@ -737,11 +781,11 @@ function getOrderedChildGroupIds(parentGroupId: string | null): string[] {
 
 function rebuildGroupIndexes(): void {
     const nextRootIds: string[] = [];
-    Object.values(groupDesignState.groupsById).forEach((group) => {
+    Object.values(groupDesignState.groupsById).forEach(group => {
         group.childGroupIds = [];
     });
 
-    listGroups().forEach((group) => {
+    listGroups().forEach(group => {
         if (group.parentGroupId && groupDesignState.groupsById[group.parentGroupId]) {
             groupDesignState.groupsById[group.parentGroupId].childGroupIds.push(group.id);
             return;
@@ -812,7 +856,7 @@ function resolveFrameOwnerForShape(shapeId: string): MarkerOwnerRef {
 
 function buildMarkerDesignGroupMap(): Record<string, { id: string; parentGroupId: string | null }> {
     return Object.fromEntries(
-        listGroups().map((group) => [
+        listGroups().map(group => [
             group.id,
             {
                 id: group.id,
@@ -823,11 +867,11 @@ function buildMarkerDesignGroupMap(): Record<string, { id: string; parentGroupId
 }
 
 function findOwningShapeForFrame(frameId: string, kind: FrameEntityKind): LoadedShape | null {
-    const ownerId = kind === 'marker'
-        ? createdMarkers.find((marker) => marker.id === frameId)?.parentId
-            ?? createdMarkers.find((marker) => marker.id === frameId)?.groupId
-        : createdRefFrames.get(frameId)?.parentId
-            ?? createdRefFrames.get(frameId)?.groupId;
+    const ownerId =
+        kind === 'marker'
+            ? (createdMarkers.find(marker => marker.id === frameId)?.parentId ??
+              createdMarkers.find(marker => marker.id === frameId)?.groupId)
+            : (createdRefFrames.get(frameId)?.parentId ?? createdRefFrames.get(frameId)?.groupId);
     if (!ownerId) {
         return null;
     }
@@ -840,7 +884,8 @@ function findOwningShapeForFrame(frameId: string, kind: FrameEntityKind): Loaded
         return null;
     }
 
-    const candidatePartId = group.memberPartIds[0] ?? Array.from(collectGroupPartIdsRecursive(group.id))[0];
+    const candidatePartId =
+        group.memberPartIds[0] ?? Array.from(collectGroupPartIdsRecursive(group.id))[0];
     return candidatePartId ? (loadedShapes.get(candidatePartId) ?? null) : null;
 }
 
@@ -850,66 +895,66 @@ function frameOwnerDisplayName(ownerId: string): string {
 
 function getSelectedShapeIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'shape')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'shape')
+        .map(entry => entry.id);
 }
 
 function getSelectedGroupIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'group')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'group')
+        .map(entry => entry.id);
 }
 
 function getSelectedMarkerIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'marker')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'marker')
+        .map(entry => entry.id);
 }
 
 function getSelectedRefFrameIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'refFrame')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'refFrame')
+        .map(entry => entry.id);
 }
 
 function getSelectedJointIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'joint')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'joint')
+        .map(entry => entry.id);
 }
 
 function getSelectedMotionIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'motion')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'motion')
+        .map(entry => entry.id);
 }
 
 function getSelectedDesignPointIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'designPoint')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'designPoint')
+        .map(entry => entry.id);
 }
 
 function getSelectedContactIds(): string[] {
     return Array.from(selectedNodeIds)
-        .map((selectionKey) => parseSelectionKey(selectionKey))
+        .map(selectionKey => parseSelectionKey(selectionKey))
         .filter((entry): entry is { kind: SelectionKind; id: string } => Boolean(entry))
-        .filter((entry) => entry.kind === 'contact')
-        .map((entry) => entry.id);
+        .filter(entry => entry.kind === 'contact')
+        .map(entry => entry.id);
 }
 
 function getActiveGroupId(): string | null {
@@ -966,14 +1011,18 @@ function updateTreeSelectionClasses(): void {
     // Remove 'selected' from nodes no longer selected
     for (const key of prevTreeSelectedNodeIds) {
         if (!selectedNodeIds.has(key)) {
-            const node = document.querySelector<HTMLElement>(`.tree-node[data-selection-key="${CSS.escape(key)}"]`);
+            const node = document.querySelector<HTMLElement>(
+                `.tree-node[data-selection-key="${CSS.escape(key)}"]`
+            );
             node?.classList.remove('selected');
         }
     }
     // Add 'selected' to newly selected nodes
     for (const key of selectedNodeIds) {
         if (!prevTreeSelectedNodeIds.has(key)) {
-            const node = document.querySelector<HTMLElement>(`.tree-node[data-selection-key="${CSS.escape(key)}"]`);
+            const node = document.querySelector<HTMLElement>(
+                `.tree-node[data-selection-key="${CSS.escape(key)}"]`
+            );
             node?.classList.add('selected');
         }
     }
@@ -981,7 +1030,7 @@ function updateTreeSelectionClasses(): void {
 }
 
 function isMarkerId(id: string): boolean {
-    return createdMarkers.some((marker) => marker.id === id);
+    return createdMarkers.some(marker => marker.id === id);
 }
 
 function isRefFrameId(id: string): boolean {
@@ -999,7 +1048,7 @@ function collectMeshBackedShapeIds(shape: LoadedShape): string[] {
     if (!shape.children || shape.children.length === 0) {
         return [shape.id];
     }
-    return shape.children.flatMap((child) => collectMeshBackedShapeIds(child));
+    return shape.children.flatMap(child => collectMeshBackedShapeIds(child));
 }
 
 function syncViewerSelectionFromState(): void {
@@ -1008,33 +1057,34 @@ function syncViewerSelectionFromState(): void {
     }
 
     const targetIds = new Set<string>();
-    Array.from(new Set(
-        getSelectedShapeIds()
-            .flatMap((shapeId) => {
+    Array.from(
+        new Set(
+            getSelectedShapeIds().flatMap(shapeId => {
                 const shape = loadedShapes.get(shapeId);
                 return shape ? collectMeshBackedShapeIds(shape) : [shapeId];
             })
-    ))
-        .map((shapeId) => loadedShapes.get(shapeId)?.meshId)
+        )
+    )
+        .map(shapeId => loadedShapes.get(shapeId)?.meshId)
         .filter((meshId): meshId is string => Boolean(meshId))
-        .forEach((meshId) => targetIds.add(meshId));
+        .forEach(meshId => targetIds.add(meshId));
 
-    getSelectedGroupIds().forEach((groupId) => {
-        collectGroupPartIdsRecursive(groupId).forEach((partId) => {
+    getSelectedGroupIds().forEach(groupId => {
+        collectGroupPartIdsRecursive(groupId).forEach(partId => {
             const shape = loadedShapes.get(partId);
             if (!shape) return;
-            collectMeshBackedShapeIds(shape).forEach((sid) => {
+            collectMeshBackedShapeIds(shape).forEach(sid => {
                 const meshId = loadedShapes.get(sid)?.meshId;
                 if (meshId) targetIds.add(meshId);
             });
         });
     });
 
-    getSelectedMarkerIds().forEach((markerId) => targetIds.add(markerId));
-    getSelectedRefFrameIds().forEach((refFrameId) => targetIds.add(refFrameId));
-    getSelectedJointIds().forEach((jointId) => targetIds.add(jointId));
-    getSelectedDesignPointIds().forEach((designPointId) => targetIds.add(designPointId));
-    getSelectedContactIds().forEach((contactId) => targetIds.add(contactId));
+    getSelectedMarkerIds().forEach(markerId => targetIds.add(markerId));
+    getSelectedRefFrameIds().forEach(refFrameId => targetIds.add(refFrameId));
+    getSelectedJointIds().forEach(jointId => targetIds.add(jointId));
+    getSelectedDesignPointIds().forEach(designPointId => targetIds.add(designPointId));
+    getSelectedContactIds().forEach(contactId => targetIds.add(contactId));
 
     isSyncingViewerSelection = true;
     try {
@@ -1063,7 +1113,7 @@ function handleTreeNodeHover(nodeData: ModelTreeNode): void {
                 if (box) {
                     bounds = {
                         min: { x: box.min.x, y: box.min.y, z: box.min.z },
-                        max: { x: box.max.x, y: box.max.y, z: box.max.z },
+                        max: { x: box.max.x, y: box.max.y, z: box.max.z }
                     };
                 }
             }
@@ -1094,7 +1144,7 @@ function applyShapeVisualColor(shapeId: string, color: string | undefined): void
 }
 
 function clearContactPartHighlights(): void {
-    activeContactHighlightIds.forEach((shapeId) => {
+    activeContactHighlightIds.forEach(shapeId => {
         applyShapeVisualColor(shapeId, loadedShapes.get(shapeId)?.color);
     });
     activeContactHighlightIds = [];
@@ -1119,25 +1169,19 @@ function syncContactPartHighlights(): void {
     }
 }
 
-type GroupMassSummary = {
-    totalPartCount: number;
-    computedPartCount: number;
-    missingPartIds: string[];
-    volume: number;
-    mass: number;
-    density: number;
-    centerOfMass: Vec3;
-    inertiaMatrix: Mat3;
-};
-
-function collectGroupPartIdsRecursive(groupId: string, collected: Set<string> = new Set<string>()): Set<string> {
+function collectGroupPartIdsRecursive(
+    groupId: string,
+    collected: Set<string> = new Set<string>()
+): Set<string> {
     const group = getGroupNode(groupId);
     if (!group) {
         return collected;
     }
 
-    group.memberPartIds.forEach((partId) => collected.add(partId));
-    group.childGroupIds.forEach((childGroupId) => collectGroupPartIdsRecursive(childGroupId, collected));
+    group.memberPartIds.forEach(partId => collected.add(partId));
+    group.childGroupIds.forEach(childGroupId =>
+        collectGroupPartIdsRecursive(childGroupId, collected)
+    );
     return collected;
 }
 
@@ -1163,7 +1207,7 @@ function computeShapeBounds(shape: LoadedShape): THREE.Box3 | null {
             hasBounds = true;
         }
 
-        target.children?.forEach((child) => visit(child));
+        target.children?.forEach(child => visit(child));
     };
 
     visit(shape);
@@ -1186,7 +1230,7 @@ function computeGroupBounds(groupId: string): { min: Vec3; max: Vec3 } | null {
 
     const box = new THREE.Box3();
     let hasBounds = false;
-    partIds.forEach((partId) => {
+    partIds.forEach(partId => {
         const shape = loadedShapes.get(partId);
         if (!shape) {
             return;
@@ -1217,7 +1261,7 @@ function syncViewerGroupBoundsFromState(): void {
     }
 
     const groupBounds = getTopLevelSelectedGroupIds(getSelectedGroupIds())
-        .map((groupId) => computeGroupBounds(groupId))
+        .map(groupId => computeGroupBounds(groupId))
         .filter((bounds): bounds is { min: Vec3; max: Vec3 } => Boolean(bounds));
 
     viewer.setSelectionBoundsBoxes(groupBounds);
@@ -1233,79 +1277,68 @@ function scheduleGroupBoundsSync(): void {
     });
 }
 
-function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null {
-    if (!occt) {
-        return null;
+function createGroupMassSummaryHtml(massSummary: GroupMassSummary | null): string {
+    if (!massSummary) {
+        return createPropertyRow('状态', '不可用');
     }
 
-    const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
-    if (partIds.length === 0) {
-        return {
-            totalPartCount: 0,
-            computedPartCount: 0,
-            missingPartIds: [],
-            volume: 0,
-            mass: 0,
-            density: 0,
-            centerOfMass: { x: 0, y: 0, z: 0 },
-            inertiaMatrix: { m: [0, 0, 0, 0, 0, 0, 0, 0, 0] }
-        };
+    const missingText =
+        massSummary.missingPartIds.length > 0
+            ? massSummary.missingPartIds.map(activeShapeName).join(', ')
+            : '(none)';
+    const inertiaRows = [
+        [
+            massSummary.inertiaMatrix.m[0],
+            massSummary.inertiaMatrix.m[1],
+            massSummary.inertiaMatrix.m[2]
+        ] as [number, number, number],
+        [
+            massSummary.inertiaMatrix.m[3],
+            massSummary.inertiaMatrix.m[4],
+            massSummary.inertiaMatrix.m[5]
+        ] as [number, number, number],
+        [
+            massSummary.inertiaMatrix.m[6],
+            massSummary.inertiaMatrix.m[7],
+            massSummary.inertiaMatrix.m[8]
+        ] as [number, number, number]
+    ];
+
+    let massHtml = '';
+    massHtml += createPropertyRow(
+        '已计算零件',
+        `${massSummary.computedPartCount}/${massSummary.totalPartCount}`
+    );
+    massHtml += createPropertyRow('缺失零件', missingText);
+    massHtml += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
+    massHtml += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
+    massHtml += createPropertyRow(
+        'Density',
+        `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`
+    );
+    massHtml += '<div class="property-sub-header">  质心</div>';
+    massHtml += createVectorRow(
+        [massSummary.centerOfMass.x, massSummary.centerOfMass.y, massSummary.centerOfMass.z],
+        'm'
+    );
+    massHtml += '<div class="property-sub-header">  惯性张量</div>';
+    massHtml += createVectorRow(inertiaRows[0]);
+    massHtml += createVectorRow(inertiaRows[1]);
+    massHtml += createVectorRow(inertiaRows[2], 'kg·m²');
+    return massHtml;
+}
+
+function setGroupMassComputeButtonState(label: string, disabled: boolean): void {
+    const btn = document.getElementById('group-mass-compute-btn') as HTMLButtonElement | null;
+    if (!btn) {
+        return;
     }
-
-    const partMasses: MassProperties[] = [];
-    const missingPartIds: string[] = [];
-
-    partIds.forEach((partId) => {
-        const shape = loadedShapes.get(partId);
-        if (!shape?.shapeId || !occt.hasShape(shape.shapeId)) {
-            missingPartIds.push(partId);
-            return;
-        }
-
-        try {
-            const density = getMaterialDensity(partId);
-            const mass = occt.getMassProperties(shape.shapeId, density);
-            if (!mass) {
-                missingPartIds.push(partId);
-                return;
-            }
-            partMasses.push(mass);
-        } catch {
-            missingPartIds.push(partId);
-        }
-    });
-
-    if (partMasses.length === 0) {
-        return {
-            totalPartCount: partIds.length,
-            computedPartCount: 0,
-            missingPartIds,
-            volume: 0,
-            mass: 0,
-            density: 0,
-            centerOfMass: { x: 0, y: 0, z: 0 },
-            inertiaMatrix: { m: [0, 0, 0, 0, 0, 0, 0, 0, 0] }
-        };
-    }
-
-    const aggregate = aggregateMassProperties(partMasses);
-    if (!aggregate) {
-        return null;
-    }
-
-    return {
-        totalPartCount: partIds.length,
-        computedPartCount: partMasses.length,
-        missingPartIds,
-        volume: aggregate.volume,
-        mass: aggregate.mass,
-        density: aggregate.density,
-        centerOfMass: aggregate.centerOfMass,
-        inertiaMatrix: aggregate.inertiaMatrix
-    };
+    btn.textContent = label;
+    btn.disabled = disabled;
 }
 
 function renderSelectedGroupProperties(groupId: string): void {
+    massPropertiesCoordinator.cancelPending();
     const group = getGroupNode(groupId);
     if (!group) {
         updatePropertiesPanel(null);
@@ -1325,16 +1358,23 @@ function renderSelectedGroupProperties(groupId: string): void {
     html += createPropertyRow('名称', group.name, { boxed: true });
     html += createPropertyRow('类型', '分组', { boxed: true });
     html += createPropertyRow('ID', group.id, { boxed: true });
-    html += createPropertyRow('父分组', group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : '物体');
+    html += createPropertyRow(
+        '父分组',
+        group.parentGroupId
+            ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId)
+            : '物体'
+    );
     html += createPropertyRow('分组类别', group.kind);
     html += createPropertyRow('子分组数', group.childGroupIds.length.toString());
     html += createPropertyRow('直属成员数', group.memberPartIds.length.toString());
     html += createPropertyRow('零件总数', partIds.length.toString());
     html += createPropertyRow('创建时间', group.createdAt);
     html += '<div class="property-separator"></div>';
-    html += '<div class="property-section-header" style="display:flex;align-items:center;justify-content:space-between;">';
+    html +=
+        '<div class="property-section-header" style="display:flex;align-items:center;justify-content:space-between;">';
     html += '物理属性';
-    html += '<button id="group-mass-compute-btn" class="compact-btn" style="font-size:11px;padding:1px 8px;cursor:pointer;">计算</button>';
+    html +=
+        '<button id="group-mass-compute-btn" class="compact-btn" style="font-size:11px;padding:1px 8px;cursor:pointer;">计算</button>';
     html += '</div>';
     html += '<div id="group-mass-properties-area">';
     html += createPropertyRow('状态', '未计算');
@@ -1343,59 +1383,103 @@ function renderSelectedGroupProperties(groupId: string): void {
     propsEl.innerHTML = html;
 
     document.getElementById('group-mass-compute-btn')?.addEventListener('click', () => {
-        const btn = document.getElementById('group-mass-compute-btn');
-        if (btn) {
-            btn.textContent = '计算中...';
-            (btn as HTMLButtonElement).disabled = true;
+        const massArea = document.getElementById('group-mass-properties-area');
+        if (!massArea) {
+            return;
         }
 
-        const massArea = document.getElementById('group-mass-properties-area');
-        if (!massArea) return;
+        setGroupMassComputeButtonState('计算中...', true);
+        massArea.innerHTML = createPropertyRow('状态', '计算中...');
 
-        setTimeout(() => {
-            const massSummary = aggregateGroupMassProperties(groupId);
-            let massHtml = '';
+        // Leave one rendered frame for the loading state before any fallback mass work starts.
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                const active = parseSelectionKey(activeSelectionKey);
+                if (
+                    selectedGroupId !== groupId ||
+                    active?.kind !== 'group' ||
+                    active.id !== groupId
+                ) {
+                    return;
+                }
 
-            if (!massSummary) {
-                massHtml += createPropertyRow('状态', '不可用');
-            } else {
-                const missingText = massSummary.missingPartIds.length > 0
-                    ? massSummary.missingPartIds.map(activeShapeName).join(', ')
-                    : '(none)';
-                const inertiaRows = [
-                    [massSummary.inertiaMatrix.m[0], massSummary.inertiaMatrix.m[1], massSummary.inertiaMatrix.m[2]] as [number, number, number],
-                    [massSummary.inertiaMatrix.m[3], massSummary.inertiaMatrix.m[4], massSummary.inertiaMatrix.m[5]] as [number, number, number],
-                    [massSummary.inertiaMatrix.m[6], massSummary.inertiaMatrix.m[7], massSummary.inertiaMatrix.m[8]] as [number, number, number]
-                ];
-                massHtml += createPropertyRow('已计算零件', `${massSummary.computedPartCount}/${massSummary.totalPartCount}`);
-                massHtml += createPropertyRow('缺失零件', missingText);
-                massHtml += createPropertyRow('总质量', `${formatPhysicsNumber(massSummary.mass, 5)} kg`);
-                massHtml += createPropertyRow('Volume', `${formatPhysicsNumber(massSummary.volume, 5)} m^3`);
-                massHtml += createPropertyRow('Density', `${formatPhysicsNumber(massSummary.density, 2)} kg/m^3`);
-                massHtml += '<div class="property-sub-header">  质心</div>';
-                massHtml += createVectorRow([
-                    massSummary.centerOfMass.x,
-                    massSummary.centerOfMass.y,
-                    massSummary.centerOfMass.z
-                ], 'm');
-                massHtml += '<div class="property-sub-header">  惯性张量</div>';
-                massHtml += createVectorRow(inertiaRows[0]);
-                massHtml += createVectorRow(inertiaRows[1]);
-                massHtml += createVectorRow(inertiaRows[2], 'kg·m²');
-            }
+                const occtForRequest = occt;
+                const requestResult = groupMassPropertiesCoordinator.request(
+                    {
+                        groupId,
+                        parts: partIds.map(partId => {
+                            const shape = loadedShapes.get(partId);
+                            return {
+                                partId,
+                                kernelShapeId: shape?.shapeId,
+                                density: getMaterialDensity(partId)
+                            };
+                        })
+                    },
+                    occtForRequest
+                        ? {
+                              hasShape: (targetShapeId: string) =>
+                                  occtForRequest.hasShape(targetShapeId),
+                              getMass: (targetShapeId: string, density: number) => {
+                                  try {
+                                      return occtForRequest.getMassProperties(
+                                          targetShapeId,
+                                          density
+                                      );
+                                  } catch (error) {
+                                      console.warn('Failed to get group mass properties:', error);
+                                      return null;
+                                  }
+                              }
+                          }
+                        : null,
+                    (resolvedGroupId, massSummary) => {
+                        const current = parseSelectionKey(activeSelectionKey);
+                        if (
+                            selectedGroupId !== resolvedGroupId ||
+                            current?.kind !== 'group' ||
+                            current.id !== resolvedGroupId
+                        ) {
+                            return;
+                        }
 
-            massArea.innerHTML = massHtml;
-            if (btn) {
-                btn.textContent = '重新计算';
-                (btn as HTMLButtonElement).disabled = false;
-            }
-        }, 0);
+                        const currentMassArea = document.getElementById(
+                            'group-mass-properties-area'
+                        );
+                        if (currentMassArea) {
+                            currentMassArea.innerHTML = createGroupMassSummaryHtml(massSummary);
+                        }
+                        setGroupMassComputeButtonState('重新计算', false);
+                    }
+                );
+
+                if (requestResult.state === 'none') {
+                    const currentMassArea = document.getElementById('group-mass-properties-area');
+                    if (currentMassArea) {
+                        currentMassArea.innerHTML = createPropertyRow('状态', '不可用');
+                    }
+                    setGroupMassComputeButtonState('重新计算', false);
+                    return;
+                }
+
+                if (requestResult.state === 'cached') {
+                    const currentMassArea = document.getElementById('group-mass-properties-area');
+                    if (currentMassArea) {
+                        currentMassArea.innerHTML = createGroupMassSummaryHtml(
+                            requestResult.massSummary
+                        );
+                    }
+                    setGroupMassComputeButtonState('重新计算', false);
+                }
+            }, 0);
+        });
     });
 }
 
 function updateSelectionPropertiesPanel(): void {
     const active = parseSelectionKey(activeSelectionKey);
     if (!active) {
+        groupMassPropertiesCoordinator.cancelPending();
         updatePropertiesPanel(null);
         return;
     }
@@ -1403,6 +1487,7 @@ function updateSelectionPropertiesPanel(): void {
         renderSelectedGroupProperties(active.id);
         return;
     }
+    groupMassPropertiesCoordinator.cancelPending();
     if (active.kind === 'marker') {
         renderMarkerPropertiesPanel(active.id);
         return;
@@ -1436,23 +1521,21 @@ function selectSelection(
 ): void {
     const t0 = performance.now();
     const selectionKey = nextSelection
-        ? (
-            nextSelection.kind === 'shape'
-                ? toShapeSelectionKey(nextSelection.id)
-                : nextSelection.kind === 'group'
-                    ? toGroupSelectionKey(nextSelection.id)
-                    : nextSelection.kind === 'marker'
-                        ? toMarkerSelectionKey(nextSelection.id)
-                        : nextSelection.kind === 'refFrame'
-                            ? toRefFrameSelectionKey(nextSelection.id)
-                            : nextSelection.kind === 'joint'
-                                ? toJointSelectionKey(nextSelection.id)
-                                : nextSelection.kind === 'motion'
-                                    ? toMotionSelectionKey(nextSelection.id)
-                                : nextSelection.kind === 'designPoint'
-                                    ? toDesignPointSelectionKey(nextSelection.id)
-                                    : toContactSelectionKey(nextSelection.id)
-        )
+        ? nextSelection.kind === 'shape'
+            ? toShapeSelectionKey(nextSelection.id)
+            : nextSelection.kind === 'group'
+              ? toGroupSelectionKey(nextSelection.id)
+              : nextSelection.kind === 'marker'
+                ? toMarkerSelectionKey(nextSelection.id)
+                : nextSelection.kind === 'refFrame'
+                  ? toRefFrameSelectionKey(nextSelection.id)
+                  : nextSelection.kind === 'joint'
+                    ? toJointSelectionKey(nextSelection.id)
+                    : nextSelection.kind === 'motion'
+                      ? toMotionSelectionKey(nextSelection.id)
+                      : nextSelection.kind === 'designPoint'
+                        ? toDesignPointSelectionKey(nextSelection.id)
+                        : toContactSelectionKey(nextSelection.id)
         : null;
 
     if (!options?.additive) {
@@ -1461,7 +1544,8 @@ function selectSelection(
 
     if (selectionKey && options?.toggle && selectedNodeIds.has(selectionKey)) {
         selectedNodeIds.delete(selectionKey);
-        activeSelectionKey = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds).at(-1) ?? null : null;
+        activeSelectionKey =
+            selectedNodeIds.size > 0 ? (Array.from(selectedNodeIds).at(-1) ?? null) : null;
     } else if (selectionKey) {
         selectedNodeIds.add(selectionKey);
         activeSelectionKey = selectionKey;
@@ -1482,7 +1566,9 @@ function selectSelection(
     const t4 = performance.now();
     syncContactPartHighlights();
     const t5 = performance.now();
-    console.log(`[selectSelection] total=${(t5 - t0).toFixed(1)}ms  tree=${(t2 - t1).toFixed(1)}ms  viewer=${(t3 - t2).toFixed(1)}ms  props=${(t4 - t3).toFixed(1)}ms  contact=${(t5 - t4).toFixed(1)}ms`);
+    console.log(
+        `[selectSelection] total=${(t5 - t0).toFixed(1)}ms  tree=${(t2 - t1).toFixed(1)}ms  viewer=${(t3 - t2).toFixed(1)}ms  props=${(t4 - t3).toFixed(1)}ms  contact=${(t5 - t4).toFixed(1)}ms`
+    );
 
     if (motionCreationPanelActive && selectedJointId) {
         applyMotionConnectorSelection(selectedJointId);
@@ -1527,7 +1613,7 @@ function selectSelection(
 function syncSelectionFromViewer(activeObjectId: string | null): void {
     const selectedIds = viewer?.getSelectedIds() ?? [];
     selectedNodeIds.clear();
-    const selectionKeys = selectedIds.flatMap((id) => {
+    const selectionKeys = selectedIds.flatMap(id => {
         const shapeId = meshIdToShapeId.get(id);
         if (shapeId) {
             return [toShapeSelectionKey(shapeId)];
@@ -1552,7 +1638,7 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
         }
         return [];
     });
-    selectionKeys.forEach((selectionKey) => selectedNodeIds.add(selectionKey));
+    selectionKeys.forEach(selectionKey => selectedNodeIds.add(selectionKey));
 
     if (activeObjectId) {
         const activeShapeId = meshIdToShapeId.get(activeObjectId);
@@ -1590,7 +1676,9 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
     if (refFrameCreationPanelActive) {
         if (selectedMarkerId) {
             pendingRefFrameBaseId = selectedMarkerId;
-            const selectedBaseMarker = createdMarkers.find((marker) => marker.id === selectedMarkerId);
+            const selectedBaseMarker = createdMarkers.find(
+                marker => marker.id === selectedMarkerId
+            );
             if (selectedBaseMarker) {
                 setStatusInfo(`Base marker selected: ${selectedBaseMarker.name}`);
             }
@@ -1622,7 +1710,10 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
 }
 
 function getUniqueGroupName(baseName: string): string {
-    return getUniqueGroupNameFromState(groupDesignState, sanitizeGroupName(baseName, `Group${listGroups().length + 1}`));
+    return getUniqueGroupNameFromState(
+        groupDesignState,
+        sanitizeGroupName(baseName, `Group${listGroups().length + 1}`)
+    );
 }
 
 function createGroupFromParts(
@@ -1633,10 +1724,12 @@ function createGroupFromParts(
 ): GroupNode {
     const uniquePartIds = Array.from(new Set(memberShapeIds));
     const ownerMap = buildPartOwnerGroupMap();
-    uniquePartIds.forEach((partId) => {
+    uniquePartIds.forEach(partId => {
         const ownerGroup = getGroupNode(ownerMap.get(partId));
         if (ownerGroup) {
-            ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter((memberId) => memberId !== partId);
+            ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter(
+                memberId => memberId !== partId
+            );
         }
     });
 
@@ -1651,7 +1744,7 @@ function createGroupFromParts(
         createdAt: new Date().toISOString()
     };
     upsertGroupNode(group);
-    uniquePartIds.forEach((partId) => selectedNodeIds.delete(toShapeSelectionKey(partId)));
+    uniquePartIds.forEach(partId => selectedNodeIds.delete(toShapeSelectionKey(partId)));
     selectSelection({ kind: 'group', id: group.id });
     return group;
 }
@@ -1662,7 +1755,11 @@ function renameSelectedGroup(nextName: string): GroupNode {
         throw new Error('Select a group first.');
     }
 
-    groupDesignState = renameGroupNodeInState(groupDesignState, groupId, nextName) as GroupDesignState;
+    groupDesignState = renameGroupNodeInState(
+        groupDesignState,
+        groupId,
+        nextName
+    ) as GroupDesignState;
     const renamedGroup = getGroupNode(groupId);
     if (!renamedGroup) {
         throw new Error(`Group "${groupId}" no longer exists.`);
@@ -1671,18 +1768,23 @@ function renameSelectedGroup(nextName: string): GroupNode {
 }
 
 function isGroupReferenced(groupId: string): boolean {
-    return createdMarkers.some((marker) => marker.groupId === groupId)
-        || Array.from(createdRefFrames.values()).some((refFrame) => refFrame.groupId === groupId)
-        || Array.from(mbsDesignPoints.values()).some((point) => point.groupId === groupId);
+    return (
+        createdMarkers.some(marker => marker.groupId === groupId) ||
+        Array.from(createdRefFrames.values()).some(refFrame => refFrame.groupId === groupId) ||
+        Array.from(mbsDesignPoints.values()).some(point => point.groupId === groupId)
+    );
 }
 
-function collectDescendantGroupIds(groupId: string, collected: Set<string> = new Set<string>()): Set<string> {
+function collectDescendantGroupIds(
+    groupId: string,
+    collected: Set<string> = new Set<string>()
+): Set<string> {
     const group = getGroupNode(groupId);
     if (!group) {
         return collected;
     }
 
-    group.childGroupIds.forEach((childGroupId) => {
+    group.childGroupIds.forEach(childGroupId => {
         if (collected.has(childGroupId)) {
             return;
         }
@@ -1695,7 +1797,7 @@ function collectDescendantGroupIds(groupId: string, collected: Set<string> = new
 
 function getTopLevelSelectedGroupIds(groupIds: string[]): string[] {
     const selectedIds = new Set(groupIds);
-    return Array.from(new Set(groupIds)).filter((groupId) => {
+    return Array.from(new Set(groupIds)).filter(groupId => {
         let parentGroupId = getGroupNode(groupId)?.parentGroupId ?? null;
         while (parentGroupId) {
             if (selectedIds.has(parentGroupId)) {
@@ -1726,9 +1828,10 @@ function moveGroupToParent(groupId: string, targetParentGroupId: string | null):
 
     const previousParentGroupId = group.parentGroupId;
     group.parentGroupId = targetParentGroupId;
-    group.order = getOrderedChildGroupIds(targetParentGroupId)
-        .filter((siblingGroupId) => siblingGroupId !== groupId)
-        .length + 1;
+    group.order =
+        getOrderedChildGroupIds(targetParentGroupId).filter(
+            siblingGroupId => siblingGroupId !== groupId
+        ).length + 1;
     rebuildGroupIndexes();
     normalizeSiblingOrders(previousParentGroupId);
     if (previousParentGroupId !== targetParentGroupId) {
@@ -1740,11 +1843,13 @@ function movePartIdsToGroup(partIds: string[], targetGroupId: string | null): nu
     const uniquePartIds = Array.from(new Set(partIds));
     const ownerMap = buildPartOwnerGroupMap();
 
-    uniquePartIds.forEach((partId) => {
+    uniquePartIds.forEach(partId => {
         const ownerGroupId = ownerMap.get(partId);
         const ownerGroup = getGroupNode(ownerGroupId);
         if (ownerGroup) {
-            ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter((memberPartId) => memberPartId !== partId);
+            ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter(
+                memberPartId => memberPartId !== partId
+            );
         }
     });
 
@@ -1752,7 +1857,7 @@ function movePartIdsToGroup(partIds: string[], targetGroupId: string | null): nu
         const targetGroup = getGroupNode(targetGroupId);
         if (targetGroup) {
             const mergedPartIds = new Set(targetGroup.memberPartIds);
-            uniquePartIds.forEach((partId) => mergedPartIds.add(partId));
+            uniquePartIds.forEach(partId => mergedPartIds.add(partId));
             targetGroup.memberPartIds = Array.from(mergedPartIds);
         }
     }
@@ -1761,20 +1866,25 @@ function movePartIdsToGroup(partIds: string[], targetGroupId: string | null): nu
     return uniquePartIds.length;
 }
 
-function moveSelectedNodesToGroup(targetGroupId: string | null): { movedGroups: number; movedParts: number } {
+function moveSelectedNodesToGroup(targetGroupId: string | null): {
+    movedGroups: number;
+    movedParts: number;
+} {
     const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
     const coveredGroupIds = new Set<string>();
-    selectedGroupIds.forEach((groupId) => {
+    selectedGroupIds.forEach(groupId => {
         coveredGroupIds.add(groupId);
-        collectDescendantGroupIds(groupId).forEach((descendantGroupId) => coveredGroupIds.add(descendantGroupId));
+        collectDescendantGroupIds(groupId).forEach(descendantGroupId =>
+            coveredGroupIds.add(descendantGroupId)
+        );
     });
     const ownerMap = buildPartOwnerGroupMap();
-    const selectedPartIds = getSelectedShapeIds().filter((partId) => {
+    const selectedPartIds = getSelectedShapeIds().filter(partId => {
         const ownerGroupId = ownerMap.get(partId);
         return !ownerGroupId || !coveredGroupIds.has(ownerGroupId);
     });
 
-    const invalidGroupId = selectedGroupIds.find((groupId) => {
+    const invalidGroupId = selectedGroupIds.find(groupId => {
         if (!targetGroupId) {
             return false;
         }
@@ -1785,11 +1895,13 @@ function moveSelectedNodesToGroup(targetGroupId: string | null): { movedGroups: 
     });
 
     if (invalidGroupId) {
-        throw new Error(`Invalid move target for group "${getGroupNode(invalidGroupId)?.name ?? invalidGroupId}".`);
+        throw new Error(
+            `Invalid move target for group "${getGroupNode(invalidGroupId)?.name ?? invalidGroupId}".`
+        );
     }
 
     const movedParts = movePartIdsToGroup(selectedPartIds, targetGroupId);
-    selectedGroupIds.forEach((groupId) => moveGroupToParent(groupId, targetGroupId));
+    selectedGroupIds.forEach(groupId => moveGroupToParent(groupId, targetGroupId));
     updateTreeSelectionClasses();
     updateSelectionPropertiesPanel();
 
@@ -1799,7 +1911,11 @@ function moveSelectedNodesToGroup(targetGroupId: string | null): { movedGroups: 
     };
 }
 
-function ungroupSelectedGroup(): { movedGroups: number; movedParts: number; parentGroupId: string | null } {
+function ungroupSelectedGroup(): {
+    movedGroups: number;
+    movedParts: number;
+    parentGroupId: string | null;
+} {
     const groupId = getActiveGroupId();
     const group = getGroupNode(groupId);
     if (!group || !groupId) {
@@ -1816,18 +1932,22 @@ function ungroupSelectedGroup(): { movedGroups: number; movedParts: number; pare
     return result;
 }
 
-function buildMoveTargetOptions(selectedGroupIds: string[]): Array<{ value: string; text: string }> {
+function buildMoveTargetOptions(
+    selectedGroupIds: string[]
+): Array<{ value: string; text: string }> {
     const blockedGroupIds = new Set<string>();
-    selectedGroupIds.forEach((groupId) => {
+    selectedGroupIds.forEach(groupId => {
         blockedGroupIds.add(groupId);
-        collectDescendantGroupIds(groupId).forEach((descendantGroupId) => blockedGroupIds.add(descendantGroupId));
+        collectDescendantGroupIds(groupId).forEach(descendantGroupId =>
+            blockedGroupIds.add(descendantGroupId)
+        );
     });
 
     return [
         { value: '__root__', text: '根节点（未分组）' },
         ...listGroups()
-            .filter((group) => !blockedGroupIds.has(group.id))
-            .map((group) => ({
+            .filter(group => !blockedGroupIds.has(group.id))
+            .map(group => ({
                 value: group.id,
                 text: group.name
             }))
@@ -1841,14 +1961,17 @@ function getDraggableSelectionPayload(anchorSelectionKey: string): string[] {
     return [anchorSelectionKey];
 }
 
-function validateMoveSelectionToGroup(targetGroupId: string | null): { valid: boolean; reason?: string } {
+function validateMoveSelectionToGroup(targetGroupId: string | null): {
+    valid: boolean;
+    reason?: string;
+} {
     const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
     const selectedShapeIds = getSelectedShapeIds();
     if (selectedGroupIds.length === 0 && selectedShapeIds.length === 0) {
         return { valid: false, reason: 'No selection' };
     }
 
-    const invalidGroupId = selectedGroupIds.find((groupId) => {
+    const invalidGroupId = selectedGroupIds.find(groupId => {
         if (!targetGroupId) {
             return false;
         }
@@ -1869,9 +1992,13 @@ function validateMoveSelectionToGroup(targetGroupId: string | null): { valid: bo
 }
 
 function clearTreeDropIndicators(): void {
-    document.querySelectorAll<HTMLElement>('.tree-node.drop-target-valid, .tree-node.drop-target-invalid').forEach((node) => {
-        node.classList.remove('drop-target-valid', 'drop-target-invalid');
-    });
+    document
+        .querySelectorAll<HTMLElement>(
+            '.tree-node.drop-target-valid, .tree-node.drop-target-invalid'
+        )
+        .forEach(node => {
+            node.classList.remove('drop-target-valid', 'drop-target-invalid');
+        });
 }
 
 function applyTreeDropIndicator(node: HTMLElement, isValid: boolean): void {
@@ -1886,7 +2013,7 @@ function syncDragSelection(selectionKeys: string[]): void {
 
     const activeKey = selectionKeys.at(-1) ?? null;
     selectedNodeIds.clear();
-    selectionKeys.forEach((selectionKey) => selectedNodeIds.add(selectionKey));
+    selectionKeys.forEach(selectionKey => selectedNodeIds.add(selectionKey));
     activeSelectionKey = activeKey;
 
     syncSelectedEntitiesFromActive();
@@ -1919,7 +2046,7 @@ function isLeafShape(shape: LoadedShape): boolean {
 }
 
 function removeShapeFromHierarchy(shapeId: string, shapes: LoadedShape[]): LoadedShape | null {
-    const index = shapes.findIndex((shape) => shape.id === shapeId);
+    const index = shapes.findIndex(shape => shape.id === shapeId);
     if (index >= 0) {
         const [removedShape] = shapes.splice(index, 1);
         return removedShape;
@@ -1941,37 +2068,37 @@ function removeShapeFromHierarchy(shapeId: string, shapes: LoadedShape[]): Loade
 function getPartDeletionReferences(shapeId: string): string[] {
     const references: string[] = [];
 
-    createdMarkers.forEach((marker) => {
+    createdMarkers.forEach(marker => {
         if (marker.groupId === shapeId) {
             references.push(`marker:${marker.name}`);
         }
     });
-    Array.from(createdRefFrames.values()).forEach((refFrame) => {
+    Array.from(createdRefFrames.values()).forEach(refFrame => {
         if (refFrame.groupId === shapeId) {
             references.push(`refMarker:${refFrame.name}`);
         }
     });
-    Array.from(mbsDesignPoints.values()).forEach((point) => {
+    Array.from(mbsDesignPoints.values()).forEach(point => {
         if (point.groupId === shapeId) {
             references.push(`designPoint:${point.name}`);
         }
     });
-    Array.from(mbsJoints.values()).forEach((joint) => {
+    Array.from(mbsJoints.values()).forEach(joint => {
         if (joint.part1 === shapeId || joint.part2 === shapeId) {
             references.push(`joint:${joint.name}`);
         }
     });
-    Array.from(mbsContacts.values()).forEach((contact) => {
+    Array.from(mbsContacts.values()).forEach(contact => {
         if (contact.partA === shapeId || contact.partB === shapeId) {
             references.push(`contact:${contact.name}`);
         }
     });
-    Array.from(fluidSlices.values()).forEach((slice) => {
+    Array.from(fluidSlices.values()).forEach(slice => {
         if (slice.shapeRef === shapeId) {
             references.push(`ribSlice:${slice.name}`);
         }
     });
-    Array.from(fluidPorts.values()).forEach((port) => {
+    Array.from(fluidPorts.values()).forEach(port => {
         if (port.shapeRef === shapeId) {
             references.push(`fluidPort:${port.name}`);
         }
@@ -1997,7 +2124,9 @@ function deletePartById(shapeId: string): { deleted: boolean; name: string; bloc
     const ownerGroupId = resolveOwningGroupId(shapeId);
     const ownerGroup = getGroupNode(ownerGroupId);
     if (ownerGroup) {
-        ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter((memberPartId) => memberPartId !== shapeId);
+        ownerGroup.memberPartIds = ownerGroup.memberPartIds.filter(
+            memberPartId => memberPartId !== shapeId
+        );
     }
 
     selectedNodeIds.delete(toShapeSelectionKey(shapeId));
@@ -2037,7 +2166,7 @@ function deleteSelectedGroups(): { deletedCount: number; blockedMessages: string
     const blockedMessages: string[] = [];
     let deletedCount = 0;
 
-    getTopLevelSelectedGroupIds(getSelectedGroupIds()).forEach((groupId) => {
+    getTopLevelSelectedGroupIds(getSelectedGroupIds()).forEach(groupId => {
         const group = getGroupNode(groupId);
         if (!group) {
             return;
@@ -2064,15 +2193,18 @@ function deleteSelectedGroups(): { deletedCount: number; blockedMessages: string
 
 function deleteSelectedDesignPoints(): number {
     const selectedDesignPointIds = getSelectedDesignPointIds();
-    const deletedSelectionKeys = new Set(selectedDesignPointIds.map((designPointId) => toDesignPointSelectionKey(designPointId)));
-    selectedDesignPointIds.forEach((designPointId) => {
+    const deletedSelectionKeys = new Set(
+        selectedDesignPointIds.map(designPointId => toDesignPointSelectionKey(designPointId))
+    );
+    selectedDesignPointIds.forEach(designPointId => {
         mbsDesignPoints.delete(designPointId);
         selectedNodeIds.delete(toDesignPointSelectionKey(designPointId));
         viewer?.removeFrame(designPointId);
     });
     if (selectedDesignPointIds.length > 0) {
         if (activeSelectionKey && deletedSelectionKeys.has(activeSelectionKey)) {
-            activeSelectionKey = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds).at(-1) ?? null : null;
+            activeSelectionKey =
+                selectedNodeIds.size > 0 ? (Array.from(selectedNodeIds).at(-1) ?? null) : null;
         }
         syncSelectedEntitiesFromActive();
     }
@@ -2086,24 +2218,26 @@ function handleDeleteSelection(): void {
     const selectedContactIds = getSelectedContactIds();
     const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
     const coveredGroupIds = new Set<string>();
-    selectedGroupIds.forEach((groupId) => {
+    selectedGroupIds.forEach(groupId => {
         coveredGroupIds.add(groupId);
-        collectDescendantGroupIds(groupId).forEach((descendantGroupId) => coveredGroupIds.add(descendantGroupId));
+        collectDescendantGroupIds(groupId).forEach(descendantGroupId =>
+            coveredGroupIds.add(descendantGroupId)
+        );
     });
 
     const ownerMap = buildPartOwnerGroupMap();
-    const selectedPartIds = getSelectedShapeIds().filter((shapeId) => {
+    const selectedPartIds = getSelectedShapeIds().filter(shapeId => {
         const ownerGroupId = ownerMap.get(shapeId);
         return !ownerGroupId || !coveredGroupIds.has(ownerGroupId);
     });
 
     if (
-        selectedGroupIds.length === 0
-        && selectedPartIds.length === 0
-        && deletedDesignPointCount === 0
-        && selectedJointIds.length === 0
-        && selectedMotionIds.length === 0
-        && selectedContactIds.length === 0
+        selectedGroupIds.length === 0 &&
+        selectedPartIds.length === 0 &&
+        deletedDesignPointCount === 0 &&
+        selectedJointIds.length === 0 &&
+        selectedMotionIds.length === 0 &&
+        selectedContactIds.length === 0
     ) {
         vscode.postMessage({
             command: 'alert',
@@ -2118,7 +2252,7 @@ function handleDeleteSelection(): void {
     let deletedContactCount = 0;
     const blockedMessages: string[] = [];
 
-    selectedPartIds.forEach((shapeId) => {
+    selectedPartIds.forEach(shapeId => {
         const result = deletePartById(shapeId);
         if (result.deleted) {
             deletedPartCount += 1;
@@ -2129,29 +2263,32 @@ function handleDeleteSelection(): void {
 
     const groupDeleteResult = deleteSelectedGroups();
     blockedMessages.push(...groupDeleteResult.blockedMessages);
-    selectedJointIds.forEach((jointId) => {
+    selectedJointIds.forEach(jointId => {
         if (deleteJointById(jointId)) {
             deletedJointCount += 1;
         }
     });
-    selectedMotionIds.forEach((motionId) => {
+    selectedMotionIds.forEach(motionId => {
         if (deleteMotionById(motionId)) {
             deletedMotionCount += 1;
         }
     });
-    selectedContactIds.forEach((contactId) => {
+    selectedContactIds.forEach(contactId => {
         if (deleteContactById(contactId)) {
             deletedContactCount += 1;
         }
     });
 
     updateModelTree();
-    setStatusInfo(`Deleted ${deletedDesignPointCount} design point(s), ${deletedJointCount} joint(s), ${deletedMotionCount} motion(s), ${deletedContactCount} contact(s), ${deletedPartCount} part(s) and ${groupDeleteResult.deletedCount} group(s).`);
+    setStatusInfo(
+        `Deleted ${deletedDesignPointCount} design point(s), ${deletedJointCount} joint(s), ${deletedMotionCount} motion(s), ${deletedContactCount} contact(s), ${deletedPartCount} part(s) and ${groupDeleteResult.deletedCount} group(s).`
+    );
 
     if (blockedMessages.length > 0) {
-        const message = blockedMessages.length > 4
-            ? `${blockedMessages.slice(0, 4).join(' | ')} | ... and ${blockedMessages.length - 4} more.`
-            : blockedMessages.join(' | ');
+        const message =
+            blockedMessages.length > 4
+                ? `${blockedMessages.slice(0, 4).join(' | ')} | ... and ${blockedMessages.length - 4} more.`
+                : blockedMessages.join(' | ');
         vscode.postMessage({
             command: 'alert',
             text: message
@@ -2161,10 +2298,15 @@ function handleDeleteSelection(): void {
 
 function loadRenderConfigState(): RenderConfigState {
     try {
-        const state = vscode.getState() as { renderConfig?: Partial<RenderConfigState> } | undefined;
+        const state = vscode.getState() as
+            | { renderConfig?: Partial<RenderConfigState> }
+            | undefined;
         return normalizeRenderConfig(state?.renderConfig);
     } catch (error) {
-        console.warn('[render-config] Failed to load persisted state, fallback to defaults:', error);
+        console.warn(
+            '[render-config] Failed to load persisted state, fallback to defaults:',
+            error
+        );
         return { ...DEFAULT_RENDER_CONFIG };
     }
 }
@@ -2174,12 +2316,10 @@ function saveRenderConfigState(): void {
     renderConfig = currentConfig;
 
     const existingStateRaw = vscode.getState();
-    const existingState = (
-        existingStateRaw !== null
-        && typeof existingStateRaw === 'object'
-    )
-        ? existingStateRaw as Record<string, unknown>
-        : {};
+    const existingState =
+        existingStateRaw !== null && typeof existingStateRaw === 'object'
+            ? (existingStateRaw as Record<string, unknown>)
+            : {};
 
     vscode.setState({
         ...existingState,
@@ -2194,12 +2334,12 @@ function applyRenderConfigToViewer(): void {
     const presetApplied = invokeViewerMethod(viewer, ['setVisualPreset'], config.visualPreset);
     const materialApplied = invokeViewerMethod(viewer, ['setMaterialMode'], config.materialMode);
     const postApplied =
-        invokeViewerMethod(viewer, ['setPostProcessingEnabled'], config.postProcessing)
-        || invokeViewerMethod(viewer, ['setOutlineEnabled'], config.postProcessing);
+        invokeViewerMethod(viewer, ['setPostProcessingEnabled'], config.postProcessing) ||
+        invokeViewerMethod(viewer, ['setOutlineEnabled'], config.postProcessing);
     const edgeApplied =
-        invokeViewerMethod(viewer, ['setEdgeLayerVisible'], config.edgeLayerVisible)
-        || invokeViewerMethod(viewer, ['setEdgesVisible'], config.edgeLayerVisible)
-        || invokeViewerMethod(viewer, ['setEdgeVisibility'], config.edgeLayerVisible);
+        invokeViewerMethod(viewer, ['setEdgeLayerVisible'], config.edgeLayerVisible) ||
+        invokeViewerMethod(viewer, ['setEdgesVisible'], config.edgeLayerVisible) ||
+        invokeViewerMethod(viewer, ['setEdgeVisibility'], config.edgeLayerVisible);
 
     if (!presetApplied || !materialApplied || !postApplied || !edgeApplied) {
         const missing: string[] = [];
@@ -2211,7 +2351,10 @@ function applyRenderConfigToViewer(): void {
     }
 }
 
-function getMeshingParamsFromPreset(preset: PrecisionPreset): { linearDeflection: number; angularDeflection: number } {
+function getMeshingParamsFromPreset(preset: PrecisionPreset): {
+    linearDeflection: number;
+    angularDeflection: number;
+} {
     switch (preset) {
         case 'coarse':
             return { linearDeflection: 0.002, angularDeflection: 0.45 };
@@ -2248,7 +2391,10 @@ function postNotification(notification: CadtoolRuntimeNotification): void {
     });
 }
 
-function notifyInfo(text: string, options: { detail?: string; statusText?: string; statusInfo?: string } = {}): void {
+function notifyInfo(
+    text: string,
+    options: { detail?: string; statusText?: string; statusInfo?: string } = {}
+): void {
     if (options.statusText) {
         setStatus(options.statusText);
     }
@@ -2262,7 +2408,10 @@ function notifyInfo(text: string, options: { detail?: string; statusText?: strin
     });
 }
 
-function notifyWarning(text: string, options: { detail?: string; statusText?: string; statusInfo?: string } = {}): void {
+function notifyWarning(
+    text: string,
+    options: { detail?: string; statusText?: string; statusInfo?: string } = {}
+): void {
     if (options.statusText) {
         setStatus(options.statusText);
     }
@@ -2291,20 +2440,18 @@ function notifyError(
     if (typeof options.statusInfo === 'string') {
         setStatusInfo(options.statusInfo);
     }
-    postNotification(createCadtoolErrorNotification(code, {
-        detail,
-        text: options.text
-    }));
+    postNotification(
+        createCadtoolErrorNotification(code, {
+            detail,
+            text: options.text
+        })
+    );
 }
 
 function identityRigidTransform(): RigidTransform {
     return {
         translation: { x: 0, y: 0, z: 0 },
-        rotation: [
-            1, 0, 0,
-            0, 1, 0,
-            0, 0, 1
-        ]
+        rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1]
     };
 }
 
@@ -2313,19 +2460,21 @@ function isIdentityRigidTransform(transform: RigidTransform | undefined): boolea
         return true;
     }
     const { translation, rotation } = transform;
-    return translation.x === 0
-        && translation.y === 0
-        && translation.z === 0
-        && rotation.length === 9
-        && rotation[0] === 1
-        && rotation[1] === 0
-        && rotation[2] === 0
-        && rotation[3] === 0
-        && rotation[4] === 1
-        && rotation[5] === 0
-        && rotation[6] === 0
-        && rotation[7] === 0
-        && rotation[8] === 1;
+    return (
+        translation.x === 0 &&
+        translation.y === 0 &&
+        translation.z === 0 &&
+        rotation.length === 9 &&
+        rotation[0] === 1 &&
+        rotation[1] === 0 &&
+        rotation[2] === 0 &&
+        rotation[3] === 0 &&
+        rotation[4] === 1 &&
+        rotation[5] === 0 &&
+        rotation[6] === 0 &&
+        rotation[7] === 0 &&
+        rotation[8] === 1
+    );
 }
 
 function normalizeRigidTransform(transform: LoadedShape['transform'] | undefined): RigidTransform {
@@ -2339,7 +2488,7 @@ function normalizeRigidTransform(transform: LoadedShape['transform'] | undefined
             y: transform.translation?.y ?? 0,
             z: transform.translation?.z ?? 0
         },
-        rotation: transform.rotation.map((value) => Number(value) || 0)
+        rotation: transform.rotation.map(value => Number(value) || 0)
     };
 }
 
@@ -2360,15 +2509,32 @@ function composeRigidTransforms(parent: RigidTransform, local: RigidTransform): 
     ];
 
     const translation = {
-        x: pr[0] * local.translation.x + pr[1] * local.translation.y + pr[2] * local.translation.z + parent.translation.x,
-        y: pr[3] * local.translation.x + pr[4] * local.translation.y + pr[5] * local.translation.z + parent.translation.y,
-        z: pr[6] * local.translation.x + pr[7] * local.translation.y + pr[8] * local.translation.z + parent.translation.z
+        x:
+            pr[0] * local.translation.x +
+            pr[1] * local.translation.y +
+            pr[2] * local.translation.z +
+            parent.translation.x,
+        y:
+            pr[3] * local.translation.x +
+            pr[4] * local.translation.y +
+            pr[5] * local.translation.z +
+            parent.translation.y,
+        z:
+            pr[6] * local.translation.x +
+            pr[7] * local.translation.y +
+            pr[8] * local.translation.z +
+            parent.translation.z
     };
 
     return { translation, rotation };
 }
 
-function transformPoint(transform: RigidTransform, x: number, y: number, z: number): [number, number, number] {
+function transformPoint(
+    transform: RigidTransform,
+    x: number,
+    y: number,
+    z: number
+): [number, number, number] {
     const r = transform.rotation;
     return [
         r[0] * x + r[1] * y + r[2] * z + transform.translation.x,
@@ -2377,7 +2543,12 @@ function transformPoint(transform: RigidTransform, x: number, y: number, z: numb
     ];
 }
 
-function transformDirection(transform: RigidTransform, x: number, y: number, z: number): [number, number, number] {
+function transformDirection(
+    transform: RigidTransform,
+    x: number,
+    y: number,
+    z: number
+): [number, number, number] {
     const r = transform.rotation;
     return [
         r[0] * x + r[1] * y + r[2] * z,
@@ -2388,11 +2559,7 @@ function transformDirection(transform: RigidTransform, x: number, y: number, z: 
 
 function invertRigidTransform(transform: RigidTransform): RigidTransform {
     const r = transform.rotation;
-    const rotation = [
-        r[0], r[3], r[6],
-        r[1], r[4], r[7],
-        r[2], r[5], r[8]
-    ];
+    const rotation = [r[0], r[3], r[6], r[1], r[4], r[7], r[2], r[5], r[8]];
     const tx = transform.translation.x;
     const ty = transform.translation.y;
     const tz = transform.translation.z;
@@ -2414,7 +2581,12 @@ function applyRigidTransformToMeshData(meshData: MeshData, transform: RigidTrans
 
     const vertices = new Float32Array(meshData.vertices.length);
     for (let i = 0; i < meshData.vertices.length; i += 3) {
-        const [x, y, z] = transformPoint(transform, meshData.vertices[i], meshData.vertices[i + 1], meshData.vertices[i + 2]);
+        const [x, y, z] = transformPoint(
+            transform,
+            meshData.vertices[i],
+            meshData.vertices[i + 1],
+            meshData.vertices[i + 2]
+        );
         vertices[i] = x;
         vertices[i + 1] = y;
         vertices[i + 2] = z;
@@ -2422,7 +2594,12 @@ function applyRigidTransformToMeshData(meshData: MeshData, transform: RigidTrans
 
     const normals = new Float32Array(meshData.normals.length);
     for (let i = 0; i < meshData.normals.length; i += 3) {
-        const [nx, ny, nz] = transformDirection(transform, meshData.normals[i], meshData.normals[i + 1], meshData.normals[i + 2]);
+        const [nx, ny, nz] = transformDirection(
+            transform,
+            meshData.normals[i],
+            meshData.normals[i + 1],
+            meshData.normals[i + 2]
+        );
         normals[i] = nx;
         normals[i + 1] = ny;
         normals[i + 2] = nz;
@@ -2435,7 +2612,10 @@ function applyRigidTransformToMeshData(meshData: MeshData, transform: RigidTrans
     };
 }
 
-function applyRigidTransformToEdgeData(edgeData: EdgeData | undefined, transform: RigidTransform): EdgeData | undefined {
+function applyRigidTransformToEdgeData(
+    edgeData: EdgeData | undefined,
+    transform: RigidTransform
+): EdgeData | undefined {
     if (!edgeData) {
         return undefined;
     }
@@ -2445,7 +2625,12 @@ function applyRigidTransformToEdgeData(edgeData: EdgeData | undefined, transform
 
     const vertices = new Float32Array(edgeData.vertices.length);
     for (let i = 0; i < edgeData.vertices.length; i += 3) {
-        const [x, y, z] = transformPoint(transform, edgeData.vertices[i], edgeData.vertices[i + 1], edgeData.vertices[i + 2]);
+        const [x, y, z] = transformPoint(
+            transform,
+            edgeData.vertices[i],
+            edgeData.vertices[i + 1],
+            edgeData.vertices[i + 2]
+        );
         vertices[i] = x;
         vertices[i + 1] = y;
         vertices[i + 2] = z;
@@ -2494,7 +2679,7 @@ function ensureRibbonMoreControls(ribbon: HTMLElement): {
 
     if (moreButton.dataset.bound !== '1') {
         moreButton.dataset.bound = '1';
-        moreButton.addEventListener('click', (event) => {
+        moreButton.addEventListener('click', event => {
             event.stopPropagation();
             moreMenu.classList.toggle('show');
         });
@@ -2509,17 +2694,19 @@ function ensureRibbonMoreControls(ribbon: HTMLElement): {
 function buildRibbonMoreMenu(menu: HTMLElement, hiddenGroups: HTMLElement[]): void {
     menu.innerHTML = '';
 
-    hiddenGroups.forEach((group) => {
+    hiddenGroups.forEach(group => {
         const groupTitle = group.querySelector('.ribbon-tab-label')?.textContent?.trim() || '命令';
         const buttons = Array.from(group.querySelectorAll('.ribbon-btn')) as HTMLButtonElement[];
 
-        buttons.forEach((sourceBtn) => {
+        buttons.forEach(sourceBtn => {
             const actionText =
-                sourceBtn.querySelector('.ribbon-btn-text')?.textContent?.trim()
-                || sourceBtn.title
-                || sourceBtn.id
-                || '命令';
-            const iconSrc = (sourceBtn.querySelector('.ribbon-btn-icon img') as HTMLImageElement | null)?.src;
+                sourceBtn.querySelector('.ribbon-btn-text')?.textContent?.trim() ||
+                sourceBtn.title ||
+                sourceBtn.id ||
+                '命令';
+            const iconSrc = (
+                sourceBtn.querySelector('.ribbon-btn-icon img') as HTMLImageElement | null
+            )?.src;
 
             const item = document.createElement('div');
             item.className = 'ribbon-dropdown-item';
@@ -2527,7 +2714,7 @@ function buildRibbonMoreMenu(menu: HTMLElement, hiddenGroups: HTMLElement[]): vo
                 <span class="ribbon-dropdown-item-icon">${iconSrc ? `<img src="${iconSrc}" alt="">` : '•'}</span>
                 <span class="ribbon-dropdown-item-label">${groupTitle} · ${actionText}</span>
             `;
-            item.addEventListener('click', (event) => {
+            item.addEventListener('click', event => {
                 event.stopPropagation();
                 menu.classList.remove('show');
                 sourceBtn.click();
@@ -2564,7 +2751,10 @@ function updateRibbonSeparators(ribbon: HTMLElement): void {
             }
         }
 
-        node.classList.toggle('ribbon-separator-hidden', !(hasPrevVisibleGroup && hasNextVisibleGroup));
+        node.classList.toggle(
+            'ribbon-separator-hidden',
+            !(hasPrevVisibleGroup && hasNextVisibleGroup)
+        );
     });
 }
 
@@ -2574,9 +2764,9 @@ function applyRibbonResponsiveMode(): void {
 
     const { moreGroup, moreSeparator, moreMenu } = ensureRibbonMoreControls(ribbon);
     const allGroups = Array.from(ribbon.querySelectorAll('.ribbon-tab-group')) as HTMLElement[];
-    const groups = allGroups.filter((group) => group.id !== 'ribbon-more-group');
+    const groups = allGroups.filter(group => group.id !== 'ribbon-more-group');
 
-    groups.forEach((group) => group.classList.remove('ribbon-group-hidden'));
+    groups.forEach(group => group.classList.remove('ribbon-group-hidden'));
     moreGroup.style.display = 'none';
     moreSeparator.style.display = 'none';
     moreMenu.classList.remove('show');
@@ -2604,14 +2794,14 @@ function applyRibbonResponsiveMode(): void {
         // keep hiding low-priority groups until ribbon fits
     }
 
-    let hiddenGroups = groups.filter((group) => group.classList.contains('ribbon-group-hidden'));
+    let hiddenGroups = groups.filter(group => group.classList.contains('ribbon-group-hidden'));
     if (hiddenGroups.length > 0) {
         moreGroup.style.display = '';
         moreSeparator.style.display = '';
         while (isOverflowing() && hideNextGroup()) {
             // account for "more" control itself
         }
-        hiddenGroups = groups.filter((group) => group.classList.contains('ribbon-group-hidden'));
+        hiddenGroups = groups.filter(group => group.classList.contains('ribbon-group-hidden'));
     }
 
     if (hiddenGroups.length === 0) {
@@ -2629,7 +2819,7 @@ function setupRibbonAdaptiveLayout(): void {
     const ribbon = document.querySelector('.ribbon-bar') as HTMLElement | null;
     if (!ribbon) return;
 
-    document.querySelectorAll('.ribbon-btn').forEach((btn) => {
+    document.querySelectorAll('.ribbon-btn').forEach(btn => {
         const el = btn as HTMLElement;
         if (el.title) return;
         const text = el.querySelector('.ribbon-btn-text')?.textContent?.trim();
@@ -2678,11 +2868,13 @@ function setupSidebarResize(): void {
     const getWidth = (el: HTMLElement): number => el.getBoundingClientRect().width;
 
     const getAllowedLeftMax = (): number => {
-        const available = mainBody.clientWidth - getWidth(rightSidebar) - minViewportWidth - handleTotalWidth();
+        const available =
+            mainBody.clientWidth - getWidth(rightSidebar) - minViewportWidth - handleTotalWidth();
         return Math.max(minLeftWidth, Math.min(maxLeftWidth, available));
     };
     const getAllowedRightMax = (): number => {
-        const available = mainBody.clientWidth - getWidth(leftSidebar) - minViewportWidth - handleTotalWidth();
+        const available =
+            mainBody.clientWidth - getWidth(leftSidebar) - minViewportWidth - handleTotalWidth();
         return Math.max(minRightWidth, Math.min(maxRightWidth, available));
     };
 
@@ -2730,8 +2922,8 @@ function setupSidebarResize(): void {
         window.addEventListener('pointerup', onUp, { once: true });
     };
 
-    leftResizer.addEventListener('pointerdown', (event) => startDrag('left', event));
-    rightResizer.addEventListener('pointerdown', (event) => startDrag('right', event));
+    leftResizer.addEventListener('pointerdown', event => startDrag('left', event));
+    rightResizer.addEventListener('pointerdown', event => startDrag('right', event));
 
     const enforceBounds = (): void => {
         applyLeftWidth(getWidth(leftSidebar));
@@ -2786,9 +2978,8 @@ function toggleRenderConfigPanel(forceVisible?: boolean): void {
     const panel = document.getElementById('render-config-panel');
     if (!panel) return;
 
-    const shouldShow = typeof forceVisible === 'boolean'
-        ? forceVisible
-        : !panel.classList.contains('show');
+    const shouldShow =
+        typeof forceVisible === 'boolean' ? forceVisible : !panel.classList.contains('show');
     panel.classList.toggle('show', shouldShow);
 }
 
@@ -2811,7 +3002,9 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
         return;
     }
 
-    const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
+    const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(
+        renderConfig.precisionPreset
+    );
     showLoading('Updating mesh precision...');
     showProgress(5, 'Preparing remesh...');
     setStatus('Updating mesh precision...');
@@ -2884,7 +3077,12 @@ async function applyPrecisionPreset(preset: PrecisionPreset): Promise<void> {
 }
 
 function applyRenderControls(
-    updates: Partial<Pick<RenderConfigState, 'visualPreset' | 'materialMode' | 'postProcessing' | 'edgeLayerVisible'>>
+    updates: Partial<
+        Pick<
+            RenderConfigState,
+            'visualPreset' | 'materialMode' | 'postProcessing' | 'edgeLayerVisible'
+        >
+    >
 ): void {
     renderConfig = normalizeRenderConfig({ ...normalizeRenderConfig(renderConfig), ...updates });
     saveRenderConfigState();
@@ -2893,9 +3091,15 @@ function applyRenderControls(
 
 function setupRenderConfigUI(): void {
     renderConfig = normalizeRenderConfig(renderConfig);
-    const presetSelect = document.getElementById('render-visual-preset') as HTMLSelectElement | null;
-    const materialSelect = document.getElementById('render-material-mode') as HTMLSelectElement | null;
-    const postCheckbox = document.getElementById('render-postprocessing') as HTMLInputElement | null;
+    const presetSelect = document.getElementById(
+        'render-visual-preset'
+    ) as HTMLSelectElement | null;
+    const materialSelect = document.getElementById(
+        'render-material-mode'
+    ) as HTMLSelectElement | null;
+    const postCheckbox = document.getElementById(
+        'render-postprocessing'
+    ) as HTMLInputElement | null;
     const edgeCheckbox = document.getElementById('render-edge-layer') as HTMLInputElement | null;
     const precisionSelect = document.getElementById('render-precision') as HTMLSelectElement | null;
 
@@ -2967,15 +3171,17 @@ function updateModelTree(): void {
     }
 
     treeEl.innerHTML = '';
-    nodes.forEach((node) => {
+    nodes.forEach(node => {
         const nodeEl = createTreeNode(node, 0);
         treeEl.appendChild(nodeEl);
     });
     updateTreeSelectionClasses();
 }
 
-function toNamedEntityList<T extends { id: string; name: string }>(items: Iterable<T>): BrowserNamedEntityInput[] {
-    return Array.from(items, (item) => ({
+function toNamedEntityList<T extends { id: string; name: string }>(
+    items: Iterable<T>
+): BrowserNamedEntityInput[] {
+    return Array.from(items, item => ({
         id: item.id,
         name: item.name
     }));
@@ -3055,8 +3261,8 @@ function expandIconPath(expanded: boolean): string | null {
 
 function buildOwnedDesignNodes(ownerId: string): ModelTreeNode[] {
     const markerNodes = createdMarkers
-        .filter((marker) => (marker.parentId ?? marker.groupId) === ownerId)
-        .map((marker) => ({
+        .filter(marker => (marker.parentId ?? marker.groupId) === ownerId)
+        .map(marker => ({
             id: `marker_${marker.id}`,
             kind: 'marker' as const,
             label: marker.name,
@@ -3064,8 +3270,8 @@ function buildOwnedDesignNodes(ownerId: string): ModelTreeNode[] {
             selectionKey: toMarkerSelectionKey(marker.id)
         }));
     const refFrameNodes = Array.from(createdRefFrames.values())
-        .filter((refFrame) => (refFrame.parentId ?? refFrame.groupId) === ownerId)
-        .map((refFrame) => ({
+        .filter(refFrame => (refFrame.parentId ?? refFrame.groupId) === ownerId)
+        .map(refFrame => ({
             id: `refFrame_${refFrame.id}`,
             kind: 'refFrame' as const,
             label: refFrame.name,
@@ -3073,8 +3279,8 @@ function buildOwnedDesignNodes(ownerId: string): ModelTreeNode[] {
             selectionKey: toRefFrameSelectionKey(refFrame.id)
         }));
     const designPointNodes = Array.from(mbsDesignPoints.values())
-        .filter((point) => point.groupId === ownerId)
-        .map((point) => ({
+        .filter(point => point.groupId === ownerId)
+        .map(point => ({
             id: `designPoint_${point.id}`,
             kind: 'designPoint' as const,
             label: point.name,
@@ -3107,7 +3313,7 @@ function toFallbackTreeShapeNode(shape: LoadedShape): ModelTreeNode {
         shapeId: shape.id,
         selectionKey: toShapeSelectionKey(shape.id),
         children: [
-            ...(shape.children?.map((child) => toFallbackTreeShapeNode(child)) ?? []),
+            ...(shape.children?.map(child => toFallbackTreeShapeNode(child)) ?? []),
             ...buildOwnedDesignNodes(shape.id)
         ]
     };
@@ -3138,18 +3344,18 @@ function toImportedTreeNode(
         return toImportedLeafTreeNode(shape, options.parentGroupName);
     }
 
-    const childNodes = shape.children?.map((child) => toImportedTreeNode(child, { parentGroupName: shape.name })) ?? [];
-    const wrappedLeafNodes = options.wrapSinglePart ? [toImportedLeafTreeNode(shape, shape.name)] : [];
+    const childNodes =
+        shape.children?.map(child => toImportedTreeNode(child, { parentGroupName: shape.name })) ??
+        [];
+    const wrappedLeafNodes = options.wrapSinglePart
+        ? [toImportedLeafTreeNode(shape, shape.name)]
+        : [];
 
     return {
         id: `import_group_${shape.id}`,
         kind: 'group',
         label: shape.name,
-        children: [
-            ...childNodes,
-            ...wrappedLeafNodes,
-            ...buildOwnedDesignNodes(shape.id)
-        ]
+        children: [...childNodes, ...wrappedLeafNodes, ...buildOwnedDesignNodes(shape.id)]
     };
 }
 
@@ -3161,10 +3367,10 @@ function toGroupTreeNode(groupId: string): ModelTreeNode | null {
 
     const children: ModelTreeNode[] = [
         ...getOrderedChildGroupIds(group.id)
-            .map((childGroupId) => toGroupTreeNode(childGroupId))
+            .map(childGroupId => toGroupTreeNode(childGroupId))
             .filter((node): node is ModelTreeNode => Boolean(node)),
         ...group.memberPartIds
-            .map((shapeId) => toGroupTreeShapeNode(shapeId))
+            .map(shapeId => toGroupTreeShapeNode(shapeId))
             .filter((node): node is ModelTreeNode => Boolean(node)),
         ...buildOwnedDesignNodes(group.id)
     ];
@@ -3183,10 +3389,10 @@ function buildObjectTreeNodes(): ModelTreeNode[] {
     syncUngroupedPartIds();
     const hasExplicitGroups = listGroups().length > 0;
     const groupNodes = getOrderedChildGroupIds(null)
-        .map((groupId) => toGroupTreeNode(groupId))
+        .map(groupId => toGroupTreeNode(groupId))
         .filter((node): node is ModelTreeNode => Boolean(node));
     const ungroupedNodes = groupDesignState.ungroupedPartIds
-        .map((shapeId) => toGroupTreeShapeNode(shapeId))
+        .map(shapeId => toGroupTreeShapeNode(shapeId))
         .filter((node): node is ModelTreeNode => Boolean(node));
 
     if (hasExplicitGroups) {
@@ -3194,22 +3400,22 @@ function buildObjectTreeNodes(): ModelTreeNode[] {
     }
 
     return rootShapes.length > 0
-        ? flattenTopLevelAssemblyShapes(rootShapes).map((shape) => (
-            shape.type === 'assembly'
-                ? toImportedTreeNode(shape)
-                : toImportedTreeNode(shape, { wrapSinglePart: true })
-        ))
-        : externalModelTreeShapes.map((shape) => ({
-            id: `shape_${shape.id}`,
-            label: shape.name,
-            kind: 'part',
-            shapeId: shape.id,
-            selectionKey: toShapeSelectionKey(shape.id)
-        }));
+        ? flattenTopLevelAssemblyShapes(rootShapes).map(shape =>
+              shape.type === 'assembly'
+                  ? toImportedTreeNode(shape)
+                  : toImportedTreeNode(shape, { wrapSinglePart: true })
+          )
+        : externalModelTreeShapes.map(shape => ({
+              id: `shape_${shape.id}`,
+              label: shape.name,
+              kind: 'part',
+              shapeId: shape.id,
+              selectionKey: toShapeSelectionKey(shape.id)
+          }));
 }
 
 function buildForceTreeNodes(): ModelTreeNode[] {
-    const contactNodes = Array.from(mbsContacts.values()).map((contact) => ({
+    const contactNodes = Array.from(mbsContacts.values()).map(contact => ({
         id: `contact_${contact.id}`,
         kind: 'force' as const,
         label: contact.name,
@@ -3217,12 +3423,12 @@ function buildForceTreeNodes(): ModelTreeNode[] {
         selectionKey: toContactSelectionKey(contact.id)
     }));
     const fluidNodes = [
-        ...Array.from(fluidSlices.values(), (slice) => ({
+        ...Array.from(fluidSlices.values(), slice => ({
             id: `slice_${slice.id}`,
             kind: 'force' as const,
             label: slice.name
         })),
-        ...Array.from(fluidPorts.values(), (port) => ({
+        ...Array.from(fluidPorts.values(), port => ({
             id: `port_${port.id}`,
             kind: 'force' as const,
             label: port.name
@@ -3236,10 +3442,11 @@ function buildModelTreeNodes(): ModelTreeNode[] {
 
     const objectNodes = buildObjectTreeNodes();
 
-    const hasEntities = objectNodes.length > 0
-        || mbsJoints.size > 0
-        || mbsMotions.size > 0
-        || forceNodes.length > 0;
+    const hasEntities =
+        objectNodes.length > 0 ||
+        mbsJoints.size > 0 ||
+        mbsMotions.size > 0 ||
+        forceNodes.length > 0;
     if (!hasEntities) {
         return [];
     }
@@ -3249,19 +3456,21 @@ function buildModelTreeNodes(): ModelTreeNode[] {
         includeGround: true,
         connections: toNamedEntityList(mbsJoints.values()),
         motions: toNamedEntityList(mbsMotions.values()),
-        forces: forceNodes.map((node) => ({ id: node.id, name: node.label })),
+        forces: forceNodes.map(node => ({ id: node.id, name: node.label })),
         materials: []
     }) as unknown as ModelTreeNode[];
 
-    const objectsCategory = nodes.find((node) => node.id === 'category_objects');
+    const objectsCategory = nodes.find(node => node.id === 'category_objects');
     if (objectsCategory) {
-        const groundNode = objectsCategory.children?.find((node) => node.kind === 'ground');
-        objectsCategory.children = groundNode ? [groundNode as ModelTreeNode, ...objectNodes] : objectNodes;
+        const groundNode = objectsCategory.children?.find(node => node.kind === 'ground');
+        objectsCategory.children = groundNode
+            ? [groundNode as ModelTreeNode, ...objectNodes]
+            : objectNodes;
     }
 
-    const connectionsCategory = nodes.find((node) => node.id === 'category_connections');
+    const connectionsCategory = nodes.find(node => node.id === 'category_connections');
     if (connectionsCategory) {
-        connectionsCategory.children = Array.from(mbsJoints.values()).map((joint) => ({
+        connectionsCategory.children = Array.from(mbsJoints.values()).map(joint => ({
             id: `conn_${joint.id}`,
             kind: 'connection' as const,
             label: joint.name,
@@ -3270,9 +3479,9 @@ function buildModelTreeNodes(): ModelTreeNode[] {
         }));
     }
 
-    const motionsCategory = nodes.find((node) => node.id === 'category_motions');
+    const motionsCategory = nodes.find(node => node.id === 'category_motions');
     if (motionsCategory) {
-        motionsCategory.children = Array.from(mbsMotions.values()).map((motion) => ({
+        motionsCategory.children = Array.from(mbsMotions.values()).map(motion => ({
             id: `motion_${motion.id}`,
             kind: 'motion' as const,
             label: motion.name,
@@ -3281,7 +3490,7 @@ function buildModelTreeNodes(): ModelTreeNode[] {
         }));
     }
 
-    const forcesCategory = nodes.find((node) => node.id === 'category_forces');
+    const forcesCategory = nodes.find(node => node.id === 'category_forces');
     if (forcesCategory) {
         forcesCategory.children = forceNodes;
     }
@@ -3469,11 +3678,11 @@ function hideTreeContextMenu(): void {
     }
 }
 
-function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: string; action: string }> {
+function buildTreeContextMenuActions(
+    nodeData: ModelTreeNode
+): Array<{ label: string; action: string }> {
     if (nodeData.contactId) {
-        return [
-            { label: '删除', action: 'deleteContact' }
-        ];
+        return [{ label: '删除', action: 'deleteContact' }];
     }
 
     if (nodeData.groupId) {
@@ -3496,9 +3705,7 @@ function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: st
     }
 
     if (nodeData.frameId) {
-        return [
-            { label: '删除', action: 'deleteFrame' }
-        ];
+        return [{ label: '删除', action: 'deleteFrame' }];
     }
 
     if (nodeData.jointId) {
@@ -3516,9 +3723,7 @@ function buildTreeContextMenuActions(nodeData: ModelTreeNode): Array<{ label: st
     }
 
     if (nodeData.designPointId) {
-        return [
-            { label: '删除', action: 'deleteSelection' }
-        ];
+        return [{ label: '删除', action: 'deleteSelection' }];
     }
 
     return [];
@@ -3533,7 +3738,7 @@ function showTreeContextMenu(x: number, y: number, nodeData: ModelTreeNode): voi
     const menu = getTreeContextMenu();
     menu.innerHTML = '';
 
-    actions.forEach((item) => {
+    actions.forEach(item => {
         const actionEl = document.createElement('button');
         actionEl.type = 'button';
         actionEl.textContent = item.label;
@@ -3551,7 +3756,7 @@ function showTreeContextMenu(x: number, y: number, nodeData: ModelTreeNode): voi
         actionEl.addEventListener('mouseleave', () => {
             actionEl.style.background = 'transparent';
         });
-        actionEl.addEventListener('click', (event) => {
+        actionEl.addEventListener('click', event => {
             event.stopPropagation();
             hideTreeContextMenu();
             handleMbsAction(item.action, {});
@@ -3614,7 +3819,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
         const expandBtn = document.createElement('span');
         expandBtn.className = 'expand-btn';
         setExpandButtonState(expandBtn, expandedByDefault);
-        expandBtn.addEventListener('click', (e) => {
+        expandBtn.addEventListener('click', e => {
             e.stopPropagation();
             toggleNodeExpand(container);
         });
@@ -3626,13 +3831,16 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
 
     const mappedShape = nodeData.shapeId ? loadedShapes.get(nodeData.shapeId) : undefined;
-    const supportsVisibility = Boolean(mappedShape && (nodeData.kind === 'assembly' || nodeData.kind === 'part' || nodeData.kind === 'solid'));
+    const supportsVisibility = Boolean(
+        mappedShape &&
+        (nodeData.kind === 'assembly' || nodeData.kind === 'part' || nodeData.kind === 'solid')
+    );
     if (supportsVisibility && mappedShape) {
         const visibilityBtn = document.createElement('span');
         visibilityBtn.className = 'visibility-btn';
         setVisibilityButtonState(visibilityBtn, mappedShape.visible);
         visibilityBtn.title = mappedShape.visible ? 'Hide' : 'Show';
-        visibilityBtn.addEventListener('click', (e) => {
+        visibilityBtn.addEventListener('click', e => {
             e.stopPropagation();
             toggleVisibility(mappedShape.id);
         });
@@ -3664,7 +3872,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
 
     if (nodeData.selectionKey && (nodeData.groupId || nodeData.shapeId)) {
         node.draggable = true;
-        node.addEventListener('dragstart', (event) => {
+        node.addEventListener('dragstart', event => {
             const selectionKey = nodeData.selectionKey ?? '';
             const parsed = parseSelectionKey(selectionKey);
             if (!parsed || !event.dataTransfer) {
@@ -3679,7 +3887,10 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
             const selectionKeys = getDraggableSelectionPayload(selectionKey);
             syncDragSelection(selectionKeys);
             event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('application/x-cadtool-selection', JSON.stringify(selectionKeys));
+            event.dataTransfer.setData(
+                'application/x-cadtool-selection',
+                JSON.stringify(selectionKeys)
+            );
             event.dataTransfer.setData('text/plain', selectionKeys.join(','));
             node.classList.add('dragging');
             hideTreeContextMenu();
@@ -3691,7 +3902,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
 
     if (nodeData.selectionKey) {
-        node.addEventListener('click', (event) => {
+        node.addEventListener('click', event => {
             const additive = event.ctrlKey || event.metaKey;
             const parsed = parseSelectionKey(nodeData.selectionKey ?? null);
             if (!parsed) {
@@ -3702,7 +3913,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
                 toggle: additive
             });
         });
-        node.addEventListener('contextmenu', (event) => {
+        node.addEventListener('contextmenu', event => {
             event.preventDefault();
             event.stopPropagation();
             const parsed = parseSelectionKey(nodeData.selectionKey ?? null);
@@ -3726,8 +3937,9 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
     }
 
     if (node.dataset.dropTarget) {
-        node.addEventListener('dragover', (event) => {
-            const targetGroupId = node.dataset.dropTarget === '__root__' ? null : node.dataset.dropTarget ?? null;
+        node.addEventListener('dragover', event => {
+            const targetGroupId =
+                node.dataset.dropTarget === '__root__' ? null : (node.dataset.dropTarget ?? null);
             const validation = validateMoveSelectionToGroup(targetGroupId);
             applyTreeDropIndicator(node, validation.valid);
             if (validation.valid) {
@@ -3740,7 +3952,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
         node.addEventListener('dragleave', () => {
             node.classList.remove('drop-target-valid', 'drop-target-invalid');
         });
-        node.addEventListener('drop', (event) => {
+        node.addEventListener('drop', event => {
             event.preventDefault();
             clearTreeDropIndicators();
 
@@ -3749,7 +3961,9 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
                 try {
                     const parsedPayload = JSON.parse(rawPayload) as unknown;
                     if (Array.isArray(parsedPayload)) {
-                        const selectionKeys = parsedPayload.filter((item): item is string => typeof item === 'string');
+                        const selectionKeys = parsedPayload.filter(
+                            (item): item is string => typeof item === 'string'
+                        );
                         syncDragSelection(selectionKeys);
                     }
                 } catch (error) {
@@ -3757,7 +3971,8 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
                 }
             }
 
-            const targetGroupId = node.dataset.dropTarget === '__root__' ? null : node.dataset.dropTarget ?? null;
+            const targetGroupId =
+                node.dataset.dropTarget === '__root__' ? null : (node.dataset.dropTarget ?? null);
             handleTreeDrop(targetGroupId);
         });
     }
@@ -3770,7 +3985,7 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
         const expandedByDefault = treeExpandedNodeIds.has(nodeData.id);
         childrenContainer.style.display = expandedByDefault ? 'block' : 'none';
 
-        nodeData.children.forEach((child) => {
+        nodeData.children.forEach(child => {
             const childNode = createTreeNode(child, level + 1);
             childrenContainer.appendChild(childNode);
         });
@@ -3836,7 +4051,7 @@ function showColorPicker(shapeId: string): void {
     input.style.opacity = '0';
     document.body.appendChild(input);
 
-    input.addEventListener('change', (e) => {
+    input.addEventListener('change', e => {
         const newColor = (e.target as HTMLInputElement).value;
         changeShapeColor(shapeId, newColor);
         document.body.removeChild(input);
@@ -3880,7 +4095,7 @@ type MassPropertiesViewState =
 
 function bindColorChangeButtons(propsEl: HTMLElement): void {
     propsEl.querySelectorAll('.color-change-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', e => {
             const targetShapeId = (e.currentTarget as HTMLElement).dataset.shapeId;
             if (targetShapeId) {
                 showColorPicker(targetShapeId);
@@ -3891,7 +4106,7 @@ function bindColorChangeButtons(propsEl: HTMLElement): void {
 
 function bindMaterialSelect(propsEl: HTMLElement): void {
     propsEl.querySelectorAll('.property-material-select').forEach(selectEl => {
-        selectEl.addEventListener('change', (e) => {
+        selectEl.addEventListener('change', e => {
             const select = e.currentTarget as HTMLSelectElement;
             const targetShapeId = select.dataset.shapeId;
             const nextDensity = Number.parseFloat(select.value);
@@ -3958,7 +4173,7 @@ function findMaterialByDensity(density: number): MaterialOption | null {
     if (!Number.isFinite(density)) {
         return null;
     }
-    const match = MATERIAL_OPTIONS.find((option) => Math.abs(option.density - density) < 0.5);
+    const match = MATERIAL_OPTIONS.find(option => Math.abs(option.density - density) < 0.5);
     return match ?? null;
 }
 
@@ -3977,10 +4192,12 @@ function createMaterialRow(shapeId: string, density: number): string {
         });
     }
 
-    const optionsHtml = options.map((material) => {
-        const selected = Math.abs(material.density - density) < 0.5 ? ' selected' : '';
-        return `<option value="${material.density}"${selected}>${formatMaterialOptionLabel(material)}</option>`;
-    }).join('');
+    const optionsHtml = options
+        .map(material => {
+            const selected = Math.abs(material.density - density) < 0.5 ? ' selected' : '';
+            return `<option value="${material.density}"${selected}>${formatMaterialOptionLabel(material)}</option>`;
+        })
+        .join('');
 
     return `<div class="property-row">
         <span class="property-label">材料</span>
@@ -4072,11 +4289,14 @@ function renderPropertiesPanel(shape: LoadedShape, massState: MassPropertiesView
         html += createPropertyRow('体积', `${formatPhysicsNumber(massState.value.volume, 5)} m^3`);
 
         html += '<div class="property-sub-header">  质心</div>';
-        html += createVectorRow([
-            massState.value.centerOfMass.x,
-            massState.value.centerOfMass.y,
-            massState.value.centerOfMass.z
-        ], 'm');
+        html += createVectorRow(
+            [
+                massState.value.centerOfMass.x,
+                massState.value.centerOfMass.y,
+                massState.value.centerOfMass.z
+            ],
+            'm'
+        );
 
         html += '<div class="property-sub-header">  惯性张量</div>';
         const inertiaRows = getInertiaRows(massState.value);
@@ -4096,7 +4316,7 @@ function syncFrameEntityToViewer(kind: FrameEntityKind, id: string): void {
     }
 
     if (kind === 'marker') {
-        const marker = createdMarkers.find((item) => item.id === id);
+        const marker = createdMarkers.find(item => item.id === id);
         if (!marker) {
             return;
         }
@@ -4181,19 +4401,19 @@ function resolveJointViewerType(jointType: string): MbsJointType {
 }
 
 function buildJointViewerData(joint: MbsJointEntity): JointData {
-    const position = joint.position ?? (
-        joint.part2 === GROUND_PART_ID
+    const position =
+        joint.position ??
+        (joint.part2 === GROUND_PART_ID
             ? calculateShapeWorldCenter(joint.part1)
             : (() => {
-                const p1 = calculateShapeWorldCenter(joint.part1);
-                const p2 = calculateShapeWorldCenter(joint.part2);
-                return {
-                    x: (p1.x + p2.x) / 2,
-                    y: (p1.y + p2.y) / 2,
-                    z: (p1.z + p2.z) / 2
-                };
-            })()
-    );
+                  const p1 = calculateShapeWorldCenter(joint.part1);
+                  const p2 = calculateShapeWorldCenter(joint.part2);
+                  return {
+                      x: (p1.x + p2.x) / 2,
+                      y: (p1.y + p2.y) / 2,
+                      z: (p1.z + p2.z) / 2
+                  };
+              })());
 
     return {
         id: joint.id,
@@ -4221,7 +4441,7 @@ function syncJointEntityToViewer(id: string): void {
 }
 
 function renderMarkerPropertiesPanel(markerId: string): void {
-    const marker = createdMarkers.find((item) => item.id === markerId);
+    const marker = createdMarkers.find(item => item.id === markerId);
     const propsEl = document.getElementById('properties-panel');
     if (!marker || !propsEl) {
         updatePropertiesPanel(null);
@@ -4257,7 +4477,7 @@ function renderMarkerPropertiesPanel(markerId: string): void {
         </div>
     </div>`;
 
-    document.getElementById('prop-marker-visible')?.addEventListener('change', (event) => {
+    document.getElementById('prop-marker-visible')?.addEventListener('change', event => {
         const target = event.currentTarget as HTMLInputElement;
         marker.setVisible(target.checked);
         viewer?.setFrameVisible(marker.id, marker.visible);
@@ -4266,9 +4486,18 @@ function renderMarkerPropertiesPanel(markerId: string): void {
     document.getElementById('prop-marker-save')?.addEventListener('click', () => {
         const nameInput = document.getElementById('prop-marker-name') as HTMLInputElement | null;
         const sizeInput = document.getElementById('prop-marker-size') as HTMLInputElement | null;
-        const directionInput = normalizeVector(readVec3FromInputs('prop-marker-dir')) ?? { x: 0, y: 0, z: 1 };
+        const directionInput = normalizeVector(readVec3FromInputs('prop-marker-dir')) ?? {
+            x: 0,
+            y: 0,
+            z: 1
+        };
         marker.name = nameInput?.value?.trim() || marker.name;
-        marker.setSize(Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize));
+        marker.setSize(
+            Math.max(
+                1,
+                Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize
+            )
+        );
         const nextPosition = readVec3FromInputs('prop-marker-pos');
         marker.setPosition(nextPosition.x, nextPosition.y, nextPosition.z);
         marker.setOrientation(createOrientationFromNormal(directionInput));
@@ -4295,7 +4524,7 @@ function renderRefFramePropertiesPanel(refFrameId: string): void {
 
     const direction = orientationToDirection(refFrame.orientation);
     const relatedMarker = refFrame.relatedMarkerId
-        ? createdMarkers.find((marker) => marker.id === refFrame.relatedMarkerId)
+        ? createdMarkers.find(marker => marker.id === refFrame.relatedMarkerId)
         : null;
 
     setPanelMode('properties', '属性-参考标架');
@@ -4313,7 +4542,7 @@ function renderRefFramePropertiesPanel(refFrameId: string): void {
         </div>
     </div>`;
 
-    document.getElementById('prop-ref-frame-visible')?.addEventListener('change', (event) => {
+    document.getElementById('prop-ref-frame-visible')?.addEventListener('change', event => {
         const target = event.currentTarget as HTMLInputElement;
         refFrame.visible = target.checked;
         viewer?.setFrameVisible(refFrame.id, refFrame.visible);
@@ -4362,13 +4591,24 @@ function renderJointPropertiesPanel(jointId: string): void {
         const nameInput = document.getElementById('prop-joint-name') as HTMLInputElement | null;
         const typeInput = document.getElementById('prop-joint-type') as HTMLSelectElement | null;
         const sizeInput = document.getElementById('prop-joint-size') as HTMLInputElement | null;
-        const inferenceInput = document.getElementById('prop-joint-inference') as HTMLInputElement | null;
-        const reverseInput = document.getElementById('prop-joint-reverse') as HTMLInputElement | null;
-        const nextDirection = normalizeVector(readVec3FromInputs('prop-joint-dir')) ?? DEFAULT_CONNECTOR_DIRECTION;
+        const inferenceInput = document.getElementById(
+            'prop-joint-inference'
+        ) as HTMLInputElement | null;
+        const reverseInput = document.getElementById(
+            'prop-joint-reverse'
+        ) as HTMLInputElement | null;
+        const nextDirection =
+            normalizeVector(readVec3FromInputs('prop-joint-dir')) ?? DEFAULT_CONNECTOR_DIRECTION;
 
         joint.name = nameInput?.value?.trim() || joint.name;
-        joint.jointType = normalizeConnectorType(typeInput?.value, normalizeConnectorType(joint.jointType));
-        joint.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${joint.iconSize}`) || joint.iconSize);
+        joint.jointType = normalizeConnectorType(
+            typeInput?.value,
+            normalizeConnectorType(joint.jointType)
+        );
+        joint.iconSize = Math.max(
+            1,
+            Number.parseFloat(sizeInput?.value ?? `${joint.iconSize}`) || joint.iconSize
+        );
         joint.inferenceEnabled = inferenceInput?.checked ?? joint.inferenceEnabled;
         joint.zAxisReversed = reverseInput?.checked ?? joint.zAxisReversed;
         joint.position = readVec3FromInputs('prop-joint-pos');
@@ -4430,8 +4670,12 @@ function renderMotionPropertiesPanel(motionId: string): void {
 
     document.getElementById('prop-motion-save')?.addEventListener('click', () => {
         const nameInput = document.getElementById('prop-motion-name') as HTMLInputElement | null;
-        const driveModeInput = document.getElementById('prop-motion-drive-mode') as HTMLSelectElement | null;
-        const visibleInput = document.getElementById('prop-motion-visible') as HTMLInputElement | null;
+        const driveModeInput = document.getElementById(
+            'prop-motion-drive-mode'
+        ) as HTMLSelectElement | null;
+        const visibleInput = document.getElementById(
+            'prop-motion-visible'
+        ) as HTMLInputElement | null;
         const sizeInput = document.getElementById('prop-motion-size') as HTMLInputElement | null;
         const phiInput = document.getElementById('prop-motion-phi') as HTMLInputElement | null;
         const wInput = document.getElementById('prop-motion-w') as HTMLInputElement | null;
@@ -4439,7 +4683,10 @@ function renderMotionPropertiesPanel(motionId: string): void {
         motion.name = nameInput?.value.trim() || motion.name;
         motion.driveMode = normalizeMotionDriveMode(driveModeInput?.value, motion.motionType);
         motion.visible = visibleInput?.checked ?? motion.visible;
-        motion.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${motion.iconSize}`) || motion.iconSize);
+        motion.iconSize = Math.max(
+            1,
+            Number.parseFloat(sizeInput?.value ?? `${motion.iconSize}`) || motion.iconSize
+        );
         motion.phiStart = Number.parseFloat(phiInput?.value ?? `${motion.phiStart}`) || 0;
         motion.wStart = Number.parseFloat(wInput?.value ?? `${motion.wStart}`) || 0;
         updateModelTree();
@@ -4489,7 +4736,7 @@ function renderContactPropertiesPanel(contactId: string): void {
         </div>
     </div>`;
 
-    document.getElementById('prop-contact-visible')?.addEventListener('change', (event) => {
+    document.getElementById('prop-contact-visible')?.addEventListener('change', event => {
         const target = event.currentTarget as HTMLInputElement;
         contact.visible = target.checked;
         const visual = contactVisuals.get(contact.id);
@@ -4504,7 +4751,10 @@ function renderContactPropertiesPanel(contactId: string): void {
         const sizeInput = document.getElementById('prop-contact-size') as HTMLInputElement | null;
         contact.name = nameInput?.value?.trim() || contact.name;
         contact.contactType = (typeInput?.value as ContactType) || contact.contactType;
-        contact.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${contact.iconSize}`) || contact.iconSize);
+        contact.iconSize = Math.max(
+            1,
+            Number.parseFloat(sizeInput?.value ?? `${contact.iconSize}`) || contact.iconSize
+        );
         upsertContactVisual(contact);
         updateModelTree();
         renderContactPropertiesPanel(contact.id);
@@ -4517,13 +4767,15 @@ function renderContactPropertiesPanel(contactId: string): void {
 }
 
 function updatePropertiesPanel(shapeId: string | null): void {
+    groupMassPropertiesCoordinator.cancelPending();
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     if (!shapeId) {
         massPropertiesCoordinator.cancelPending();
         setPanelMode('properties', '属性');
-        propsEl.innerHTML = '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
+        propsEl.innerHTML =
+            '<div style="color: #808080; font-style: italic;">选择对象以查看属性</div>';
         return;
     }
 
@@ -4543,16 +4795,16 @@ function updatePropertiesPanel(shapeId: string | null): void {
         { uiShapeId: shape.id, kernelShapeId: shape.shapeId, density: targetDensity },
         occtForRequest
             ? {
-                hasShape: (targetShapeId: string) => occtForRequest.hasShape(targetShapeId),
-                getMass: (targetShapeId: string, density: number) => {
-                    try {
-                        return occtForRequest.getMassProperties(targetShapeId, density);
-                    } catch (error) {
-                        console.warn('Failed to get mass properties:', error);
-                        return null;
-                    }
-                }
-            }
+                  hasShape: (targetShapeId: string) => occtForRequest.hasShape(targetShapeId),
+                  getMass: (targetShapeId: string, density: number) => {
+                      try {
+                          return occtForRequest.getMassProperties(targetShapeId, density);
+                      } catch (error) {
+                          console.warn('Failed to get mass properties:', error);
+                          return null;
+                      }
+                  }
+              }
             : null,
         (resolvedShapeId, massProperties) => {
             if (selectedShapeId !== resolvedShapeId) {
@@ -4647,7 +4899,9 @@ function expandParentNodes(nodeElement: Element): void {
 function expandAndScrollToTreeNode(treeNodeId: string): void {
     // Defer to next frame so the DOM is fully laid out after updateModelTree()
     requestAnimationFrame(() => {
-        const container = document.querySelector(`.tree-node-container[data-node-id="${treeNodeId}"]`);
+        const container = document.querySelector(
+            `.tree-node-container[data-node-id="${treeNodeId}"]`
+        );
         if (!container) return;
         expandParentNodes(container);
         const treeNode = container.querySelector('.tree-node');
@@ -4695,7 +4949,10 @@ function toArrayBuffer(fileContent: unknown): ArrayBuffer {
         return fileContent;
     }
     if (fileContent instanceof Uint8Array) {
-        return fileContent.buffer.slice(fileContent.byteOffset, fileContent.byteOffset + fileContent.byteLength);
+        return fileContent.buffer.slice(
+            fileContent.byteOffset,
+            fileContent.byteOffset + fileContent.byteLength
+        );
     }
     if (Array.isArray(fileContent)) {
         return new Uint8Array(fileContent).buffer;
@@ -4742,11 +4999,9 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
         }
 
         const workerBuffer = arrayBuffer.slice(0);
-        massPropertiesWorkerClient
-            .syncStep(result.shapes, workerBuffer, baseId)
-            .catch((error) => {
-                console.warn('[massWorker] Step sync failed', error);
-            });
+        massPropertiesWorkerClient.syncStep(result.shapes, workerBuffer, baseId).catch(error => {
+            console.warn('[massWorker] Step sync failed', error);
+        });
 
         showProgress(30, 'Building hierarchy...');
         setStatus('Building model hierarchy...');
@@ -4754,7 +5009,11 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
 
         // Build hierarchy from rootNodes if available
         if (result.rootNodes && result.rootNodes.length > 0) {
-            console.log('[loadStepFile] Building hierarchy from', result.rootNodes.length, 'root nodes');
+            console.log(
+                '[loadStepFile] Building hierarchy from',
+                result.rootNodes.length,
+                'root nodes'
+            );
 
             // Collect only leaf renderable shapes.
             // This avoids rendering both parent and child solids at the same time (z-fighting / ghosting).
@@ -4763,7 +5022,9 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                 if (!node?.children || !Array.isArray(node.children)) {
                     return false;
                 }
-                return node.children.some((child: any) => Boolean(child.shapeId) || hasRenderableDescendant(child));
+                return node.children.some(
+                    (child: any) => Boolean(child.shapeId) || hasRenderableDescendant(child)
+                );
             };
             const collectShapes = (node: any) => {
                 if (node.shapeId && !hasRenderableDescendant(node)) {
@@ -4775,27 +5036,38 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                     });
                 }
             };
-            result.rootNodes.forEach((root) => collectShapes(root));
+            result.rootNodes.forEach(root => collectShapes(root));
 
             showProgress(40, `Generating meshes (0/${shapesToMesh.length})...`);
             console.log('[loadStepFile] Total shapes to mesh:', shapesToMesh.length);
 
-            const validShapeIds = Array.from(new Set(
-                shapesToMesh
-                    .map(({ node }) => node.shapeId as string | undefined)
-                    .filter((shapeId): shapeId is string => Boolean(shapeId) && occt!.hasShape(shapeId))
-            ));
-            const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
-            const meshByShapeId = occt!.getMeshes(validShapeIds, linearDeflection, angularDeflection);
+            const validShapeIds = Array.from(
+                new Set(
+                    shapesToMesh
+                        .map(({ node }) => node.shapeId as string | undefined)
+                        .filter(
+                            (shapeId): shapeId is string =>
+                                Boolean(shapeId) && occt!.hasShape(shapeId)
+                        )
+                )
+            );
+            const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(
+                renderConfig.precisionPreset
+            );
+            const meshByShapeId = occt!.getMeshes(
+                validShapeIds,
+                linearDeflection,
+                angularDeflection
+            );
             const edgeByShapeId = new Map<string, EdgeData | null>();
-            validShapeIds.forEach((shapeId) => {
+            validShapeIds.forEach(shapeId => {
                 const edgeLinearDeflection = Math.max(linearDeflection * 0.35, 1e-6);
                 edgeByShapeId.set(shapeId, occt!.getBrepEdges(shapeId, edgeLinearDeflection));
             });
 
             // Attach meshes to all nodes
             for (let i = 0; i < shapesToMesh.length; i++) {
-                const {node} = shapesToMesh[i];
+                const { node } = shapesToMesh[i];
                 if (node.shapeId) {
                     const meshData = meshByShapeId.get(node.shapeId) ?? null;
                     if (meshData && meshData.vertices.length > 0) {
@@ -4809,7 +5081,10 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
 
                 // Update progress (40% to 80% for mesh generation)
                 const meshProgress = 40 + ((i + 1) / shapesToMesh.length) * 40;
-                showProgress(meshProgress, `Generating meshes (${i + 1}/${shapesToMesh.length})...`);
+                showProgress(
+                    meshProgress,
+                    `Generating meshes (${i + 1}/${shapesToMesh.length})...`
+                );
 
                 // Yield to UI thread periodically
                 if (i % 5 === 0) {
@@ -4833,7 +5108,11 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             ): LoadedShape => {
                 const localTransform = normalizeRigidTransform(node.transform);
                 const worldTransform = composeRigidTransforms(parentTransform, localTransform);
-                const displayColor = normalizeImportedDisplayColor(node.name, node.type, node.color);
+                const displayColor = normalizeImportedDisplayColor(
+                    node.name,
+                    node.type,
+                    node.color
+                );
                 const shape: LoadedShape = {
                     id: node.id,
                     name: node.name,
@@ -4871,7 +5150,9 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
 
                 // Process children
                 if (node.children && node.children.length > 0) {
-                    shape.children = node.children.map((child: any) => buildShapeTree(child, shape, worldTransform));
+                    shape.children = node.children.map((child: any) =>
+                        buildShapeTree(child, shape, worldTransform)
+                    );
                 }
 
                 loadedShapes.set(shape.id, shape);
@@ -4911,7 +5192,6 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                 command: 'alert',
                 text: `Successfully loaded ${meshCount} parts from ${fileName}`
             });
-
         } else {
             // Fallback to legacy flat structure
             console.log('[loadStepFile] Using legacy flat structure');
@@ -4925,8 +5205,14 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
             selectedDensityByShapeId.clear();
 
             const totalShapes = result.shapes.length;
-            const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(renderConfig.precisionPreset);
-            const meshByShapeId = occt!.getMeshes(result.shapes, linearDeflection, angularDeflection);
+            const { linearDeflection, angularDeflection } = getMeshingParamsFromPreset(
+                renderConfig.precisionPreset
+            );
+            const meshByShapeId = occt!.getMeshes(
+                result.shapes,
+                linearDeflection,
+                angularDeflection
+            );
             for (let i = 0; i < totalShapes; i++) {
                 const shapeId = result.shapes[i];
                 const meshData = meshByShapeId.get(shapeId) ?? null;
@@ -4996,7 +5282,6 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                 text: `Successfully loaded ${addedCount} shapes from ${fileName}`
             });
         }
-
     } catch (error) {
         console.error('Failed to load STEP file:', error);
         const detail = error instanceof Error ? error.message : String(error);
@@ -5057,7 +5342,7 @@ function exportModel(): void {
 
         // Recursively collect all parts
         const collectParts = (shape: LoadedShape): void => {
-            const partData: typeof exportData.parts[0] = {
+            const partData: (typeof exportData.parts)[0] = {
                 id: shape.id,
                 name: shape.name,
                 type: shape.type,
@@ -5076,8 +5361,12 @@ function exportModel(): void {
 
                 // Calculate bounding box
                 const vertices = shape.meshData.vertices;
-                let minX = Infinity, minY = Infinity, minZ = Infinity;
-                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                let minX = Infinity,
+                    minY = Infinity,
+                    minZ = Infinity;
+                let maxX = -Infinity,
+                    maxY = -Infinity,
+                    maxZ = -Infinity;
 
                 for (let i = 0; i < vertices.length; i += 3) {
                     minX = Math.min(minX, vertices[i]);
@@ -5141,7 +5430,6 @@ function exportModel(): void {
 
         setStatus('Ready');
         setStatusInfo(`Exported ${exportData.parts.length} parts`);
-
     } catch (error) {
         console.error('Failed to export model:', error);
         const detail = error instanceof Error ? error.message : String(error);
@@ -5286,7 +5574,11 @@ function addImportWarning(stats: CadtoolConfigImportStats, warning: string): voi
     }
 }
 
-function getConfigArray(config: JsonRecord, key: string, stats: CadtoolConfigImportStats): unknown[] {
+function getConfigArray(
+    config: JsonRecord,
+    key: string,
+    stats: CadtoolConfigImportStats
+): unknown[] {
     const value = config[key];
     if (value === undefined) {
         return [];
@@ -5312,12 +5604,12 @@ function parseVector3(value: unknown): { x: number; y: number; z: number } | nul
         const y = value.y;
         const z = value.z;
         if (
-            typeof x === 'number'
-            && Number.isFinite(x)
-            && typeof y === 'number'
-            && Number.isFinite(y)
-            && typeof z === 'number'
-            && Number.isFinite(z)
+            typeof x === 'number' &&
+            Number.isFinite(x) &&
+            typeof y === 'number' &&
+            Number.isFinite(y) &&
+            typeof z === 'number' &&
+            Number.isFinite(z)
         ) {
             return { x, y, z };
         }
@@ -5326,7 +5618,9 @@ function parseVector3(value: unknown): { x: number; y: number; z: number } | nul
     return null;
 }
 
-function normalizeVector(vector: { x: number; y: number; z: number } | null): { x: number; y: number; z: number } | null {
+function normalizeVector(
+    vector: { x: number; y: number; z: number } | null
+): { x: number; y: number; z: number } | null {
     if (!vector) {
         return null;
     }
@@ -5388,9 +5682,15 @@ function createOrientationFromNormal(normal: Vec3): Mat3 {
 
     return {
         m: [
-            xAxis.x, xAxis.y, xAxis.z,
-            yAxis.x, yAxis.y, yAxis.z,
-            normalized.x, normalized.y, normalized.z
+            xAxis.x,
+            xAxis.y,
+            xAxis.z,
+            yAxis.x,
+            yAxis.y,
+            yAxis.z,
+            normalized.x,
+            normalized.y,
+            normalized.z
         ]
     };
 }
@@ -5438,7 +5738,11 @@ function showMarkerPreview(draft: MarkerDraft): void {
     });
 }
 
-function buildMarkerPreviewDraft(selectedShape: LoadedShape, position: Vec3, normal: Vec3): MarkerDraft {
+function buildMarkerPreviewDraft(
+    selectedShape: LoadedShape,
+    position: Vec3,
+    normal: Vec3
+): MarkerDraft {
     const nameInput = document.getElementById('opt-marker-name') as HTMLInputElement | null;
     const sizeInput = document.getElementById('opt-marker-size') as HTMLInputElement | null;
     const owner = resolveFrameOwnerForShape(selectedShape.id);
@@ -5477,14 +5781,18 @@ function estimateShapeInferenceTolerance(shape: LoadedShape): number {
     }
 
     const diagonal = Math.sqrt(
-        (maxX - minX) * (maxX - minX)
-        + (maxY - minY) * (maxY - minY)
-        + (maxZ - minZ) * (maxZ - minZ)
+        (maxX - minX) * (maxX - minX) +
+            (maxY - minY) * (maxY - minY) +
+            (maxZ - minZ) * (maxZ - minZ)
     );
     return Math.max(diagonal * 0.02, 0.5);
 }
 
-function inferPlacementFromEdgeEndpoints(shape: LoadedShape, hitPosition: Vec3, fallbackNormal: Vec3): { position: Vec3; normal: Vec3 } | null {
+function inferPlacementFromEdgeEndpoints(
+    shape: LoadedShape,
+    hitPosition: Vec3,
+    fallbackNormal: Vec3
+): { position: Vec3; normal: Vec3 } | null {
     const edgeVertices = shape.edgeData?.vertices;
     if (!edgeVertices || edgeVertices.length < 6) {
         return null;
@@ -5492,7 +5800,12 @@ function inferPlacementFromEdgeEndpoints(shape: LoadedShape, hitPosition: Vec3, 
 
     const tolerance = estimateShapeInferenceTolerance(shape);
     const toleranceSq = tolerance * tolerance;
-    let bestCandidate: { position: Vec3; normal: Vec3; endpointDistanceSq: number; segmentDistanceSq: number } | null = null;
+    let bestCandidate: {
+        position: Vec3;
+        normal: Vec3;
+        endpointDistanceSq: number;
+        segmentDistanceSq: number;
+    } | null = null;
 
     for (let index = 0; index + 5 < edgeVertices.length; index += 6) {
         const start: Vec3 = {
@@ -5506,13 +5819,22 @@ function inferPlacementFromEdgeEndpoints(shape: LoadedShape, hitPosition: Vec3, 
             z: edgeVertices[index + 5]
         };
         const segment = subtractVec3(end, start);
-        const length = Math.sqrt(segment.x * segment.x + segment.y * segment.y + segment.z * segment.z);
+        const length = Math.sqrt(
+            segment.x * segment.x + segment.y * segment.y + segment.z * segment.z
+        );
         if (length <= 1e-9) {
             continue;
         }
 
         const toHit = subtractVec3(hitPosition, start);
-        const t = Math.max(0, Math.min(1, ((toHit.x * segment.x) + (toHit.y * segment.y) + (toHit.z * segment.z)) / (length * length)));
+        const t = Math.max(
+            0,
+            Math.min(
+                1,
+                (toHit.x * segment.x + toHit.y * segment.y + toHit.z * segment.z) /
+                    (length * length)
+            )
+        );
         const closestPoint: Vec3 = {
             x: start.x + segment.x * t,
             y: start.y + segment.y * t,
@@ -5529,9 +5851,12 @@ function inferPlacementFromEdgeEndpoints(shape: LoadedShape, hitPosition: Vec3, 
         const direction = normalizeVector(segment) ?? fallbackNormal;
         const endpointDistanceSq = Math.min(startDistanceSq, endDistanceSq);
 
-        if (!bestCandidate
-            || segmentDistanceSq < bestCandidate.segmentDistanceSq
-            || (segmentDistanceSq === bestCandidate.segmentDistanceSq && endpointDistanceSq < bestCandidate.endpointDistanceSq)) {
+        if (
+            !bestCandidate ||
+            segmentDistanceSq < bestCandidate.segmentDistanceSq ||
+            (segmentDistanceSq === bestCandidate.segmentDistanceSq &&
+                endpointDistanceSq < bestCandidate.endpointDistanceSq)
+        ) {
             bestCandidate = {
                 position: cloneVec3(position),
                 normal: direction,
@@ -5568,12 +5893,14 @@ function inferPlacementFromCircularEdge(
         return null;
     }
 
-    const dot = (candidate.normal.x * fallbackNormal.x)
-        + (candidate.normal.y * fallbackNormal.y)
-        + (candidate.normal.z * fallbackNormal.z);
-    const alignedNormal = dot < 0
-        ? { x: -candidate.normal.x, y: -candidate.normal.y, z: -candidate.normal.z }
-        : candidate.normal;
+    const dot =
+        candidate.normal.x * fallbackNormal.x +
+        candidate.normal.y * fallbackNormal.y +
+        candidate.normal.z * fallbackNormal.z;
+    const alignedNormal =
+        dot < 0
+            ? { x: -candidate.normal.x, y: -candidate.normal.y, z: -candidate.normal.z }
+            : candidate.normal;
 
     return {
         position: cloneVec3(candidate.center),
@@ -5625,22 +5952,36 @@ function inferMarkerPlacement(
 
     const snapPoint = geometryHint?.snapPoint ? cloneVec3(geometryHint.snapPoint) : null;
     const snapDirection = geometryHint?.snapDirection
-        ? normalizeVector(geometryHint.snapDirection) ?? null
+        ? (normalizeVector(geometryHint.snapDirection) ?? null)
         : null;
-    if (geometryHint?.snapKind === 'sphere-center' && snapPoint && snapDirection && (geometryHint.snapConfidence ?? 0) >= 0.5) {
+    if (
+        geometryHint?.snapKind === 'sphere-center' &&
+        snapPoint &&
+        snapDirection &&
+        (geometryHint.snapConfidence ?? 0) >= 0.5
+    ) {
         return {
             position: snapPoint,
             normal: snapDirection
         };
     }
-    if (geometryHint?.snapKind === 'cylinder-axis' && snapPoint && snapDirection && (geometryHint.snapConfidence ?? 0) >= 0.5) {
+    if (
+        geometryHint?.snapKind === 'cylinder-axis' &&
+        snapPoint &&
+        snapDirection &&
+        (geometryHint.snapConfidence ?? 0) >= 0.5
+    ) {
         return {
             position: snapPoint,
             normal: snapDirection
         };
     }
 
-    const edgePlacement = inferPlacementFromEdgeEndpoints(selectedShape, hitPosition, fallbackNormal);
+    const edgePlacement = inferPlacementFromEdgeEndpoints(
+        selectedShape,
+        hitPosition,
+        fallbackNormal
+    );
     if (edgePlacement) {
         return edgePlacement;
     }
@@ -5691,12 +6032,17 @@ function resetCanvasInteraction(): void {
     setCanvasCursor('default');
 }
 
-function resolveLatestExistingFrameFromHistory(): { index: number; id: string; kind: FrameEntityKind } | null {
+function resolveLatestExistingFrameFromHistory(): {
+    index: number;
+    id: string;
+    kind: FrameEntityKind;
+} | null {
     for (let i = frameCreationHistory.length - 1; i >= 0; i -= 1) {
         const item = frameCreationHistory[i];
-        const exists = item.kind === 'marker'
-            ? createdMarkers.some((marker) => marker.id === item.id)
-            : createdRefFrames.has(item.id);
+        const exists =
+            item.kind === 'marker'
+                ? createdMarkers.some(marker => marker.id === item.id)
+                : createdRefFrames.has(item.id);
 
         if (exists) {
             return { index: i, id: item.id, kind: item.kind };
@@ -5710,7 +6056,7 @@ function resolveLatestExistingFrameFromHistory(): { index: number; id: string; k
 
 function buildShapeNameToIdMap(): Map<string, string> {
     const shapeNameToId = new Map<string, string>();
-    loadedShapes.forEach((shape) => {
+    loadedShapes.forEach(shape => {
         if (!shapeNameToId.has(shape.name)) {
             shapeNameToId.set(shape.name, shape.id);
         }
@@ -5718,7 +6064,10 @@ function buildShapeNameToIdMap(): Map<string, string> {
     return shapeNameToId;
 }
 
-function resolveShapeRef(value: string, shapeNameToId: Map<string, string>): { resolved: string; matched: boolean } {
+function resolveShapeRef(
+    value: string,
+    shapeNameToId: Map<string, string>
+): { resolved: string; matched: boolean } {
     if (value.trim().toLowerCase() === 'ground') {
         return { resolved: GROUND_PART_ID, matched: true };
     }
@@ -5735,16 +6084,16 @@ function clearCadtoolRuntimeEntities(): void {
         createdMarkers.forEach(marker => {
             viewer.removeFrame(marker.id);
         });
-        createdRefFrames.forEach((refFrame) => {
+        createdRefFrames.forEach(refFrame => {
             viewer.removeFrame(refFrame.id);
         });
-        mbsDesignPoints.forEach((designPoint) => {
+        mbsDesignPoints.forEach(designPoint => {
             viewer.removeFrame(designPoint.id);
         });
-        mbsJoints.forEach((joint) => {
+        mbsJoints.forEach(joint => {
             viewer.removeJoint(joint.id);
         });
-        Array.from(contactVisuals.keys()).forEach((contactId) => {
+        Array.from(contactVisuals.keys()).forEach(contactId => {
             removeContactVisual(contactId);
         });
     }
@@ -5811,9 +6160,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const partsRaw = entry.parts;
         const parts: string[] = Array.isArray(partsRaw)
-            ? partsRaw
-                .map(toNonEmptyString)
-                .filter((value): value is string => Boolean(value))
+            ? partsRaw.map(toNonEmptyString).filter((value): value is string => Boolean(value))
             : [];
 
         if (partsRaw !== undefined && !Array.isArray(partsRaw)) {
@@ -5821,10 +6168,13 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         }
 
         const memberShapeIds: string[] = [];
-        parts.forEach((partName) => {
+        parts.forEach(partName => {
             const resolvedPart = resolveShapeRef(partName, shapeNameToId);
             if (!resolvedPart.matched && loadedShapes.size > 0) {
-                addImportWarning(stats, `group "${name}" references unknown part "${partName}", keeping raw reference.`);
+                addImportWarning(
+                    stats,
+                    `group "${name}" references unknown part "${partName}", keeping raw reference.`
+                );
             }
             if (!memberShapeIds.includes(resolvedPart.resolved)) {
                 memberShapeIds.push(resolvedPart.resolved);
@@ -5840,20 +6190,30 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             childGroupIds: [],
             memberPartIds: memberShapeIds,
             kind: entry.kind === 'default' ? 'default' : 'imported',
-            order: typeof entry.order === 'number' && Number.isFinite(entry.order) ? entry.order : importedGroups.length + 1,
+            order:
+                typeof entry.order === 'number' && Number.isFinite(entry.order)
+                    ? entry.order
+                    : importedGroups.length + 1,
             createdAt: new Date().toISOString()
         };
         importedGroups.push(group);
 
         if (groupNameToId.has(name)) {
-            addImportWarning(stats, `Duplicate group name "${name}" found; latest entry is used for references.`);
+            addImportWarning(
+                stats,
+                `Duplicate group name "${name}" found; latest entry is used for references.`
+            );
         }
         groupNameToId.set(name, groupId);
         stats.groups += 1;
     });
 
-    importedGroups.forEach((group) => {
-        if (group.parentGroupId && !getGroupNode(group.parentGroupId) && !groupDesignState.groupsById[group.parentGroupId]) {
+    importedGroups.forEach(group => {
+        if (
+            group.parentGroupId &&
+            !getGroupNode(group.parentGroupId) &&
+            !groupDesignState.groupsById[group.parentGroupId]
+        ) {
             const mappedParentId = groupNameToId.get(group.parentGroupId);
             group.parentGroupId = mappedParentId ?? null;
         }
@@ -5880,28 +6240,43 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const groupRef = toNonEmptyString(entry.groupRef);
         const partRef = toNonEmptyString(entry.partRef);
-        const relatedMarkerRef = toNonEmptyString(entry.relatedMarkerRef) ?? toNonEmptyString(entry.markerRef);
-        const refMarkerFlag = entry.refMarker === true || entry.refMarker === 'true' || Boolean(relatedMarkerRef);
+        const relatedMarkerRef =
+            toNonEmptyString(entry.relatedMarkerRef) ?? toNonEmptyString(entry.markerRef);
+        const refMarkerFlag =
+            entry.refMarker === true || entry.refMarker === 'true' || Boolean(relatedMarkerRef);
 
         let groupId: string | undefined;
         let hostPartId: string | undefined;
         if (groupRef) {
             groupId = groupNameToId.get(groupRef) ?? shapeNameToId.get(groupRef) ?? groupRef;
             if (!groupNameToId.has(groupRef) && !shapeNameToId.has(groupRef)) {
-                addImportWarning(stats, `marker "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`);
+                addImportWarning(
+                    stats,
+                    `marker "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`
+                );
             }
         } else if (partRef) {
             const partId = shapeNameToId.get(partRef) ?? partRef;
             hostPartId = partId;
             groupId = resolveOwningGroupId(partId) ?? partId;
             if (!shapeNameToId.has(partRef) && loadedShapes.size > 0) {
-                addImportWarning(stats, `marker "${name}" references unknown partRef "${partRef}", keeping raw reference.`);
+                addImportWarning(
+                    stats,
+                    `marker "${name}" references unknown partRef "${partRef}", keeping raw reference.`
+                );
             }
         }
 
         if (!groupId) {
-            groupId = getActiveGroupId() ?? resolveOwningGroupId(selectedShapeId ?? undefined) ?? selectedShapeId ?? '__unassigned__';
-            addImportWarning(stats, `marker "${name}" has no groupRef/partRef; assigned to "${groupId}".`);
+            groupId =
+                getActiveGroupId() ??
+                resolveOwningGroupId(selectedShapeId ?? undefined) ??
+                selectedShapeId ??
+                '__unassigned__';
+            addImportWarning(
+                stats,
+                `marker "${name}" has no groupRef/partRef; assigned to "${groupId}".`
+            );
         }
         if (!hostPartId && groupId && loadedShapes.has(groupId)) {
             hostPartId = groupId;
@@ -5909,11 +6284,15 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         const parsedPosition = parseVector3(entry.position);
         const parsedDirection = normalizeVector(parseVector3(entry.direction));
-        const parsedSize = typeof entry.size === 'number' && Number.isFinite(entry.size) ? entry.size : -1;
+        const parsedSize =
+            typeof entry.size === 'number' && Number.isFinite(entry.size) ? entry.size : -1;
         const parsedVisible = typeof entry.visible === 'boolean' ? entry.visible : true;
 
         if (entry.position !== undefined && !parsedPosition) {
-            addImportWarning(stats, `marker "${name}" has invalid position; defaulting to (0,0,0).`);
+            addImportWarning(
+                stats,
+                `marker "${name}" has invalid position; defaulting to (0,0,0).`
+            );
         }
         if (entry.direction !== undefined && !parsedDirection) {
             addImportWarning(stats, `marker "${name}" has invalid direction; defaulting to +Z.`);
@@ -5926,17 +6305,23 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             }
 
             const relatedMarker = relatedMarkerId
-                ? createdMarkers.find((marker) => marker.id === relatedMarkerId)
+                ? createdMarkers.find(marker => marker.id === relatedMarkerId)
                 : undefined;
             if (relatedMarkerRef && !relatedMarker) {
-                addImportWarning(stats, `ref marker "${name}" references unknown relatedMarkerRef "${relatedMarkerRef}".`);
+                addImportWarning(
+                    stats,
+                    `ref marker "${name}" references unknown relatedMarkerRef "${relatedMarkerRef}".`
+                );
             }
 
-            const resolvedPosition = parsedPosition
-                ?? (relatedMarker ? cloneVec3(relatedMarker.position) : { x: 0, y: 0, z: 0 });
+            const resolvedPosition =
+                parsedPosition ??
+                (relatedMarker ? cloneVec3(relatedMarker.position) : { x: 0, y: 0, z: 0 });
             const resolvedOrientation = parsedDirection
                 ? createOrientationFromNormal(parsedDirection)
-                : (relatedMarker ? cloneMat3(relatedMarker.orientation) : createOrientationFromNormal({ x: 0, y: 0, z: 1 }));
+                : relatedMarker
+                  ? cloneMat3(relatedMarker.orientation)
+                  : createOrientationFromNormal({ x: 0, y: 0, z: 1 });
             const refFrame: MbsRefFrameEntity = {
                 id: nextEntityId('refMarker', createdRefFrames.size),
                 name,
@@ -5999,9 +6384,14 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         }
 
         if (frameNameToFrame.size > 0 && frameNameToFrame.get(name)?.id) {
-            const duplicates = Array.from(frameNameToFrame.keys()).filter((frameName) => frameName === name).length;
+            const duplicates = Array.from(frameNameToFrame.keys()).filter(
+                frameName => frameName === name
+            ).length;
             if (duplicates > 1) {
-                addImportWarning(stats, `Duplicate marker name "${name}" found; latest entry is used for references.`);
+                addImportWarning(
+                    stats,
+                    `Duplicate marker name "${name}" found; latest entry is used for references.`
+                );
             }
         }
         stats.markers += 1;
@@ -6018,18 +6408,28 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         const name = toNonEmptyString(entry.name);
         if (!name) {
             stats.skipped += 1;
-            addImportWarning(stats, `designPoint[${index}] is missing a valid "name" and was skipped.`);
+            addImportWarning(
+                stats,
+                `designPoint[${index}] is missing a valid "name" and was skipped.`
+            );
             return;
         }
 
         const groupRef = toNonEmptyString(entry.groupRef);
         const markerRef = toNonEmptyString(entry.markerRef);
-        let groupId = getActiveGroupId() ?? resolveOwningGroupId(selectedShapeId ?? undefined) ?? selectedShapeId ?? '__unassigned__';
+        let groupId =
+            getActiveGroupId() ??
+            resolveOwningGroupId(selectedShapeId ?? undefined) ??
+            selectedShapeId ??
+            '__unassigned__';
 
         if (groupRef) {
             groupId = groupNameToId.get(groupRef) ?? shapeNameToId.get(groupRef) ?? groupRef;
             if (!groupNameToId.has(groupRef) && !shapeNameToId.has(groupRef)) {
-                addImportWarning(stats, `designPoint "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`);
+                addImportWarning(
+                    stats,
+                    `designPoint "${name}" references unknown groupRef "${groupRef}", keeping raw reference.`
+                );
             }
         }
 
@@ -6038,28 +6438,31 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             const resolved = frameNameToFrame.get(markerRef);
             markerRefId = resolved?.id ?? markerRef;
             if (!resolved) {
-                addImportWarning(stats, `designPoint "${name}" references unknown markerRef "${markerRef}", keeping raw reference.`);
+                addImportWarning(
+                    stats,
+                    `designPoint "${name}" references unknown markerRef "${markerRef}", keeping raw reference.`
+                );
             }
         }
 
         const parsedPosition = parseVector3(entry.position);
         const parsedDirection = normalizeVector(parseVector3(entry.direction));
         const markerRefEntity = markerRefId
-            ? createdMarkers.find((marker) => marker.id === markerRefId)
-                ?? createdRefFrames.get(markerRefId)
+            ? (createdMarkers.find(marker => marker.id === markerRefId) ??
+              createdRefFrames.get(markerRefId))
             : undefined;
 
-        const position = parsedPosition
-            ?? (markerRefEntity ? cloneVec3(markerRefEntity.position) : { x: 0, y: 0, z: 0 });
-        const sizeValue = typeof entry.size === 'number' && Number.isFinite(entry.size)
-            ? entry.size
-            : -1;
-        const isDirectionReverse = typeof entry.isDirectionReverse === 'boolean'
-            ? entry.isDirectionReverse
-            : false;
-        const offsetValue = typeof entry.offsetValue === 'number' && Number.isFinite(entry.offsetValue)
-            ? entry.offsetValue
-            : 0;
+        const position =
+            parsedPosition ??
+            (markerRefEntity ? cloneVec3(markerRefEntity.position) : { x: 0, y: 0, z: 0 });
+        const sizeValue =
+            typeof entry.size === 'number' && Number.isFinite(entry.size) ? entry.size : -1;
+        const isDirectionReverse =
+            typeof entry.isDirectionReverse === 'boolean' ? entry.isDirectionReverse : false;
+        const offsetValue =
+            typeof entry.offsetValue === 'number' && Number.isFinite(entry.offsetValue)
+                ? entry.offsetValue
+                : 0;
 
         const designPoint: MbsDesignPointEntity = {
             id: nextEntityId('designPoint', mbsDesignPoints.size),
@@ -6067,7 +6470,9 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             groupId,
             markerRefId,
             position: clampDesignPointPosition(position),
-            direction: parsedDirection ?? (markerRefEntity ? orientationToDirection(markerRefEntity.orientation) : undefined),
+            direction:
+                parsedDirection ??
+                (markerRefEntity ? orientationToDirection(markerRefEntity.orientation) : undefined),
             size: clampDesignPointSize(sizeValue),
             isDirectionReverse,
             offsetValue,
@@ -6101,22 +6506,33 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
         if (!name || !connectorType || !part1 || !part2) {
             stats.skipped += 1;
-            addImportWarning(stats, `connector[${index}] is missing required fields and was skipped.`);
+            addImportWarning(
+                stats,
+                `connector[${index}] is missing required fields and was skipped.`
+            );
             return;
         }
 
         const resolvedPart1 = resolveShapeRef(part1, shapeNameToId);
         const resolvedPart2 = resolveShapeRef(part2, shapeNameToId);
         if (!resolvedPart1.matched && loadedShapes.size > 0) {
-            addImportWarning(stats, `connector "${name}" references unknown part1 "${part1}", keeping raw reference.`);
+            addImportWarning(
+                stats,
+                `connector "${name}" references unknown part1 "${part1}", keeping raw reference.`
+            );
         }
         if (!resolvedPart2.matched && loadedShapes.size > 0) {
-            addImportWarning(stats, `connector "${name}" references unknown part2 "${part2}", keeping raw reference.`);
+            addImportWarning(
+                stats,
+                `connector "${name}" references unknown part2 "${part2}", keeping raw reference.`
+            );
         }
 
-        const parsedPosition = parseVector3(entry.position) ?? calculateShapeWorldCenter(resolvedPart1.resolved);
+        const parsedPosition =
+            parseVector3(entry.position) ?? calculateShapeWorldCenter(resolvedPart1.resolved);
         const parsedDirection = resolveConnectorDirection({
-            inferenceEnabled: typeof entry.inferenceEnabled === 'boolean' ? entry.inferenceEnabled : true,
+            inferenceEnabled:
+                typeof entry.inferenceEnabled === 'boolean' ? entry.inferenceEnabled : true,
             pickedDirection: parseVector3(entry.direction),
             reverseDirection: typeof entry.zAxisReversed === 'boolean' ? entry.zAxisReversed : false
         });
@@ -6129,8 +6545,12 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             part2: resolvedPart2.resolved,
             position: parsedPosition,
             direction: parsedDirection,
-            iconSize: typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize) ? entry.iconSize : pendingJointIconSize,
-            inferenceEnabled: typeof entry.inferenceEnabled === 'boolean' ? entry.inferenceEnabled : true,
+            iconSize:
+                typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize)
+                    ? entry.iconSize
+                    : pendingJointIconSize,
+            inferenceEnabled:
+                typeof entry.inferenceEnabled === 'boolean' ? entry.inferenceEnabled : true,
             zAxisReversed: typeof entry.zAxisReversed === 'boolean' ? entry.zAxisReversed : false,
             createdAt: new Date().toISOString()
         };
@@ -6158,11 +6578,20 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         }
 
         const normalizedMotionType = normalizeMotionType(motionType);
-        const jointRef = Array.from(mbsJoints.values()).find((joint) => joint.id === connectorRef || joint.name === connectorRef) ?? null;
+        const jointRef =
+            Array.from(mbsJoints.values()).find(
+                joint => joint.id === connectorRef || joint.name === connectorRef
+            ) ?? null;
         if (!jointRef) {
-            addImportWarning(stats, `motion "${name}" references unknown connector "${connectorRef}", keeping raw reference.`);
+            addImportWarning(
+                stats,
+                `motion "${name}" references unknown connector "${connectorRef}", keeping raw reference.`
+            );
         } else if (!isDriveCompatibleJointType(jointRef.jointType)) {
-            addImportWarning(stats, `motion "${name}" references connector "${connectorRef}" which is not drive-compatible.`);
+            addImportWarning(
+                stats,
+                `motion "${name}" references connector "${connectorRef}" which is not drive-compatible.`
+            );
         }
 
         const driveMode = normalizeMotionDriveMode(
@@ -6176,16 +6605,28 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             motionType: normalizedMotionType,
             driveMode,
             connectorRef: jointRef?.id ?? connectorRef,
-            iconSize: typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize) ? entry.iconSize : pendingMotionIconSize,
-            visible: typeof entry.visible === 'boolean'
-                ? entry.visible
-                : (typeof entry.visibility === 'boolean' ? entry.visibility : true),
-            phiStart: typeof entry.phiStart === 'number'
-                ? entry.phiStart
-                : (typeof entry.start === 'number' ? entry.start : 0),
-            wStart: typeof entry.wStart === 'number'
-                ? entry.wStart
-                : (typeof entry.w === 'number' ? entry.w : 0),
+            iconSize:
+                typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize)
+                    ? entry.iconSize
+                    : pendingMotionIconSize,
+            visible:
+                typeof entry.visible === 'boolean'
+                    ? entry.visible
+                    : typeof entry.visibility === 'boolean'
+                      ? entry.visibility
+                      : true,
+            phiStart:
+                typeof entry.phiStart === 'number'
+                    ? entry.phiStart
+                    : typeof entry.start === 'number'
+                      ? entry.start
+                      : 0,
+            wStart:
+                typeof entry.wStart === 'number'
+                    ? entry.wStart
+                    : typeof entry.w === 'number'
+                      ? entry.w
+                      : 0,
             createdAt: new Date().toISOString()
         };
         mbsMotions.set(motion.id, motion);
@@ -6205,17 +6646,26 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         const partB = toNonEmptyString(entry.partB);
         if (!name || !partA || !partB) {
             stats.skipped += 1;
-            addImportWarning(stats, `contact[${index}] is missing required fields and was skipped.`);
+            addImportWarning(
+                stats,
+                `contact[${index}] is missing required fields and was skipped.`
+            );
             return;
         }
 
         const resolvedPartA = resolveShapeRef(partA, shapeNameToId);
         const resolvedPartB = resolveShapeRef(partB, shapeNameToId);
         if (!resolvedPartA.matched && loadedShapes.size > 0) {
-            addImportWarning(stats, `contact "${name}" references unknown partA "${partA}", keeping raw reference.`);
+            addImportWarning(
+                stats,
+                `contact "${name}" references unknown partA "${partA}", keeping raw reference.`
+            );
         }
         if (!resolvedPartB.matched && loadedShapes.size > 0) {
-            addImportWarning(stats, `contact "${name}" references unknown partB "${partB}", keeping raw reference.`);
+            addImportWarning(
+                stats,
+                `contact "${name}" references unknown partB "${partB}", keeping raw reference.`
+            );
         }
 
         const params = isJsonRecord(entry.params) ? entry.params : null;
@@ -6227,11 +6677,9 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         const contact: MbsContactEntity = {
             id: nextEntityId('contact', mbsContacts.size),
             name,
-            contactType: (
-                toNonEmptyString(entry.contactType)
-                ?? toNonEmptyString(params?.contactType)
-                ?? 'pointPoint'
-            ) as ContactType,
+            contactType: (toNonEmptyString(entry.contactType) ??
+                toNonEmptyString(params?.contactType) ??
+                'pointPoint') as ContactType,
             partA: resolvedPartA.resolved,
             partB: resolvedPartB.resolved,
             featureA: {
@@ -6244,9 +6692,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
                 position: parseVector3(featureBRecord?.position) ?? anchorB.position,
                 normal: normalizeVector(parseVector3(featureBRecord?.direction)) ?? anchorB.normal
             },
-            iconSize: typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize)
-                ? Math.max(1, entry.iconSize)
-                : pendingContactSize,
+            iconSize:
+                typeof entry.iconSize === 'number' && Number.isFinite(entry.iconSize)
+                    ? Math.max(1, entry.iconSize)
+                    : pendingContactSize,
             visible: typeof entry.visibility === 'boolean' ? entry.visibility : true,
             createdAt: new Date().toISOString()
         };
@@ -6267,7 +6716,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         const name = toNonEmptyString(entry.name);
         if (!name) {
             stats.skipped += 1;
-            addImportWarning(stats, `ribSlice[${index}] is missing a valid "name" and was skipped.`);
+            addImportWarning(
+                stats,
+                `ribSlice[${index}] is missing a valid "name" and was skipped.`
+            );
             return;
         }
 
@@ -6299,7 +6751,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
         const portType = toNonEmptyString(entry.portType);
         if (!name || !portType) {
             stats.skipped += 1;
-            addImportWarning(stats, `fluidPort[${index}] is missing required fields and was skipped.`);
+            addImportWarning(
+                stats,
+                `fluidPort[${index}] is missing required fields and was skipped.`
+            );
             return;
         }
 
@@ -6309,7 +6764,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             : undefined;
         const ribSliceRef = toNonEmptyString(entry.ribSliceRef) ?? undefined;
         if (ribSliceRef && !ribSliceNames.has(ribSliceRef)) {
-            addImportWarning(stats, `fluidPort "${name}" references unknown ribSliceRef "${ribSliceRef}".`);
+            addImportWarning(
+                stats,
+                `fluidPort "${name}" references unknown ribSliceRef "${ribSliceRef}".`
+            );
         }
 
         const port: FluidPortEntity = {
@@ -6335,9 +6793,10 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
 
     if (stats.warningCount > 0) {
         const hiddenWarnings = stats.warningCount - stats.warnings.length;
-        const warningText = hiddenWarnings > 0
-            ? `${stats.warnings.join(' | ')} | ... and ${hiddenWarnings} more warning(s).`
-            : stats.warnings.join(' | ');
+        const warningText =
+            hiddenWarnings > 0
+                ? `${stats.warnings.join(' | ')} | ... and ${hiddenWarnings} more warning(s).`
+                : stats.warnings.join(' | ');
         notifyWarning(`CADTool config import warnings (${stats.warningCount}).`, {
             detail: warningText,
             statusInfo: `CADTool config import completed with ${stats.warningCount} warning(s).`
@@ -6368,10 +6827,10 @@ function resolveGroupRefName(groupOrShapeId: string | undefined): string {
 
 function buildCadtoolConfigExportData(): CadtoolConfigExportData {
     const frameIdToName = new Map<string, string>();
-    createdMarkers.forEach((marker) => frameIdToName.set(marker.id, marker.name));
-    createdRefFrames.forEach((refFrame) => frameIdToName.set(refFrame.id, refFrame.name));
+    createdMarkers.forEach(marker => frameIdToName.set(marker.id, marker.name));
+    createdRefFrames.forEach(refFrame => frameIdToName.set(refFrame.id, refFrame.name));
 
-    const markerEntries = createdMarkers.map((marker) => ({
+    const markerEntries = createdMarkers.map(marker => ({
         name: marker.name,
         groupRef: resolveGroupRefName(marker.groupId),
         partRef: marker.parentId ? resolvePartRefName(marker.parentId) : undefined,
@@ -6381,7 +6840,7 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
         visible: marker.visible
     }));
 
-    const refMarkerEntries = Array.from(createdRefFrames.values()).map((refFrame) => ({
+    const refMarkerEntries = Array.from(createdRefFrames.values()).map(refFrame => ({
         name: refFrame.name,
         groupRef: resolveGroupRefName(refFrame.groupId),
         partRef: refFrame.parentId ? resolvePartRefName(refFrame.parentId) : undefined,
@@ -6399,12 +6858,14 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
         group: listGroups().map(group => ({
             name: group.name,
             parts: group.memberPartIds.map(resolvePartRefName),
-            parentRef: group.parentGroupId ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId) : null,
+            parentRef: group.parentGroupId
+                ? (getGroupNode(group.parentGroupId)?.name ?? group.parentGroupId)
+                : null,
             kind: group.kind,
             order: group.order
         })),
         marker: [...markerEntries, ...refMarkerEntries],
-        designPoint: Array.from(mbsDesignPoints.values()).map((point) => ({
+        designPoint: Array.from(mbsDesignPoints.values()).map(point => ({
             name: point.name,
             groupRef: resolveGroupRefName(point.groupId),
             markerRef: point.markerRefId
@@ -6437,7 +6898,7 @@ function buildCadtoolConfigExportData(): CadtoolConfigExportData {
             phiStart: motion.phiStart,
             wStart: motion.wStart
         })),
-        contact: Array.from(mbsContacts.values()).map((contact) => ({
+        contact: Array.from(mbsContacts.values()).map(contact => ({
             name: contact.name,
             partA: resolvePartRefName(contact.partA),
             partB: resolvePartRefName(contact.partB),
@@ -6508,8 +6969,12 @@ function calculateShapeCenter(shape: LoadedShape): { x: number; y: number; z: nu
     }
 
     const vertices = shape.meshData.vertices;
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+        minY = Infinity,
+        minZ = Infinity;
+    let maxX = -Infinity,
+        maxY = -Infinity,
+        maxZ = -Infinity;
 
     for (let i = 0; i < vertices.length; i += 3) {
         minX = Math.min(minX, vertices[i]);
@@ -6619,7 +7084,7 @@ function prepareExplodeData(): void {
 function applyExplode(distance: number): void {
     if (!viewer) return;
 
-    explodeDataMap.forEach((data) => {
+    explodeDataMap.forEach(data => {
         const offset = {
             x: data.explodeDirection.x * distance,
             y: data.explodeDirection.y * distance,
@@ -6694,8 +7159,12 @@ function updateExplodeDistance(percent: number): void {
 function calculateModelScale(): number {
     if (rootShapes.length === 0) return 100;
 
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+        minY = Infinity,
+        minZ = Infinity;
+    let maxX = -Infinity,
+        maxY = -Infinity,
+        maxZ = -Infinity;
 
     function processShape(shape: LoadedShape): void {
         if (shape.meshData) {
@@ -6742,7 +7211,7 @@ function clearScene(): void {
     massPropertiesWorkerClient.clear();
 
     // Remove all meshes from viewer
-    loadedShapes.forEach((shape) => {
+    loadedShapes.forEach(shape => {
         if (viewer && shape.meshId) {
             viewer.removeMesh(shape.meshId);
         }
@@ -6764,6 +7233,7 @@ function clearScene(): void {
     externalModelTreeShapes = [];
     explodeDataMap.clear();
     massPropertiesCoordinator.clear();
+    groupMassPropertiesCoordinator.clear();
     clearCadtoolRuntimeEntities();
     viewer?.setSelectionBoundsBoxes([]);
 
@@ -6833,13 +7303,18 @@ function findFirstRenderableShapeId(shape: LoadedShape, excludedShapeId: string)
     return null;
 }
 
-function renderCustomProperties(title: string, rows: Array<{ label: string; value: string }>): void {
+function renderCustomProperties(
+    title: string,
+    rows: Array<{ label: string; value: string }>
+): void {
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) {
         return;
     }
 
-    const lines = [`<div style="margin-bottom: 8px; font-weight: bold; color: #9cdcfe;">${title}</div>`];
+    const lines = [
+        `<div style="margin-bottom: 8px; font-weight: bold; color: #9cdcfe;">${title}</div>`
+    ];
     for (const row of rows) {
         lines.push(createPropertyRow(row.label, row.value));
     }
@@ -6857,17 +7332,17 @@ function sanitizeDesignPointName(name: string, fallback: string): string {
 
 function collectReservedEntityNames(ignoreDesignPointId?: string): Set<string> {
     const names = new Set<string>();
-    loadedShapes.forEach((shape) => names.add(shape.name));
-    listGroups().forEach((group) => names.add(group.name));
-    createdMarkers.forEach((marker) => names.add(marker.name));
-    Array.from(createdRefFrames.values()).forEach((refFrame) => names.add(refFrame.name));
+    loadedShapes.forEach(shape => names.add(shape.name));
+    listGroups().forEach(group => names.add(group.name));
+    createdMarkers.forEach(marker => names.add(marker.name));
+    Array.from(createdRefFrames.values()).forEach(refFrame => names.add(refFrame.name));
     Array.from(mbsDesignPoints.values())
-        .filter((point) => point.id !== ignoreDesignPointId)
-        .forEach((point) => names.add(point.name));
-    Array.from(mbsJoints.values()).forEach((joint) => names.add(joint.name));
-    Array.from(mbsMotions.values()).forEach((motion) => names.add(motion.name));
-    Array.from(fluidSlices.values()).forEach((slice) => names.add(slice.name));
-    Array.from(fluidPorts.values()).forEach((port) => names.add(port.name));
+        .filter(point => point.id !== ignoreDesignPointId)
+        .forEach(point => names.add(point.name));
+    Array.from(mbsJoints.values()).forEach(joint => names.add(joint.name));
+    Array.from(mbsMotions.values()).forEach(motion => names.add(motion.name));
+    Array.from(fluidSlices.values()).forEach(slice => names.add(slice.name));
+    Array.from(fluidPorts.values()).forEach(port => names.add(port.name));
     return names;
 }
 
@@ -6892,7 +7367,8 @@ function clampDesignPointSize(value: number): number {
 }
 
 function clampDesignPointPosition(position: Vec3): Vec3 {
-    const clampAxis = (value: number): number => Math.min(1000, Math.max(-1000, Number.isFinite(value) ? value : 0));
+    const clampAxis = (value: number): number =>
+        Math.min(1000, Math.max(-1000, Number.isFinite(value) ? value : 0));
     return {
         x: clampAxis(position.x),
         y: clampAxis(position.y),
@@ -6908,7 +7384,12 @@ function calculateMidpoint(pointA: Vec3, pointB: Vec3): Vec3 {
     };
 }
 
-function calculateOffsetPoint(basePoint: Vec3, direction: Vec3, offsetValue: number, reverse = false): Vec3 {
+function calculateOffsetPoint(
+    basePoint: Vec3,
+    direction: Vec3,
+    offsetValue: number,
+    reverse = false
+): Vec3 {
     const normalized = normalizeVector(direction);
     if (!normalized) {
         throw new Error('Offset direction is invalid.');
@@ -6937,11 +7418,11 @@ function intersectLineWithPlane(
     if (Math.abs(denominator) <= 1e-6) {
         throw new Error('Selected line and plane do not intersect.');
     }
-    const t = (
-        (planePoint.x - linePoint.x) * normal.x
-        + (planePoint.y - linePoint.y) * normal.y
-        + (planePoint.z - linePoint.z) * normal.z
-    ) / denominator;
+    const t =
+        ((planePoint.x - linePoint.x) * normal.x +
+            (planePoint.y - linePoint.y) * normal.y +
+            (planePoint.z - linePoint.z) * normal.z) /
+        denominator;
     return {
         x: linePoint.x + direction.x * t,
         y: linePoint.y + direction.y * t,
@@ -6982,9 +7463,9 @@ function intersectLineWithLine(lineA: DesignPointFeatureLine, lineB: DesignPoint
         z: p2.z + d2.z * t
     };
     const gap = Math.sqrt(
-        Math.pow(pointA.x - pointB.x, 2)
-        + Math.pow(pointA.y - pointB.y, 2)
-        + Math.pow(pointA.z - pointB.z, 2)
+        Math.pow(pointA.x - pointB.x, 2) +
+            Math.pow(pointA.y - pointB.y, 2) +
+            Math.pow(pointA.z - pointB.z, 2)
     );
     if (gap > 1e-3) {
         throw new Error('Selected line features do not share a stable intersection.');
@@ -6992,15 +7473,28 @@ function intersectLineWithLine(lineA: DesignPointFeatureLine, lineB: DesignPoint
     return calculateMidpoint(pointA, pointB);
 }
 
-function calculateIntersectionPoint(featureA: DesignPointFeature, featureB: DesignPointFeature): Vec3 {
+function calculateIntersectionPoint(
+    featureA: DesignPointFeature,
+    featureB: DesignPointFeature
+): Vec3 {
     if (featureA.kind === 'line' && featureB.kind === 'line') {
         return intersectLineWithLine(featureA, featureB);
     }
     if (featureA.kind === 'line' && featureB.kind === 'plane') {
-        return intersectLineWithPlane(featureA.point, featureA.direction, featureB.point, featureB.normal);
+        return intersectLineWithPlane(
+            featureA.point,
+            featureA.direction,
+            featureB.point,
+            featureB.normal
+        );
     }
     if (featureA.kind === 'plane' && featureB.kind === 'line') {
-        return intersectLineWithPlane(featureB.point, featureB.direction, featureA.point, featureA.normal);
+        return intersectLineWithPlane(
+            featureB.point,
+            featureB.direction,
+            featureA.point,
+            featureA.normal
+        );
     }
     throw new Error('Two plane features do not produce a single design point.');
 }
@@ -7008,8 +7502,11 @@ function calculateIntersectionPoint(featureA: DesignPointFeature, featureB: Desi
 function getFrameReferenceOptions(): Array<{ value: string; text: string }> {
     return [
         { value: '', text: '(无)' },
-        ...createdMarkers.map((marker) => ({ value: marker.id, text: `标架: ${marker.name}` })),
-        ...Array.from(createdRefFrames.values()).map((refFrame) => ({ value: refFrame.id, text: `参考标架: ${refFrame.name}` }))
+        ...createdMarkers.map(marker => ({ value: marker.id, text: `标架: ${marker.name}` })),
+        ...Array.from(createdRefFrames.values()).map(refFrame => ({
+            value: refFrame.id,
+            text: `参考标架: ${refFrame.name}`
+        }))
     ];
 }
 
@@ -7017,7 +7514,7 @@ function getFrameReferenceLabel(frameId?: string): string {
     if (!frameId) {
         return '(无)';
     }
-    const marker = createdMarkers.find((item) => item.id === frameId);
+    const marker = createdMarkers.find(item => item.id === frameId);
     if (marker) {
         return `标架: ${marker.name}`;
     }
@@ -7076,8 +7573,12 @@ function recalculateDesignPointDraft(draft: DesignPointDraft, silent = false): b
             if (!draft.firstPoint || !draft.secondPoint) {
                 return false;
             }
-            draft.position = clampDesignPointPosition(calculateMidpoint(draft.firstPoint, draft.secondPoint));
-            const midpointDirection = normalizeVector(subtractVec3(draft.secondPoint, draft.firstPoint));
+            draft.position = clampDesignPointPosition(
+                calculateMidpoint(draft.firstPoint, draft.secondPoint)
+            );
+            const midpointDirection = normalizeVector(
+                subtractVec3(draft.secondPoint, draft.firstPoint)
+            );
             if (midpointDirection) {
                 draft.direction = midpointDirection;
             }
@@ -7089,7 +7590,12 @@ function recalculateDesignPointDraft(draft: DesignPointDraft, silent = false): b
                 return false;
             }
             draft.position = clampDesignPointPosition(
-                calculateOffsetPoint(draft.basePoint, draft.direction, draft.offsetValue, draft.isDirectionReverse)
+                calculateOffsetPoint(
+                    draft.basePoint,
+                    draft.direction,
+                    draft.offsetValue,
+                    draft.isDirectionReverse
+                )
             );
             return true;
         }
@@ -7097,7 +7603,9 @@ function recalculateDesignPointDraft(draft: DesignPointDraft, silent = false): b
         if (!draft.featureA || !draft.featureB) {
             return false;
         }
-        draft.position = clampDesignPointPosition(calculateIntersectionPoint(draft.featureA, draft.featureB));
+        draft.position = clampDesignPointPosition(
+            calculateIntersectionPoint(draft.featureA, draft.featureB)
+        );
         if (draft.featureA.kind === 'line') {
             draft.direction = draft.featureA.direction;
         } else if (draft.featureB.kind === 'line') {
@@ -7110,7 +7618,10 @@ function recalculateDesignPointDraft(draft: DesignPointDraft, silent = false): b
         if (!silent) {
             vscode.postMessage({
                 command: 'alert',
-                text: error instanceof Error ? error.message : `Design point calculation failed: ${error}`
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : `Design point calculation failed: ${error}`
             });
         }
         return false;
@@ -7157,10 +7668,18 @@ function buildVec3Input(prefix: string, label: string, x: number, y: number, z: 
     </div>`;
 }
 
-function buildDropdown(id: string, label: string, value: string, options: Array<{ value: string; text: string }>): string {
-    const optionsHtml = options.map(opt =>
-        `<option value="${escapeAttr(opt.value)}"${opt.value === value ? ' selected' : ''}>${opt.text}</option>`
-    ).join('');
+function buildDropdown(
+    id: string,
+    label: string,
+    value: string,
+    options: Array<{ value: string; text: string }>
+): string {
+    const optionsHtml = options
+        .map(
+            opt =>
+                `<option value="${escapeAttr(opt.value)}"${opt.value === value ? ' selected' : ''}>${opt.text}</option>`
+        )
+        .join('');
     return `<div class="opt-row">
         <label for="${id}">${label}</label>
         <select id="${id}" class="opt-dropdown">${optionsHtml}</select>
@@ -7189,11 +7708,12 @@ function buildModeSwitch(): string {
 }
 
 function bindModeSwitchEvents(container: HTMLElement): void {
-    container.querySelectorAll<HTMLElement>('[data-mode]').forEach((button) => {
+    container.querySelectorAll<HTMLElement>('[data-mode]').forEach(button => {
         button.addEventListener('click', () => {
             const mode = button.dataset.mode;
-            container.querySelectorAll<HTMLElement>('[data-mode]').forEach((item) => {
-                item.className = item.dataset.mode === mode ? 'opt-mode-btn-active' : 'opt-mode-btn';
+            container.querySelectorAll<HTMLElement>('[data-mode]').forEach(item => {
+                item.className =
+                    item.dataset.mode === mode ? 'opt-mode-btn-active' : 'opt-mode-btn';
             });
         });
     });
@@ -7204,17 +7724,20 @@ function buildSectionHeader(text: string): string {
 }
 
 function buildTabBar(tabs: Array<{ id: string; text: string; active: boolean }>): string {
-    const tabsHtml = tabs.map(tab =>
-        `<button class="${tab.active ? 'opt-tab-active' : 'opt-tab'}" data-tab="${tab.id}">${tab.text}</button>`
-    ).join('');
+    const tabsHtml = tabs
+        .map(
+            tab =>
+                `<button class="${tab.active ? 'opt-tab-active' : 'opt-tab'}" data-tab="${tab.id}">${tab.text}</button>`
+        )
+        .join('');
     return `<div class="opt-tab-bar">${tabsHtml}</div>`;
 }
 
 function bindTabBarEvents(container: HTMLElement): void {
-    container.querySelectorAll<HTMLElement>('[data-tab]').forEach((button) => {
+    container.querySelectorAll<HTMLElement>('[data-tab]').forEach(button => {
         button.addEventListener('click', () => {
             const tabId = button.dataset.tab;
-            container.querySelectorAll<HTMLElement>('[data-tab]').forEach((item) => {
+            container.querySelectorAll<HTMLElement>('[data-tab]').forEach(item => {
                 item.className = item.dataset.tab === tabId ? 'opt-tab-active' : 'opt-tab';
             });
         });
@@ -7225,21 +7748,24 @@ function buildSelectedList(items: Array<{ name: string }>): string {
     if (items.length === 0) {
         return '<div class="opt-selected-list"><div class="opt-hint">暂无已选零件</div></div>';
     }
-    const itemsHtml = items.map(item =>
-        `<div class="opt-selected-item"><span class="checkmark">✓</span>${item.name}</div>`
-    ).join('');
+    const itemsHtml = items
+        .map(
+            item =>
+                `<div class="opt-selected-item"><span class="checkmark">✓</span>${item.name}</div>`
+        )
+        .join('');
     return `<div class="opt-selected-list">${itemsHtml}</div>`;
 }
 
 function closeOptionsPanel(): void {
     if (
-        canvasInteractionMode !== 'none'
-        || markerCreationPanelActive
-        || jointCreationPanelActive
-        || refFrameCreationPanelActive
-        || motionCreationPanelActive
-        || designPointCreationPanelActive
-        || contactCreationPanelActive
+        canvasInteractionMode !== 'none' ||
+        markerCreationPanelActive ||
+        jointCreationPanelActive ||
+        refFrameCreationPanelActive ||
+        motionCreationPanelActive ||
+        designPointCreationPanelActive ||
+        contactCreationPanelActive
     ) {
         resetCanvasInteraction();
     }
@@ -7248,13 +7774,23 @@ function closeOptionsPanel(): void {
 }
 
 function escapeAttr(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }
 
 function readVec3FromInputs(prefix: string): Vec3 {
-    const x = parseFloat((document.getElementById(`${prefix}-x`) as HTMLInputElement)?.value ?? '0');
-    const y = parseFloat((document.getElementById(`${prefix}-y`) as HTMLInputElement)?.value ?? '0');
-    const z = parseFloat((document.getElementById(`${prefix}-z`) as HTMLInputElement)?.value ?? '0');
+    const x = parseFloat(
+        (document.getElementById(`${prefix}-x`) as HTMLInputElement)?.value ?? '0'
+    );
+    const y = parseFloat(
+        (document.getElementById(`${prefix}-y`) as HTMLInputElement)?.value ?? '0'
+    );
+    const z = parseFloat(
+        (document.getElementById(`${prefix}-z`) as HTMLInputElement)?.value ?? '0'
+    );
     return { x: isNaN(x) ? 0 : x, y: isNaN(y) ? 0 : y, z: isNaN(z) ? 0 : z };
 }
 
@@ -7262,14 +7798,19 @@ function readVec3FromInputs(prefix: string): Vec3 {
 // Options Panel Renderers
 // ============================================================================
 
-function renderGroupOptionsPanel(selectedParts: LoadedShape[], parentGroupId: string | null = null): void {
+function renderGroupOptionsPanel(
+    selectedParts: LoadedShape[],
+    parentGroupId: string | null = null
+): void {
     setPanelMode('options', '选项-组合');
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
 
     const defaultName = `Group${mbsGroups.size + 1}`;
     const partItems = selectedParts.map(s => ({ name: s.name }));
-    const parentGroupName = parentGroupId ? (getGroupNode(parentGroupId)?.name ?? parentGroupId) : '(root)';
+    const parentGroupName = parentGroupId
+        ? (getGroupNode(parentGroupId)?.name ?? parentGroupId)
+        : '(root)';
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-group-name', defaultName)}
@@ -7311,13 +7852,13 @@ function renderMoveOptionsPanel(): void {
 
     const selectedGroupIds = getTopLevelSelectedGroupIds(getSelectedGroupIds());
     const selectedPartItems = getSelectedShapeIds()
-        .map((shapeId) => loadedShapes.get(shapeId))
+        .map(shapeId => loadedShapes.get(shapeId))
         .filter((shape): shape is LoadedShape => Boolean(shape))
-        .map((shape) => ({ name: `零件: ${shape.name}` }));
+        .map(shape => ({ name: `零件: ${shape.name}` }));
     const selectedGroupItems = selectedGroupIds
-        .map((groupId) => getGroupNode(groupId))
+        .map(groupId => getGroupNode(groupId))
         .filter((group): group is GroupNode => Boolean(group))
-        .map((group) => ({ name: `分组: ${group.name}` }));
+        .map(group => ({ name: `分组: ${group.name}` }));
     const selectedItems = [...selectedGroupItems, ...selectedPartItems];
     const moveTargetOptions = buildMoveTargetOptions(selectedGroupIds);
 
@@ -7378,7 +7919,9 @@ function renderRenameGroupOptionsPanel(): void {
     </div>`;
 
     document.getElementById('opt-rename-group-confirm')?.addEventListener('click', () => {
-        const nameInput = document.getElementById('opt-rename-group-name') as HTMLInputElement | null;
+        const nameInput = document.getElementById(
+            'opt-rename-group-name'
+        ) as HTMLInputElement | null;
         const requestedName = nameInput?.value ?? group.name;
 
         try {
@@ -7399,7 +7942,12 @@ function renderRenameGroupOptionsPanel(): void {
     });
 }
 
-function renderFrameOptionsPanel(title: string, name: string, position: Vec3, direction: Vec3): void {
+function renderFrameOptionsPanel(
+    title: string,
+    name: string,
+    position: Vec3,
+    direction: Vec3
+): void {
     setPanelMode('options', title);
     const propsEl = document.getElementById('properties-panel');
     if (!propsEl) return;
@@ -7430,9 +7978,14 @@ function finalizeMarkerDraft(): void {
 
     const nameInput = document.getElementById('opt-marker-name') as HTMLInputElement | null;
     const sizeInput = document.getElementById('opt-marker-size') as HTMLInputElement | null;
-    const direction = normalizeVector(readVec3FromInputs('opt-marker-dir')) ?? orientationToDirection(markerDraft.orientation);
+    const direction =
+        normalizeVector(readVec3FromInputs('opt-marker-dir')) ??
+        orientationToDirection(markerDraft.orientation);
     const position = readVec3FromInputs('opt-marker-pos');
-    const size = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${markerDraft.size}`) || markerDraft.size);
+    const size = Math.max(
+        1,
+        Number.parseFloat(sizeInput?.value ?? `${markerDraft.size}`) || markerDraft.size
+    );
     const marker = markerCreator.createMarker({
         position,
         normal: direction,
@@ -7466,7 +8019,7 @@ function finalizeMarkerDraft(): void {
 }
 
 function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: string): boolean {
-    const relatedMarker = createdMarkers.find((marker) => marker.id === baseMarkerId);
+    const relatedMarker = createdMarkers.find(marker => marker.id === baseMarkerId);
     const targetShape = loadedShapes.get(targetShapeId);
 
     const restoreRefFrameCreationPanel = (statusInfo?: string): void => {
@@ -7479,7 +8032,9 @@ function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: 
     };
 
     if (!relatedMarker || !targetShape) {
-        restoreRefFrameCreationPanel('Reference marker creation is waiting for a valid base marker and target part.');
+        restoreRefFrameCreationPanel(
+            'Reference marker creation is waiting for a valid base marker and target part.'
+        );
         return false;
     }
 
@@ -7542,7 +8097,9 @@ function renderMarkerCreationPanel(): void {
     }
 
     const draftPosition = markerDraft?.position ?? { x: 0, y: 0, z: 0 };
-    const draftDirection = markerDraft ? orientationToDirection(markerDraft.orientation) : { x: 0, y: 0, z: 1 };
+    const draftDirection = markerDraft
+        ? orientationToDirection(markerDraft.orientation)
+        : { x: 0, y: 0, z: 1 };
     const modeRow = `<div class="opt-mode-row">
         <button id="opt-marker-mode-fast" class="${markerCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">闪电模式</button>
         <button id="opt-marker-mode-standard" class="${markerCreationMode === 'standard' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">标准模式</button>
@@ -7562,7 +8119,9 @@ function renderMarkerCreationPanel(): void {
             <label for="opt-marker-inference">智能推断</label>
             <input id="opt-marker-inference" type="checkbox"${markerFeatureInferenceEnabled ? ' checked' : ''} />
         </div>
-        ${markerCreationMode === 'standard' ? `${buildSeparator()}
+        ${
+            markerCreationMode === 'standard'
+                ? `${buildSeparator()}
         ${buildVec3Input('opt-marker-pos', '位置（全局坐标）', draftPosition.x, draftPosition.y, draftPosition.z)}
         ${buildSeparator()}
         ${buildVec3Input('opt-marker-dir', '方向（单位向量）', draftDirection.x, draftDirection.y, draftDirection.z)}
@@ -7573,12 +8132,14 @@ function renderMarkerCreationPanel(): void {
             <button id="opt-marker-pick-direction" class="opt-btn-secondary">拾取方向</button>
         </div>
         ${buildSeparator()}
-        ${buildActionButtons('opt-marker-confirm', '添加', 'opt-marker-cancel')}` : `${buildSeparator()}
+        ${buildActionButtons('opt-marker-confirm', '添加', 'opt-marker-cancel')}`
+                : `${buildSeparator()}
         <div class="opt-hint">当前为闪电模式，拾取面后立即创建标架。</div>
         ${buildSeparator()}
         <div class="opt-btn-row">
             <button id="opt-marker-cancel" class="opt-btn-secondary">取消</button>
-        </div>`}
+        </div>`
+        }
     </div>`;
 
     document.getElementById('opt-marker-mode-fast')?.addEventListener('click', () => {
@@ -7589,7 +8150,7 @@ function renderMarkerCreationPanel(): void {
         markerCreationMode = 'standard';
         renderMarkerCreationPanel();
     });
-    document.getElementById('opt-marker-inference')?.addEventListener('change', (event) => {
+    document.getElementById('opt-marker-inference')?.addEventListener('change', event => {
         markerFeatureInferenceEnabled = (event.currentTarget as HTMLInputElement).checked;
     });
     document.getElementById('opt-marker-cancel')?.addEventListener('click', () => {
@@ -7625,9 +8186,11 @@ function renderRefFrameCreationPanel(): void {
     }
 
     const selectedBaseMarker = pendingRefFrameBaseId
-        ? createdMarkers.find((marker) => marker.id === pendingRefFrameBaseId) ?? null
+        ? (createdMarkers.find(marker => marker.id === pendingRefFrameBaseId) ?? null)
         : null;
-    const selectedTargetShape = pendingRefFrameTargetShapeId ? loadedShapes.get(pendingRefFrameTargetShapeId) ?? null : null;
+    const selectedTargetShape = pendingRefFrameTargetShapeId
+        ? (loadedShapes.get(pendingRefFrameTargetShapeId) ?? null)
+        : null;
     const targetOwnerName = selectedTargetShape
         ? frameOwnerDisplayName(resolveFrameOwnerForShape(selectedTargetShape.id).id)
         : '(未选择)';
@@ -7646,9 +8209,11 @@ function renderRefFrameCreationPanel(): void {
         ${buildSeparator()}
         <div class="opt-hint">${refFrameCreationMode === 'fast' ? '先在三维中拾取一个标架，再选择目标零件后会立即创建参考标架。' : '先在三维中拾取一个标架，再选择目标零件并点击“添加”完成创建。'}</div>
         ${buildSeparator()}
-        ${refFrameCreationMode === 'standard'
-            ? buildActionButtons('opt-ref-confirm', '添加', 'opt-ref-cancel')
-            : '<div class="opt-btn-row"><button id="opt-ref-cancel" class="opt-btn-secondary">取消</button></div>'}
+        ${
+            refFrameCreationMode === 'standard'
+                ? buildActionButtons('opt-ref-confirm', '添加', 'opt-ref-cancel')
+                : '<div class="opt-btn-row"><button id="opt-ref-cancel" class="opt-btn-secondary">取消</button></div>'
+        }
     </div>`;
 
     document.getElementById('opt-ref-mode-fast')?.addEventListener('click', () => {
@@ -7684,17 +8249,23 @@ function syncDesignPointDraftFromPanel(): DesignPointDraft | null {
     const sizeInput = document.getElementById('opt-dp-size') as HTMLInputElement | null;
     const offsetInput = document.getElementById('opt-dp-offset') as HTMLInputElement | null;
     const reverseInput = document.getElementById('opt-dp-reverse') as HTMLInputElement | null;
-    const markerRefSelect = document.getElementById('opt-dp-marker-ref') as HTMLSelectElement | null;
+    const markerRefSelect = document.getElementById(
+        'opt-dp-marker-ref'
+    ) as HTMLSelectElement | null;
 
     designPointDraft.name = nameInput?.value?.trim() || designPointDraft.name;
-    designPointDraft.size = clampDesignPointSize(Number.parseFloat(sizeInput?.value ?? `${designPointDraft.size}`));
-    designPointDraft.offsetValue = Number.parseFloat(offsetInput?.value ?? `${designPointDraft.offsetValue}`) || 0;
+    designPointDraft.size = clampDesignPointSize(
+        Number.parseFloat(sizeInput?.value ?? `${designPointDraft.size}`)
+    );
+    designPointDraft.offsetValue =
+        Number.parseFloat(offsetInput?.value ?? `${designPointDraft.offsetValue}`) || 0;
     designPointDraft.isDirectionReverse = reverseInput?.checked ?? false;
     designPointDraft.markerRefId = markerRefSelect?.value || undefined;
 
     if (designPointCreationMode === 'pick') {
         designPointDraft.position = clampDesignPointPosition(readVec3FromInputs('opt-dp-pos'));
-        designPointDraft.direction = normalizeVector(readVec3FromInputs('opt-dp-dir')) ?? designPointDraft.direction;
+        designPointDraft.direction =
+            normalizeVector(readVec3FromInputs('opt-dp-dir')) ?? designPointDraft.direction;
     }
 
     return designPointDraft;
@@ -7757,7 +8328,9 @@ function finalizeDesignPointDraft(): void {
         text: `Design point "${designPoint.name}" created successfully.`
     });
 
-    const nextShape = loadedShapes.get(draft.hostShapeId) ?? (selectedShapeId ? loadedShapes.get(selectedShapeId) ?? null : null);
+    const nextShape =
+        loadedShapes.get(draft.hostShapeId) ??
+        (selectedShapeId ? (loadedShapes.get(selectedShapeId) ?? null) : null);
     if (nextShape) {
         designPointDraft = createEmptyDesignPointDraft(nextShape);
         designPointDraft.size = pendingDesignPointSize;
@@ -7788,41 +8361,45 @@ function renderDesignPointOptionsPanel(): void {
         { value: 'offset', text: '偏移模式' },
         { value: 'intersection', text: '交点模式' }
     ];
-    const pointText = (value?: Vec3): string => value ? formatVec3(value) : '(未选择)';
-    const featureText = (value?: DesignPointFeature): string => value ? `${value.label} ${formatVec3(value.point)}` : '(未选择)';
-    const pickSection = designPointCreationMode === 'pick'
-        ? `${buildVec3Input('opt-dp-pos', '位置（全局坐标）', draft.position.x, draft.position.y, draft.position.z)}
+    const pointText = (value?: Vec3): string => (value ? formatVec3(value) : '(未选择)');
+    const featureText = (value?: DesignPointFeature): string =>
+        value ? `${value.label} ${formatVec3(value.point)}` : '(未选择)';
+    const pickSection =
+        designPointCreationMode === 'pick'
+            ? `${buildVec3Input('opt-dp-pos', '位置（全局坐标）', draft.position.x, draft.position.y, draft.position.z)}
         ${buildSeparator()}
         ${buildVec3Input('opt-dp-dir', '方向（单位向量）', draft.direction.x, draft.direction.y, draft.direction.z)}
         ${buildSeparator()}
         <div class="opt-btn-row">
             <button id="opt-dp-pick-placement" class="opt-btn-secondary">拾取位置与方向</button>
         </div>`
-        : `${buildDropdown('opt-dp-calc-mode', '计算方式', designPointCalcMode, calcModeOptions)}
+            : `${buildDropdown('opt-dp-calc-mode', '计算方式', designPointCalcMode, calcModeOptions)}
         ${buildSeparator()}
-        ${designPointCalcMode === 'midpoint'
-            ? `<div class="opt-label">第一个点：${pointText(draft.firstPoint)}</div>
+        ${
+            designPointCalcMode === 'midpoint'
+                ? `<div class="opt-label">第一个点：${pointText(draft.firstPoint)}</div>
                 <div class="opt-label">第二个点：${pointText(draft.secondPoint)}</div>
                 ${buildSeparator()}
                 <div class="opt-btn-row">
                     <button id="opt-dp-pick-first" class="opt-btn-secondary">拾取第一个点</button>
                     <button id="opt-dp-pick-second" class="opt-btn-secondary">拾取第二个点</button>
                 </div>`
-            : designPointCalcMode === 'offset'
-                ? `<div class="opt-label">参考点：${pointText(draft.basePoint)}</div>
+                : designPointCalcMode === 'offset'
+                  ? `<div class="opt-label">参考点：${pointText(draft.basePoint)}</div>
                     <div class="opt-label">参考方向：${formatVec3(draft.direction)}</div>
                     ${buildSeparator()}
                     <div class="opt-btn-row">
                         <button id="opt-dp-pick-base" class="opt-btn-secondary">拾取参考点</button>
                         <button id="opt-dp-pick-direction" class="opt-btn-secondary">拾取参考方向</button>
                     </div>`
-                : `<div class="opt-label">特征一：${featureText(draft.featureA)}</div>
+                  : `<div class="opt-label">特征一：${featureText(draft.featureA)}</div>
                     <div class="opt-label">特征二：${featureText(draft.featureB)}</div>
                     ${buildSeparator()}
                     <div class="opt-btn-row">
                         <button id="opt-dp-pick-feature-a" class="opt-btn-secondary">拾取特征一</button>
                         <button id="opt-dp-pick-feature-b" class="opt-btn-secondary">拾取特征二</button>
-                    </div>`}
+                    </div>`
+        }
         ${buildSeparator()}
         ${buildVec3Input('opt-dp-pos', '计算结果位置', draft.position.x, draft.position.y, draft.position.z)}
         ${buildSeparator()}
@@ -7873,7 +8450,7 @@ function renderDesignPointOptionsPanel(): void {
         setCanvasCursor('crosshair');
         setStatus('Click on a face to place the design point');
     });
-    document.querySelectorAll<HTMLElement>('[data-tab]').forEach((button) => {
+    document.querySelectorAll<HTMLElement>('[data-tab]').forEach(button => {
         button.addEventListener('click', () => {
             syncDesignPointDraftFromPanel();
             const tabId = button.dataset.tab;
@@ -7881,7 +8458,7 @@ function renderDesignPointOptionsPanel(): void {
             renderDesignPointOptionsPanel();
         });
     });
-    document.getElementById('opt-dp-calc-mode')?.addEventListener('change', (event) => {
+    document.getElementById('opt-dp-calc-mode')?.addEventListener('change', event => {
         syncDesignPointDraftFromPanel();
         const nextMode = (event.currentTarget as HTMLSelectElement).value;
         if (nextMode === 'midpoint' || nextMode === 'offset' || nextMode === 'intersection') {
@@ -7979,13 +8556,18 @@ function renderDesignPointPropertiesPanel(designPointId: string): void {
     document.getElementById('prop-dp-save')?.addEventListener('click', () => {
         const nameInput = document.getElementById('prop-dp-name') as HTMLInputElement | null;
         const sizeInput = document.getElementById('prop-dp-size') as HTMLInputElement | null;
-        const markerRefSelect = document.getElementById('prop-dp-marker-ref') as HTMLSelectElement | null;
+        const markerRefSelect = document.getElementById(
+            'prop-dp-marker-ref'
+        ) as HTMLSelectElement | null;
         const reverseInput = document.getElementById('prop-dp-reverse') as HTMLInputElement | null;
         const offsetInput = document.getElementById('prop-dp-offset') as HTMLInputElement | null;
         point.name = getUniqueDesignPointName(nameInput?.value ?? point.name, point.id);
-        point.size = clampDesignPointSize(Number.parseFloat(sizeInput?.value ?? `${point.size}`) || point.size);
+        point.size = clampDesignPointSize(
+            Number.parseFloat(sizeInput?.value ?? `${point.size}`) || point.size
+        );
         point.position = clampDesignPointPosition(readVec3FromInputs('prop-dp-pos'));
-        point.direction = normalizeVector(readVec3FromInputs('prop-dp-dir')) ?? point.direction ?? { x: 0, y: 0, z: 1 };
+        point.direction = normalizeVector(readVec3FromInputs('prop-dp-dir')) ??
+            point.direction ?? { x: 0, y: 0, z: 1 };
         point.markerRefId = markerRefSelect?.value || undefined;
         point.isDirectionReverse = reverseInput?.checked ?? false;
         point.offsetValue = Number.parseFloat(offsetInput?.value ?? `${point.offsetValue}`) || 0;
@@ -8045,12 +8627,20 @@ function syncJointDraftFromInputs(): void {
     const nameInput = document.getElementById('opt-joint-name') as HTMLInputElement | null;
     const typeInput = document.getElementById('opt-joint-type') as HTMLSelectElement | null;
     const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
-    const inferenceInput = document.getElementById('opt-joint-inference') as HTMLInputElement | null;
+    const inferenceInput = document.getElementById(
+        'opt-joint-inference'
+    ) as HTMLInputElement | null;
     const reverseInput = document.getElementById('opt-joint-reverse') as HTMLInputElement | null;
 
     jointDraft.name = nameInput?.value?.trim() || jointDraft.name;
-    jointDraft.jointType = normalizeConnectorType(typeInput?.value, normalizeConnectorType(jointDraft.jointType));
-    jointDraft.iconSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${jointDraft.iconSize}`) || jointDraft.iconSize);
+    jointDraft.jointType = normalizeConnectorType(
+        typeInput?.value,
+        normalizeConnectorType(jointDraft.jointType)
+    );
+    jointDraft.iconSize = Math.max(
+        1,
+        Number.parseFloat(sizeInput?.value ?? `${jointDraft.iconSize}`) || jointDraft.iconSize
+    );
     jointDraft.inferenceEnabled = inferenceInput?.checked ?? jointDraft.inferenceEnabled;
     jointDraft.zAxisReversed = reverseInput?.checked ?? jointDraft.zAxisReversed;
     pendingJointIconSize = jointDraft.iconSize;
@@ -8075,7 +8665,8 @@ function recomputeJointDraftPlacement(): void {
     const part2Pick = jointDraft.part2Pick;
     const nextDirection = resolveConnectorDirection({
         inferenceEnabled: jointDraft.inferenceEnabled,
-        pickedDirection: part2Pick?.direction ?? part1Pick?.direction ?? DEFAULT_CONNECTOR_DIRECTION,
+        pickedDirection:
+            part2Pick?.direction ?? part1Pick?.direction ?? DEFAULT_CONNECTOR_DIRECTION,
         reverseDirection: jointDraft.zAxisReversed
     });
 
@@ -8183,7 +8774,9 @@ function renderJointOptionsPanel(): void {
     const part1Name = resolvePartRefName(draft.part1);
     const part2Name = resolvePartRefName(draft.part2);
     const stageText = draft.part1
-        ? (draft.part2 ? '已完成零件选择，可继续调整参数或连续创建。' : '下一步：在三维视图中拾取零件 2，或使用 Ground。')
+        ? draft.part2
+            ? '已完成零件选择，可继续调整参数或连续创建。'
+            : '下一步：在三维视图中拾取零件 2，或使用 Ground。'
         : '下一步：在三维视图中拾取零件 1。';
     const modeRow = `<div class="opt-mode-row">
         <button id="opt-joint-mode-fast" class="${jointCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">闪电模式</button>
@@ -8220,7 +8813,9 @@ function renderJointOptionsPanel(): void {
         </div>
         ${buildSeparator()}
         <div class="opt-hint">${stageText}</div>
-        ${jointCreationMode === 'standard' ? `${buildSeparator()}
+        ${
+            jointCreationMode === 'standard'
+                ? `${buildSeparator()}
         <div class="opt-row">
             <label for="opt-joint-reverse">Z 轴反向</label>
             <input id="opt-joint-reverse" type="checkbox"${draft.zAxisReversed ? ' checked' : ''} />
@@ -8229,12 +8824,14 @@ function renderJointOptionsPanel(): void {
         ${buildVec3Input('opt-joint-pos', '位置（全局坐标）', draft.position.x, draft.position.y, draft.position.z)}
         ${buildVec3Input('opt-joint-dir', '方向（单位向量）', draft.direction.x, draft.direction.y, draft.direction.z)}
         ${buildSeparator()}
-        ${buildActionButtons('opt-joint-confirm', '添加', 'opt-joint-cancel')}` : `${buildSeparator()}
+        ${buildActionButtons('opt-joint-confirm', '添加', 'opt-joint-cancel')}`
+                : `${buildSeparator()}
         <div class="opt-hint">当前为闪电模式，完成零件 1 和零件 2 拾取后会立即创建连接。</div>
         ${buildSeparator()}
         <div class="opt-btn-row">
             <button id="opt-joint-cancel" class="opt-btn-secondary">取消</button>
-        </div>`}
+        </div>`
+        }
     </div>`;
 
     document.getElementById('opt-joint-mode-fast')?.addEventListener('click', () => {
@@ -8285,11 +8882,24 @@ const CONTACT_TYPE_OPTIONS: Array<{ value: ContactType; text: string }> = [
     { value: 'pointSurface', text: '点面接触' }
 ];
 
-function normalizeMotionType(value: string | null | undefined, fallback: MotionType = 'rotational'): MotionType {
-    if (value === 'translational' || value === 'displacement' || value === 'velocity' || value === 'acceleration') {
+function normalizeMotionType(
+    value: string | null | undefined,
+    fallback: MotionType = 'rotational'
+): MotionType {
+    if (
+        value === 'translational' ||
+        value === 'displacement' ||
+        value === 'velocity' ||
+        value === 'acceleration'
+    ) {
         return 'translational';
     }
-    if (value === 'rotational' || value === 'angle' || value === 'angularVelocity' || value === 'angularAcceleration') {
+    if (
+        value === 'rotational' ||
+        value === 'angle' ||
+        value === 'angularVelocity' ||
+        value === 'angularAcceleration'
+    ) {
         return 'rotational';
     }
     return fallback;
@@ -8299,14 +8909,19 @@ function defaultMotionDriveMode(motionType: MotionType): MotionDriveMode {
     return motionType === 'translational' ? 'displacement' : 'angle';
 }
 
-function getMotionDriveModeOptions(motionType: MotionType): Array<{ value: MotionDriveMode; text: string }> {
+function getMotionDriveModeOptions(
+    motionType: MotionType
+): Array<{ value: MotionDriveMode; text: string }> {
     return motionType === 'translational'
         ? TRANSLATIONAL_DRIVE_MODE_OPTIONS
         : ROTATIONAL_DRIVE_MODE_OPTIONS;
 }
 
-function normalizeMotionDriveMode(value: string | null | undefined, motionType: MotionType): MotionDriveMode {
-    const allowed = new Set(getMotionDriveModeOptions(motionType).map((item) => item.value));
+function normalizeMotionDriveMode(
+    value: string | null | undefined,
+    motionType: MotionType
+): MotionDriveMode {
+    const allowed = new Set(getMotionDriveModeOptions(motionType).map(item => item.value));
     if (value && allowed.has(value as MotionDriveMode)) {
         return value as MotionDriveMode;
     }
@@ -8327,7 +8942,7 @@ function isMotionTypeCompatibleWithJoint(motionType: MotionType, jointType: stri
 }
 
 function resolveMotionTypeLabel(motionType: MotionType): string {
-    return MOTION_TYPE_OPTIONS.find((item) => item.value === motionType)?.text ?? motionType;
+    return MOTION_TYPE_OPTIONS.find(item => item.value === motionType)?.text ?? motionType;
 }
 
 function resolveMotionConnectorLabel(connectorRef: string | undefined): string {
@@ -8340,8 +8955,9 @@ function resolveMotionConnectorLabel(connectorRef: string | undefined): string {
         return connectorRef;
     }
 
-    const jointTypeLabel = JOINT_TYPE_OPTIONS.find((item) => item.value === normalizeConnectorType(joint.jointType))?.text
-        ?? normalizeConnectorType(joint.jointType);
+    const jointTypeLabel =
+        JOINT_TYPE_OPTIONS.find(item => item.value === normalizeConnectorType(joint.jointType))
+            ?.text ?? normalizeConnectorType(joint.jointType);
     return `${joint.name} (${jointTypeLabel})`;
 }
 
@@ -8362,7 +8978,9 @@ function createDefaultMotionDraft(motionType: MotionType = motionCreationPreset)
 function syncMotionSizeInputs(nextValue: number): void {
     const rounded = Math.max(1, Math.min(50000, Math.round(nextValue)));
     const sizeInput = document.getElementById('opt-motion-size') as HTMLInputElement | null;
-    const sizeRangeInput = document.getElementById('opt-motion-size-range') as HTMLInputElement | null;
+    const sizeRangeInput = document.getElementById(
+        'opt-motion-size-range'
+    ) as HTMLInputElement | null;
     if (sizeInput) {
         sizeInput.value = `${rounded}`;
     }
@@ -8384,7 +9002,9 @@ function updateMotionDraftSize(nextValue: number): number {
 function syncMotionDraftFromInputs(): MotionDraft {
     const currentDraft = motionDraft ?? createDefaultMotionDraft();
     const nameInput = document.getElementById('opt-motion-name') as HTMLInputElement | null;
-    const driveModeInput = document.getElementById('opt-motion-drive-mode') as HTMLSelectElement | null;
+    const driveModeInput = document.getElementById(
+        'opt-motion-drive-mode'
+    ) as HTMLSelectElement | null;
     const sizeInput = document.getElementById('opt-motion-size') as HTMLInputElement | null;
     const visibleInput = document.getElementById('opt-motion-visible') as HTMLInputElement | null;
     const phiInput = document.getElementById('opt-motion-phi') as HTMLInputElement | null;
@@ -8396,7 +9016,11 @@ function syncMotionDraftFromInputs(): MotionDraft {
         name: nameInput?.value.trim() || currentDraft.name,
         motionType: nextMotionType,
         driveMode: normalizeMotionDriveMode(driveModeInput?.value, nextMotionType),
-        iconSize: Math.max(1, Number.parseFloat(sizeInput?.value ?? `${currentDraft.iconSize}`) || currentDraft.iconSize),
+        iconSize: Math.max(
+            1,
+            Number.parseFloat(sizeInput?.value ?? `${currentDraft.iconSize}`) ||
+                currentDraft.iconSize
+        ),
         visible: visibleInput?.checked ?? currentDraft.visible,
         phiStart: Number.parseFloat(phiInput?.value ?? `${currentDraft.phiStart}`) || 0,
         wStart: Number.parseFloat(wInput?.value ?? `${currentDraft.wStart}`) || 0
@@ -8440,9 +9064,8 @@ function createMotionFromDraft(): boolean {
         return false;
     }
     if (!isMotionTypeCompatibleWithJoint(draft.motionType, joint.jointType)) {
-        const expectedType = draft.motionType === 'rotational'
-            ? 'revolute/cylindrical'
-            : 'prismatic/cylindrical';
+        const expectedType =
+            draft.motionType === 'rotational' ? 'revolute/cylindrical' : 'prismatic/cylindrical';
         vscode.postMessage({
             command: 'alert',
             text: `The selected joint is incompatible with this drive. Expected ${expectedType}.`
@@ -8496,7 +9119,9 @@ function applyMotionConnectorSelection(jointId: string): void {
         return;
     }
     if (!isDriveCompatibleJointType(joint.jointType)) {
-        setStatusInfo('Only revolute, prismatic, and cylindrical joints can be used as drive connectors.');
+        setStatusInfo(
+            'Only revolute, prismatic, and cylindrical joints can be used as drive connectors.'
+        );
         renderMotionOptionsPanel();
         return;
     }
@@ -8525,7 +9150,11 @@ function applyMotionConnectorSelection(jointId: string): void {
 
 function startMotionCreation(motionTypeRaw: string): void {
     const motionType = normalizeMotionType(motionTypeRaw, motionCreationPreset);
-    if (canvasInteractionMode === 'createMotion' && motionCreationPanelActive && motionCreationPreset === motionType) {
+    if (
+        canvasInteractionMode === 'createMotion' &&
+        motionCreationPanelActive &&
+        motionCreationPreset === motionType
+    ) {
         resetCanvasInteraction();
         closeOptionsPanel();
         setStatus('Ready');
@@ -8552,9 +9181,10 @@ function renderMotionOptionsPanel(): void {
     motionDraft = draft;
     motionCreationPreset = draft.motionType;
     pendingMotionIconSize = draft.iconSize;
-    const addButton = motionCreationMode === 'standard'
-        ? '<button id="opt-motion-add" class="opt-btn-primary">添加</button>'
-        : '';
+    const addButton =
+        motionCreationMode === 'standard'
+            ? '<button id="opt-motion-add" class="opt-btn-primary">添加</button>'
+            : '';
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-motion-name', draft.name)}
@@ -8610,19 +9240,26 @@ function renderMotionOptionsPanel(): void {
         }
     });
 
-    const driveModeInput = document.getElementById('opt-motion-drive-mode') as HTMLSelectElement | null;
+    const driveModeInput = document.getElementById(
+        'opt-motion-drive-mode'
+    ) as HTMLSelectElement | null;
     driveModeInput?.addEventListener('change', () => {
         if (!motionDraft) {
             return;
         }
-        motionDraft.driveMode = normalizeMotionDriveMode(driveModeInput.value, motionDraft.motionType);
+        motionDraft.driveMode = normalizeMotionDriveMode(
+            driveModeInput.value,
+            motionDraft.motionType
+        );
     });
 
     const sizeInput = document.getElementById('opt-motion-size') as HTMLInputElement | null;
     sizeInput?.addEventListener('input', () => {
         updateMotionDraftSize(Number.parseFloat(sizeInput.value));
     });
-    const sizeRangeInput = document.getElementById('opt-motion-size-range') as HTMLInputElement | null;
+    const sizeRangeInput = document.getElementById(
+        'opt-motion-size-range'
+    ) as HTMLInputElement | null;
     sizeRangeInput?.addEventListener('input', () => {
         updateMotionDraftSize(Number.parseFloat(sizeRangeInput.value));
     });
@@ -8709,9 +9346,10 @@ function renderContactOptionsPanel(): void {
     contactCreationPreset = draft.contactType;
     pendingContactSize = draft.iconSize;
 
-    const addButton = contactCreationMode === 'standard'
-        ? '<button id="opt-contact-add" class="opt-btn-primary">添加</button>'
-        : '';
+    const addButton =
+        contactCreationMode === 'standard'
+            ? '<button id="opt-contact-add" class="opt-btn-primary">添加</button>'
+            : '';
 
     propsEl.innerHTML = `<div class="opt-section">
         ${buildNameInput('opt-contact-name', draft.name)}
@@ -8772,7 +9410,9 @@ function renderContactOptionsPanel(): void {
     sizeInput?.addEventListener('input', () => {
         updateSize(Number.parseFloat(sizeInput.value));
     });
-    const sizeRangeInput = document.getElementById('opt-contact-size-range') as HTMLInputElement | null;
+    const sizeRangeInput = document.getElementById(
+        'opt-contact-size-range'
+    ) as HTMLInputElement | null;
     sizeRangeInput?.addEventListener('input', () => {
         updateSize(Number.parseFloat(sizeRangeInput.value));
     });
@@ -8786,7 +9426,9 @@ function renderContactOptionsPanel(): void {
         renderContactOptionsPanel();
     });
     document.getElementById('opt-contact-reset')?.addEventListener('click', () => {
-        contactDraft = createDefaultContactDraft(contactDraft?.contactType ?? contactCreationPreset);
+        contactDraft = createDefaultContactDraft(
+            contactDraft?.contactType ?? contactCreationPreset
+        );
         renderContactOptionsPanel();
         setStatus('请选择特征 1');
         setStatusInfo('Contact draft reset.');
@@ -8816,7 +9458,7 @@ function collectGroupableShapeIds(shapes: LoadedShape[]): string[] {
 
 function handleCreateGroup(parentGroupId: string | null = null): void {
     const selectedParts = getSelectedShapeIds()
-        .map((shapeId) => loadedShapes.get(shapeId))
+        .map(shapeId => loadedShapes.get(shapeId))
         .filter((shape): shape is LoadedShape => Boolean(shape));
     if (selectedParts.length === 0) {
         vscode.postMessage({
@@ -8865,9 +9507,9 @@ function handleCreateDefaultGroup(): void {
     }
 
     const createdGroups = memberShapeIds
-        .map((shapeId) => loadedShapes.get(shapeId))
+        .map(shapeId => loadedShapes.get(shapeId))
         .filter((shape): shape is LoadedShape => Boolean(shape))
-        .map((shape) => createGroupFromParts(shape.name, [shape.id], null, 'default'));
+        .map(shape => createGroupFromParts(shape.name, [shape.id], null, 'default'));
     updateModelTree();
     setStatusInfo(`Default groups created: ${createdGroups.length}`);
 }
@@ -8901,7 +9543,9 @@ function handleUngroupGroup(): void {
     try {
         const result = ungroupSelectedGroup();
         updateModelTree();
-        setStatusInfo(`Ungrouped to 物体: moved ${result.movedParts} part(s) and ${result.movedGroups} child group(s).`);
+        setStatusInfo(
+            `Ungrouped to 物体: moved ${result.movedParts} part(s) and ${result.movedGroups} child group(s).`
+        );
     } catch (error) {
         vscode.postMessage({
             command: 'alert',
@@ -8934,7 +9578,11 @@ function handleMotionProperties(): void {
     renderMotionPropertiesPanel(target.id);
 }
 
-function getContactFeatureFromPlacement(selectedShape: LoadedShape, position: Vec3, normal: Vec3): ContactFeatureRef {
+function getContactFeatureFromPlacement(
+    selectedShape: LoadedShape,
+    position: Vec3,
+    normal: Vec3
+): ContactFeatureRef {
     return {
         shapeId: selectedShape.id,
         position: cloneVec3(position),
@@ -8960,8 +9608,16 @@ function getShapeContactAnchor(shapeId: string): ContactFeatureRef {
 }
 
 function createContactVisual(contact: MbsContactEntity): THREE.Group | null {
-    const pointA = new THREE.Vector3(contact.featureA.position.x, contact.featureA.position.y, contact.featureA.position.z);
-    const pointB = new THREE.Vector3(contact.featureB.position.x, contact.featureB.position.y, contact.featureB.position.z);
+    const pointA = new THREE.Vector3(
+        contact.featureA.position.x,
+        contact.featureA.position.y,
+        contact.featureA.position.z
+    );
+    const pointB = new THREE.Vector3(
+        contact.featureB.position.x,
+        contact.featureB.position.y,
+        contact.featureB.position.z
+    );
     const direction = new THREE.Vector3().subVectors(pointB, pointA);
     const distance = direction.length();
     if (!Number.isFinite(distance) || distance <= 1e-6 || !viewer) {
@@ -8978,7 +9634,14 @@ function createContactVisual(contact: MbsContactEntity): THREE.Group | null {
     });
     const sphereGeometry = new THREE.SphereGeometry(radius, 16, 16);
     const centerGeometry = new THREE.SphereGeometry(radius * 1.3, 20, 20);
-    const cylinderGeometry = new THREE.CylinderGeometry(radius * 0.45, radius * 0.45, distance, 12, 1, false);
+    const cylinderGeometry = new THREE.CylinderGeometry(
+        radius * 0.45,
+        radius * 0.45,
+        distance,
+        12,
+        1,
+        false
+    );
 
     const group = new THREE.Group();
     group.name = `contact_${contact.id}`;
@@ -8994,7 +9657,10 @@ function createContactVisual(contact: MbsContactEntity): THREE.Group | null {
     const connector = new THREE.Mesh(cylinderGeometry, material.clone());
     const midpoint = new THREE.Vector3().addVectors(pointA, pointB).multiplyScalar(0.5);
     connector.position.copy(midpoint);
-    connector.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+    connector.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        direction.clone().normalize()
+    );
     group.add(connector);
 
     const core = new THREE.Mesh(centerGeometry, material.clone());
@@ -9022,14 +9688,14 @@ function removeContactVisual(contactId: string): void {
 
     viewer.unregisterSelectableObject(contactId);
     viewer.getScene().remove(group);
-    group.traverse((child) => {
+    group.traverse(child => {
         const disposable = child as THREE.Object3D & {
             geometry?: THREE.BufferGeometry;
             material?: THREE.Material | THREE.Material[];
         };
         disposable.geometry?.dispose();
         if (Array.isArray(disposable.material)) {
-            disposable.material.forEach((material) => material.dispose());
+            disposable.material.forEach(material => material.dispose());
         } else {
             disposable.material?.dispose();
         }
@@ -9129,7 +9795,11 @@ function handleContactPlacement(selectedShape: LoadedShape, position: Vec3, norm
 }
 
 function startContactCreation(contactType: ContactType): void {
-    if (canvasInteractionMode === 'createContact' && contactCreationPanelActive && contactCreationPreset === contactType) {
+    if (
+        canvasInteractionMode === 'createContact' &&
+        contactCreationPanelActive &&
+        contactCreationPreset === contactType
+    ) {
         resetCanvasInteraction();
         closeOptionsPanel();
         setStatus('Ready');
@@ -9181,8 +9851,8 @@ function deleteJointById(jointId: string): boolean {
     }
 
     Array.from(mbsMotions.values())
-        .filter((motion) => motion.connectorRef === jointId)
-        .forEach((motion) => {
+        .filter(motion => motion.connectorRef === jointId)
+        .forEach(motion => {
             deleteMotionById(motion.id);
         });
 
@@ -9306,15 +9976,24 @@ function handleMeasureTool(): void {
         { label: 'Size X', value: bbox.size.x.toFixed(3) },
         { label: 'Size Y', value: bbox.size.y.toFixed(3) },
         { label: 'Size Z', value: bbox.size.z.toFixed(3) },
-        { label: 'Min', value: `${bbox.min.x.toFixed(3)}, ${bbox.min.y.toFixed(3)}, ${bbox.min.z.toFixed(3)}` },
-        { label: 'Max', value: `${bbox.max.x.toFixed(3)}, ${bbox.max.y.toFixed(3)}, ${bbox.max.z.toFixed(3)}` }
+        {
+            label: 'Min',
+            value: `${bbox.min.x.toFixed(3)}, ${bbox.min.y.toFixed(3)}, ${bbox.min.z.toFixed(3)}`
+        },
+        {
+            label: 'Max',
+            value: `${bbox.max.x.toFixed(3)}, ${bbox.max.y.toFixed(3)}, ${bbox.max.z.toFixed(3)}`
+        }
     ]);
     setStatusInfo(`Measured shape: ${shape.name}`);
 }
 
 function handleSurfaceThicken(): void {
     if (!selectedShapeId) {
-        vscode.postMessage({ command: 'alert', text: 'Please select a shape before surface thickening.' });
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a shape before surface thickening.'
+        });
         return;
     }
     const shape = loadedShapes.get(selectedShapeId);
@@ -9323,7 +10002,10 @@ function handleSurfaceThicken(): void {
 
 function handlePlanarRingProcess(): void {
     if (!selectedShapeId) {
-        vscode.postMessage({ command: 'alert', text: 'Please select a shape before planar ring processing.' });
+        vscode.postMessage({
+            command: 'alert',
+            text: 'Please select a shape before planar ring processing.'
+        });
         return;
     }
     const shape = loadedShapes.get(selectedShapeId);
@@ -9415,8 +10097,10 @@ function startJointCreation(jointType: string): void {
 function startDesignPointCreation(): void {
     resetCanvasInteraction();
     const targetShape = selectedShapeId
-        ? loadedShapes.get(selectedShapeId) ?? null
-        : (shapeSelectionHistory.at(-1) ? loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null : null);
+        ? (loadedShapes.get(selectedShapeId) ?? null)
+        : shapeSelectionHistory.at(-1)
+          ? (loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null)
+          : null;
     if (targetShape) {
         selectedShapeId = targetShape.id;
         rememberShapeSelection(targetShape.id);
@@ -9457,7 +10141,11 @@ function startFrameEditModeForTarget(
     kind: FrameEntityKind,
     pickIntent: 'placement' | 'position' | 'direction'
 ): void {
-    const targetShape = findOwningShapeForFrame(id, kind) ?? (shapeSelectionHistory.at(-1) ? loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null : null);
+    const targetShape =
+        findOwningShapeForFrame(id, kind) ??
+        (shapeSelectionHistory.at(-1)
+            ? (loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null)
+            : null);
     if (!targetShape) {
         vscode.postMessage({
             command: 'alert',
@@ -9473,11 +10161,13 @@ function startFrameEditModeForTarget(
     editingFrameTarget = { id, kind };
     frameEditPickIntent = pickIntent;
     viewer?.setSelectionEnabled(false);
-    setStatus(pickIntent === 'position'
-        ? 'Click on a face to update frame position'
-        : pickIntent === 'direction'
-            ? 'Click on a face to update frame direction'
-            : 'Click on a face to reposition the frame');
+    setStatus(
+        pickIntent === 'position'
+            ? 'Click on a face to update frame position'
+            : pickIntent === 'direction'
+              ? 'Click on a face to update frame direction'
+              : 'Click on a face to reposition the frame'
+    );
     setStatusInfo(`Editing ${kind === 'marker' ? 'marker' : 'reference marker'}: ${id}`);
     setCanvasCursor('crosshair');
 }
@@ -9485,14 +10175,23 @@ function startFrameEditModeForTarget(
 function resolveFacePlacement(
     event: MouseEvent,
     options?: { silent?: boolean; enableInference?: boolean }
-): { selectedShape: LoadedShape; position: Vec3; normal: Vec3; guide: MarkerGuideData | null; feature: DesignPointFeature | null } | null {
+): {
+    selectedShape: LoadedShape;
+    position: Vec3;
+    normal: Vec3;
+    guide: MarkerGuideData | null;
+    feature: DesignPointFeature | null;
+} | null {
     if (!viewer || !occt) {
         return null;
     }
 
-    const selectedShape = pickShapeAtPointerEvent(event)
-        ?? (selectedShapeId ? loadedShapes.get(selectedShapeId) ?? null : null)
-        ?? (shapeSelectionHistory.at(-1) ? loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null : null);
+    const selectedShape =
+        pickShapeAtPointerEvent(event) ??
+        (selectedShapeId ? (loadedShapes.get(selectedShapeId) ?? null) : null) ??
+        (shapeSelectionHistory.at(-1)
+            ? (loadedShapes.get(shapeSelectionHistory.at(-1) ?? '') ?? null)
+            : null);
     if (!selectedShape || !selectedShape.shapeId) {
         if (!options?.silent) {
             vscode.postMessage({
@@ -9572,88 +10271,91 @@ function resolveFacePlacement(
     };
     const localSnapPoint = result.snapPoint ?? result.inferredPosition;
     const localSnapDirection = result.snapDirection ?? result.inferredDirection;
-    const snapKind = result.snapKind
-        ?? (result.inferredFeature === 'cylinderAxis'
+    const snapKind =
+        result.snapKind ??
+        (result.inferredFeature === 'cylinderAxis'
             ? 'cylinder-axis'
             : result.inferredFeature === 'sphereCenter'
-                ? 'sphere-center'
-                : undefined);
+              ? 'sphere-center'
+              : undefined);
     const worldSnapPoint = localSnapPoint
         ? (() => {
-            const [x, y, z] = transformPoint(
-                shapeTransform,
-                localSnapPoint.x,
-                localSnapPoint.y,
-                localSnapPoint.z
-            );
-            return { x, y, z };
-        })()
+              const [x, y, z] = transformPoint(
+                  shapeTransform,
+                  localSnapPoint.x,
+                  localSnapPoint.y,
+                  localSnapPoint.z
+              );
+              return { x, y, z };
+          })()
         : undefined;
     const worldSnapDirection = localSnapDirection
         ? (() => {
-            const [x, y, z] = transformDirection(
-                shapeTransform,
-                localSnapDirection.x,
-                localSnapDirection.y,
-                localSnapDirection.z
-            );
-            return normalizeVector({ x, y, z }) ?? { x, y, z };
-        })()
+              const [x, y, z] = transformDirection(
+                  shapeTransform,
+                  localSnapDirection.x,
+                  localSnapDirection.y,
+                  localSnapDirection.z
+              );
+              return normalizeVector({ x, y, z }) ?? { x, y, z };
+          })()
         : undefined;
     const worldCylinderAxisStart = result.cylinderAxisStart
         ? (() => {
-            const [x, y, z] = transformPoint(
-                shapeTransform,
-                result.cylinderAxisStart.x,
-                result.cylinderAxisStart.y,
-                result.cylinderAxisStart.z
-            );
-            return { x, y, z };
-        })()
+              const [x, y, z] = transformPoint(
+                  shapeTransform,
+                  result.cylinderAxisStart.x,
+                  result.cylinderAxisStart.y,
+                  result.cylinderAxisStart.z
+              );
+              return { x, y, z };
+          })()
         : undefined;
     const worldCylinderAxisEnd = result.cylinderAxisEnd
         ? (() => {
-            const [x, y, z] = transformPoint(
-                shapeTransform,
-                result.cylinderAxisEnd.x,
-                result.cylinderAxisEnd.y,
-                result.cylinderAxisEnd.z
-            );
-            return { x, y, z };
-        })()
+              const [x, y, z] = transformPoint(
+                  shapeTransform,
+                  result.cylinderAxisEnd.x,
+                  result.cylinderAxisEnd.y,
+                  result.cylinderAxisEnd.z
+              );
+              return { x, y, z };
+          })()
         : undefined;
 
-    const inferEnabled = options?.enableInference ?? (canvasInteractionMode === 'createMarker' || canvasInteractionMode === 'editFrame');
+    const inferEnabled =
+        options?.enableInference ??
+        (canvasInteractionMode === 'createMarker' || canvasInteractionMode === 'editFrame');
     const circularEdgePlacement = inferEnabled
         ? inferPlacementFromCircularEdge(
-            selectedShape,
-            {
-                x: worldPositionX,
-                y: worldPositionY,
-                z: worldPositionZ
-            },
-            worldNormal
-        )
+              selectedShape,
+              {
+                  x: worldPositionX,
+                  y: worldPositionY,
+                  z: worldPositionZ
+              },
+              worldNormal
+          )
         : null;
     const inferredPlacement = inferEnabled
         ? (circularEdgePlacement ?? {
-            position: {
-                x: worldPositionX,
-                y: worldPositionY,
-                z: worldPositionZ
-            },
-            normal: worldNormal,
-            guide: null
-        })
+              position: {
+                  x: worldPositionX,
+                  y: worldPositionY,
+                  z: worldPositionZ
+              },
+              normal: worldNormal,
+              guide: null
+          })
         : {
-            position: {
-                x: worldPositionX,
-                y: worldPositionY,
-                z: worldPositionZ
-            },
-            normal: worldNormal,
-            guide: null
-        };
+              position: {
+                  x: worldPositionX,
+                  y: worldPositionY,
+                  z: worldPositionZ
+              },
+              normal: worldNormal,
+              guide: null
+          };
     if (inferEnabled && !circularEdgePlacement) {
         const placement = inferMarkerPlacement(
             selectedShape,
@@ -9678,14 +10380,14 @@ function resolveFacePlacement(
         inferredPlacement.position = placement.position;
         inferredPlacement.normal = placement.normal;
         if (
-            markerFeatureInferenceEnabled
-            && snapKind === 'cylinder-axis'
-            && worldCylinderAxisStart
-            && worldCylinderAxisEnd
-            && worldSnapPoint
-            && typeof result.cylinderRadius === 'number'
-            && Number.isFinite(result.cylinderRadius)
-            && result.cylinderRadius > 0
+            markerFeatureInferenceEnabled &&
+            snapKind === 'cylinder-axis' &&
+            worldCylinderAxisStart &&
+            worldCylinderAxisEnd &&
+            worldSnapPoint &&
+            typeof result.cylinderRadius === 'number' &&
+            Number.isFinite(result.cylinderRadius) &&
+            result.cylinderRadius > 0
         ) {
             inferredPlacement.guide = {
                 kind: 'cylinder',
@@ -9703,25 +10405,28 @@ function resolveFacePlacement(
         position: inferredPlacement.position,
         normal: inferredPlacement.normal,
         guide: inferredPlacement.guide,
-        feature: worldSnapPoint && worldSnapDirection
-            ? {
-                kind: 'line',
-                point: worldSnapPoint,
-                direction: worldSnapDirection,
-                label: snapKind === 'cylinder-axis' ? '轴线' : '直线'
-            }
-            : {
-                kind: 'plane',
-                point: inferredPlacement.position,
-                normal: inferredPlacement.normal,
-                label: '平面'
-            }
+        feature:
+            worldSnapPoint && worldSnapDirection
+                ? {
+                      kind: 'line',
+                      point: worldSnapPoint,
+                      direction: worldSnapDirection,
+                      label: snapKind === 'cylinder-axis' ? '轴线' : '直线'
+                  }
+                : {
+                      kind: 'plane',
+                      point: inferredPlacement.position,
+                      normal: inferredPlacement.normal,
+                      label: '平面'
+                  }
     };
 }
 
 function handleCanvasPointerMove(event: MouseEvent): void {
-    const markerPlacementActive = canvasInteractionMode === 'createMarker' && markerCreationPanelActive;
-    const jointPlacementActive = canvasInteractionMode === 'createJoint' && jointCreationPanelActive;
+    const markerPlacementActive =
+        canvasInteractionMode === 'createMarker' && markerCreationPanelActive;
+    const jointPlacementActive =
+        canvasInteractionMode === 'createJoint' && jointCreationPanelActive;
     const frameEditActive = canvasInteractionMode === 'editFrame' && editingFrameTarget !== null;
     if (!markerPlacementActive && !jointPlacementActive && !frameEditActive) {
         return;
@@ -9729,9 +10434,7 @@ function handleCanvasPointerMove(event: MouseEvent): void {
 
     const placement = resolveFacePlacement(event, {
         silent: true,
-        enableInference: jointPlacementActive
-            ? jointFeatureInferenceEnabled
-            : true
+        enableInference: jointPlacementActive ? jointFeatureInferenceEnabled : true
     });
     if (!placement) {
         if (markerPlacementActive && !markerDraft) {
@@ -9744,7 +10447,9 @@ function handleCanvasPointerMove(event: MouseEvent): void {
 
     viewer?.setMarkerGuide(placement.guide);
     if (markerPlacementActive) {
-        showMarkerPreview(buildMarkerPreviewDraft(placement.selectedShape, placement.position, placement.normal));
+        showMarkerPreview(
+            buildMarkerPreviewDraft(placement.selectedShape, placement.position, placement.normal)
+        );
     }
 }
 
@@ -9755,7 +10460,10 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
         const owner = resolveFrameOwnerForShape(selectedShape.id);
         const nextOrientation = createOrientationFromNormal(normal);
         const nextPosition = cloneVec3(position);
-        const nextSize = Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize);
+        const nextSize = Math.max(
+            1,
+            Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize
+        );
 
         if (!markerDraft) {
             markerDraft = {
@@ -9794,7 +10502,12 @@ function createMarkerFromPlacement(selectedShape: LoadedShape, position: Vec3, n
         name: nameInput?.value?.trim() || `Marker${createdMarkers.length + 1}`
     });
     marker.setParentId(selectedShape.id);
-    marker.setSize(Math.max(1, Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize));
+    marker.setSize(
+        Math.max(
+            1,
+            Number.parseFloat(sizeInput?.value ?? `${pendingMarkerSize}`) || pendingMarkerSize
+        )
+    );
     marker.setVisible(true);
 
     createdMarkers.push(marker);
@@ -9826,9 +10539,7 @@ function createJointFromPlacement(selectedShape: LoadedShape, position: Vec3, no
     }
 
     syncJointDraftFromInputs();
-    const pickedDirection = jointDraft.inferenceEnabled
-        ? normal
-        : DEFAULT_CONNECTOR_DIRECTION;
+    const pickedDirection = jointDraft.inferenceEnabled ? normal : DEFAULT_CONNECTOR_DIRECTION;
     const pick: JointDraftPick = {
         partId: selectedShape.id,
         position: cloneVec3(position),
@@ -9952,7 +10663,7 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
 
     const orientation = createOrientationFromNormal(normal);
     if (target.kind === 'marker') {
-        const marker = createdMarkers.find((item) => item.id === target.id);
+        const marker = createdMarkers.find(item => item.id === target.id);
         if (!marker) {
             vscode.postMessage({
                 command: 'alert',
@@ -10003,16 +10714,19 @@ function handleCanvasClick(event: MouseEvent): void {
     if (canvasInteractionMode === 'none') return;
 
     const placement = resolveFacePlacement(event, {
-        enableInference: canvasInteractionMode === 'createJoint'
-            ? jointFeatureInferenceEnabled
-            : undefined
+        enableInference:
+            canvasInteractionMode === 'createJoint' ? jointFeatureInferenceEnabled : undefined
     });
     if (!placement) return;
 
     let completed = false;
     switch (canvasInteractionMode) {
         case 'createMarker':
-            createMarkerFromPlacement(placement.selectedShape, placement.position, placement.normal);
+            createMarkerFromPlacement(
+                placement.selectedShape,
+                placement.position,
+                placement.normal
+            );
             break;
         case 'createJoint':
             createJointFromPlacement(placement.selectedShape, placement.position, placement.normal);
@@ -10021,7 +10735,12 @@ function handleCanvasClick(event: MouseEvent): void {
             handleContactPlacement(placement.selectedShape, placement.position, placement.normal);
             break;
         case 'createDesignPoint':
-            createDesignPointFromPlacement(placement.selectedShape, placement.position, placement.normal, placement.feature);
+            createDesignPointFromPlacement(
+                placement.selectedShape,
+                placement.position,
+                placement.normal,
+                placement.feature
+            );
             break;
         case 'editFrame':
             completed = editFrameFromPlacement(placement.position, placement.normal);
@@ -10116,8 +10835,8 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             const target = activeMarkerId
                 ? { index: -1, id: activeMarkerId, kind: 'marker' as const }
                 : activeRefFrameId
-                    ? { index: -1, id: activeRefFrameId, kind: 'refFrame' as const }
-                    : resolveLatestExistingFrameFromHistory();
+                  ? { index: -1, id: activeRefFrameId, kind: 'refFrame' as const }
+                  : resolveLatestExistingFrameFromHistory();
             if (!target) {
                 vscode.postMessage({
                     command: 'alert',
@@ -10127,7 +10846,7 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             }
 
             if (target.kind === 'marker') {
-                const markerIndex = createdMarkers.findIndex((marker) => marker.id === target.id);
+                const markerIndex = createdMarkers.findIndex(marker => marker.id === target.id);
                 if (markerIndex < 0) {
                     if (target.index >= 0) {
                         frameCreationHistory.splice(target.index, 1);
@@ -10145,7 +10864,7 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
                 }
 
                 createdMarkers.splice(markerIndex, 1);
-                mbsDesignPoints.forEach((point) => {
+                mbsDesignPoints.forEach(point => {
                     if (point.markerRefId === marker.id) {
                         point.markerRefId = undefined;
                     }
@@ -10176,11 +10895,13 @@ function handleMbsAction(action: string, params: Record<string, unknown>): void 
             }
 
             if (refFrame.relatedMarkerId) {
-                const parentMarker = createdMarkers.find((marker) => marker.id === refFrame.relatedMarkerId);
+                const parentMarker = createdMarkers.find(
+                    marker => marker.id === refFrame.relatedMarkerId
+                );
                 parentMarker?.removeRefMarker(refFrame.id);
             }
             createdRefFrames.delete(refFrame.id);
-            mbsDesignPoints.forEach((point) => {
+            mbsDesignPoints.forEach(point => {
                 if (point.markerRefId === refFrame.id) {
                     point.markerRefId = undefined;
                 }
@@ -10309,15 +11030,14 @@ function handleMessage(event: MessageEvent): void {
             break;
         case 'updateModelTree':
             externalModelTreeShapes = Array.isArray(message.shapes)
-                ? message.shapes
-                    .filter((item: unknown): item is { id: string; name: string } => {
-                        if (!item || typeof item !== 'object') {
-                            return false;
-                        }
-                        const id = (item as { id?: unknown }).id;
-                        const name = (item as { name?: unknown }).name;
-                        return typeof id === 'string' && typeof name === 'string';
-                    })
+                ? message.shapes.filter((item: unknown): item is { id: string; name: string } => {
+                      if (!item || typeof item !== 'object') {
+                          return false;
+                      }
+                      const id = (item as { id?: unknown }).id;
+                      const name = (item as { name?: unknown }).name;
+                      return typeof id === 'string' && typeof name === 'string';
+                  })
                 : [];
             updateModelTree();
             break;
@@ -10360,7 +11080,7 @@ async function initViewer(): Promise<void> {
         });
 
         // Listen for selection changes from 3D viewer
-        viewer.onSelectionChange((event) => {
+        viewer.onSelectionChange(event => {
             if (isSyncingViewerSelection) {
                 return;
             }
@@ -10374,34 +11094,38 @@ async function initViewer(): Promise<void> {
         // Add pointer listeners for marker creation/editing
         container.addEventListener('mousemove', handleCanvasPointerMove);
         container.addEventListener('click', handleCanvasClick);
-        container.addEventListener('wheel', (event) => {
-            if (!event.altKey) {
-                return;
-            }
-            if (jointCreationPanelActive) {
+        container.addEventListener(
+            'wheel',
+            event => {
+                if (!event.altKey) {
+                    return;
+                }
+                if (jointCreationPanelActive) {
+                    event.preventDefault();
+                    const delta = event.deltaY < 0 ? 1 : -1;
+                    const nextSize = updateJointDraftSize(pendingJointIconSize + delta);
+                    setStatusInfo(`Connection icon size: ${nextSize}`);
+                    return;
+                }
+                if (contactCreationPanelActive) {
+                    event.preventDefault();
+                    const delta = event.deltaY < 0 ? 1 : -1;
+                    const nextSize = updateContactDraftSize(pendingContactSize + delta);
+                    renderContactOptionsPanel();
+                    setStatusInfo(`Contact icon size: ${nextSize}`);
+                    return;
+                }
+                if (!motionCreationPanelActive) {
+                    return;
+                }
                 event.preventDefault();
                 const delta = event.deltaY < 0 ? 1 : -1;
-                const nextSize = updateJointDraftSize(pendingJointIconSize + delta);
-                setStatusInfo(`Connection icon size: ${nextSize}`);
-                return;
-            }
-            if (contactCreationPanelActive) {
-                event.preventDefault();
-                const delta = event.deltaY < 0 ? 1 : -1;
-                const nextSize = updateContactDraftSize(pendingContactSize + delta);
-                renderContactOptionsPanel();
-                setStatusInfo(`Contact icon size: ${nextSize}`);
-                return;
-            }
-            if (!motionCreationPanelActive) {
-                return;
-            }
-            event.preventDefault();
-            const delta = event.deltaY < 0 ? 1 : -1;
-            const nextSize = updateMotionDraftSize(pendingMotionIconSize + delta);
-            renderMotionOptionsPanel();
-            setStatusInfo(`Motion icon size: ${nextSize}`);
-        }, { passive: false });
+                const nextSize = updateMotionDraftSize(pendingMotionIconSize + delta);
+                renderMotionOptionsPanel();
+                setStatusInfo(`Motion icon size: ${nextSize}`);
+            },
+            { passive: false }
+        );
 
         applyRenderConfigToViewer();
     }
@@ -10426,7 +11150,6 @@ async function init(): Promise<void> {
 
         // Notify extension that webview is ready
         vscode.postMessage({ command: 'ready' });
-
     } catch (error) {
         console.error('Initialization failed:', error);
         setStatus('Initialization failed');
@@ -10445,24 +11168,24 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSidebarResize();
     init();
 
-    document.addEventListener('keydown', (event) => {
+    document.addEventListener('keydown', event => {
         const target = event.target as HTMLElement | null;
         const isTypingTarget = Boolean(
-            target
-            && (target.tagName === 'INPUT'
-                || target.tagName === 'TEXTAREA'
-                || target.tagName === 'SELECT'
-                || target.isContentEditable)
+            target &&
+            (target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.tagName === 'SELECT' ||
+                target.isContentEditable)
         );
         if (event.key === 'Escape' && !isTypingTarget) {
             if (
-                canvasInteractionMode !== 'none'
-                || markerCreationPanelActive
-                || jointCreationPanelActive
-                || motionCreationPanelActive
-                || refFrameCreationPanelActive
-                || designPointDraft
-                || contactCreationPanelActive
+                canvasInteractionMode !== 'none' ||
+                markerCreationPanelActive ||
+                jointCreationPanelActive ||
+                motionCreationPanelActive ||
+                refFrameCreationPanelActive ||
+                designPointDraft ||
+                contactCreationPanelActive
             ) {
                 event.preventDefault();
                 closeOptionsPanel();
@@ -10473,9 +11196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.key !== 'Delete' || isTypingTarget) {
             return;
         }
-        if (
-            selectedNodeIds.size === 0
-        ) {
+        if (selectedNodeIds.size === 0) {
             return;
         }
         event.preventDefault();
@@ -10506,7 +11227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Ribbon button handlers: direct dispatch to handleMbsAction
     document.querySelectorAll('.ribbon-btn[data-action-id]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', e => {
             e.stopPropagation();
             const actionId = (btn as HTMLElement).dataset.actionId;
             if (!actionId) return;
@@ -10550,7 +11271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Explode slider listeners
     const explodeSlider = document.getElementById('explode-slider') as HTMLInputElement;
     if (explodeSlider) {
-        explodeSlider.addEventListener('input', (e) => {
+        explodeSlider.addEventListener('input', e => {
             const target = e.target as HTMLInputElement;
             const value = parseInt(target.value);
             updateExplodeDistance(value);
@@ -10566,5 +11287,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
-
