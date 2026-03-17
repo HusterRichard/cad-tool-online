@@ -1233,11 +1233,7 @@ function scheduleGroupBoundsSync(): void {
     });
 }
 
-function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null {
-    if (!occt) {
-        return null;
-    }
-
+async function aggregateGroupMassPropertiesAsync(groupId: string): Promise<GroupMassSummary | null> {
     const partIds = Array.from(collectGroupPartIdsRecursive(groupId));
     if (partIds.length === 0) {
         return {
@@ -1255,17 +1251,26 @@ function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null 
     const partMasses: MassProperties[] = [];
     const missingPartIds: string[] = [];
 
-    partIds.forEach((partId) => {
+    // 通过 Worker 并行请求所有零件的物理属性，不阻塞主线程
+    const requests = partIds.map(async (partId) => {
         const shape = loadedShapes.get(partId);
-        if (!shape?.shapeId || !occt.hasShape(shape.shapeId)) {
+        if (!shape?.shapeId) {
             missingPartIds.push(partId);
             return;
         }
 
         try {
             const density = getMaterialDensity(partId);
-            const mass = occt.getMassProperties(shape.shapeId, density);
+            const mass = await massPropertiesWorkerClient.requestMass(shape.shapeId, density);
             if (!mass) {
+                // Worker 不可用时回退到主线程同步计算
+                if (occt && occt.hasShape(shape.shapeId)) {
+                    const fallback = occt.getMassProperties(shape.shapeId, density);
+                    if (fallback) {
+                        partMasses.push(fallback);
+                        return;
+                    }
+                }
                 missingPartIds.push(partId);
                 return;
             }
@@ -1274,6 +1279,8 @@ function aggregateGroupMassProperties(groupId: string): GroupMassSummary | null 
             missingPartIds.push(partId);
         }
     });
+
+    await Promise.all(requests);
 
     if (partMasses.length === 0) {
         return {
@@ -1352,8 +1359,7 @@ function renderSelectedGroupProperties(groupId: string): void {
         const massArea = document.getElementById('group-mass-properties-area');
         if (!massArea) return;
 
-        setTimeout(() => {
-            const massSummary = aggregateGroupMassProperties(groupId);
+        aggregateGroupMassPropertiesAsync(groupId).then((massSummary) => {
             let massHtml = '';
 
             if (!massSummary) {
@@ -1389,7 +1395,13 @@ function renderSelectedGroupProperties(groupId: string): void {
                 btn.textContent = '重新计算';
                 (btn as HTMLButtonElement).disabled = false;
             }
-        }, 0);
+        }).catch(() => {
+            massArea.innerHTML = createPropertyRow('状态', '计算失败');
+            if (btn) {
+                btn.textContent = '重新计算';
+                (btn as HTMLButtonElement).disabled = false;
+            }
+        });
     });
 }
 
