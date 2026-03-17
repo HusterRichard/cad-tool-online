@@ -17,7 +17,12 @@ import {
     type MeshData,
     type Vec3
 } from '@cadtool-online/core';
-import { SelectionManager, type SelectionCallback, type SelectionOptions } from './SelectionManager';
+import {
+    SelectionManager,
+    type SelectionCallback,
+    type SelectionFilter,
+    type SelectionOptions
+} from './SelectionManager';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
 import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
 
@@ -47,19 +52,19 @@ type EdgeOverlay = LineSegments2;
 
 export type MarkerGuideData =
     | {
-        kind: 'circle';
-        center: Vec3;
-        normal: Vec3;
-        radius: number;
-    }
+          kind: 'circle';
+          center: Vec3;
+          normal: Vec3;
+          radius: number;
+      }
     | {
-        kind: 'cylinder';
-        axisStart: Vec3;
-        axisEnd: Vec3;
-        radius: number;
-        viewDirection: Vec3;
-        snapCircleCenter?: Vec3;
-    };
+          kind: 'cylinder';
+          axisStart: Vec3;
+          axisEnd: Vec3;
+          radius: number;
+          viewDirection: Vec3;
+          snapCircleCenter?: Vec3;
+      };
 
 export interface SelectionBoundsBox {
     min: Vec3;
@@ -118,7 +123,8 @@ export class ThreeViewer {
         this.materialMode = options.materialMode ?? 'phong';
         this.visualPreset = options.visualPreset ?? 'cad';
         this.postProcessingEnabled = options.enablePostProcessing ?? true;
-        this.outlineEnabled = options.enableOutline ?? (options.selectionOptions?.outlineEnabled ?? true);
+        this.outlineEnabled =
+            options.enableOutline ?? options.selectionOptions?.outlineEnabled ?? true;
         this.useEnvironmentMap = options.useEnvironmentMap ?? true;
         this.matcapTexture = this.createDefaultMatcapTexture();
 
@@ -340,12 +346,16 @@ export class ThreeViewer {
             return;
         }
 
-        const renderTarget = new THREE.WebGLRenderTarget(this.container.clientWidth, this.container.clientHeight, {
-            format: THREE.RGBAFormat,
-            type: THREE.HalfFloatType,
-            depthBuffer: true,
-            stencilBuffer: false
-        });
+        const renderTarget = new THREE.WebGLRenderTarget(
+            this.container.clientWidth,
+            this.container.clientHeight,
+            {
+                format: THREE.RGBAFormat,
+                type: THREE.HalfFloatType,
+                depthBuffer: true,
+                stencilBuffer: false
+            }
+        );
         renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
         renderTarget.samples = 4;
 
@@ -423,7 +433,7 @@ export class ThreeViewer {
 
                 const base = 0.22 + 0.58 * key;
                 const red = Math.min(1, base + 0.16 * spec + 0.08 * rim);
-                const green = Math.min(1, base + 0.20 * spec + 0.12 * rim);
+                const green = Math.min(1, base + 0.2 * spec + 0.12 * rim);
                 const blue = Math.min(1, base + 0.24 * spec + 0.16 * rim);
 
                 data[idx] = Math.floor(red * 255);
@@ -546,8 +556,10 @@ export class ThreeViewer {
     private updateManagedMeshMaterials(): void {
         this.selectionManager?.clearSelection();
 
-        this.meshes.forEach((mesh) => {
-            const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
+        this.meshes.forEach(mesh => {
+            const state = mesh.userData.viewerMaterialState as
+                | ViewerManagedMaterialState
+                | undefined;
             if (!state?.managedByViewer) {
                 return;
             }
@@ -670,7 +682,7 @@ export class ThreeViewer {
         }
 
         const geometry = new THREE.BufferGeometry().setFromPoints(
-            points.slice(0, -1).map((point) => new THREE.Vector3(point.x, point.y, point.z))
+            points.slice(0, -1).map(point => new THREE.Vector3(point.x, point.y, point.z))
         );
         const circle = new THREE.LineLoop(geometry, this.getMarkerGuideMaterial());
         circle.renderOrder = 6;
@@ -700,7 +712,10 @@ export class ThreeViewer {
         return lineSegments;
     }
 
-    private buildSelectionBoundsHelper(bounds: SelectionBoundsBox, color: number = 0x00d1ff): THREE.Box3Helper | null {
+    private buildSelectionBoundsHelper(
+        bounds: SelectionBoundsBox,
+        color: number = 0x00d1ff
+    ): THREE.Box3Helper | null {
         const min = new THREE.Vector3(
             Math.min(bounds.min.x, bounds.max.x),
             Math.min(bounds.min.y, bounds.max.y),
@@ -713,12 +728,12 @@ export class ThreeViewer {
         );
 
         if (
-            !Number.isFinite(min.x)
-            || !Number.isFinite(min.y)
-            || !Number.isFinite(min.z)
-            || !Number.isFinite(max.x)
-            || !Number.isFinite(max.y)
-            || !Number.isFinite(max.z)
+            !Number.isFinite(min.x) ||
+            !Number.isFinite(min.y) ||
+            !Number.isFinite(min.z) ||
+            !Number.isFinite(max.x) ||
+            !Number.isFinite(max.y) ||
+            !Number.isFinite(max.z)
         ) {
             return null;
         }
@@ -740,11 +755,11 @@ export class ThreeViewer {
             return;
         }
 
-        this.selectionBoundsGroup.traverse((child) => {
+        this.selectionBoundsGroup.traverse(child => {
             if (child instanceof THREE.LineSegments) {
                 child.geometry.dispose();
                 if (Array.isArray(child.material)) {
-                    child.material.forEach((material) => material.dispose());
+                    child.material.forEach(material => material.dispose());
                 } else {
                     child.material.dispose();
                 }
@@ -759,11 +774,11 @@ export class ThreeViewer {
             return;
         }
 
-        this.hoverBoundsGroup.traverse((child) => {
+        this.hoverBoundsGroup.traverse(child => {
             if (child instanceof THREE.LineSegments) {
                 child.geometry.dispose();
                 if (Array.isArray(child.material)) {
-                    child.material.forEach((material) => material.dispose());
+                    child.material.forEach(material => material.dispose());
                 } else {
                     child.material.dispose();
                 }
@@ -778,8 +793,12 @@ export class ThreeViewer {
             return;
         }
 
-        this.markerGuideGroup.traverse((child) => {
-            if (child instanceof THREE.Line || child instanceof THREE.LineLoop || child instanceof THREE.LineSegments) {
+        this.markerGuideGroup.traverse(child => {
+            if (
+                child instanceof THREE.Line ||
+                child instanceof THREE.LineLoop ||
+                child instanceof THREE.LineSegments
+            ) {
                 child.geometry.dispose();
             }
         });
@@ -816,10 +835,22 @@ export class ThreeViewer {
                     group.add(rails);
                 }
 
-                const startCircle = this.buildGuideCircle(geometry.axisStart, geometry.axisDirection, geometry.radius);
-                const endCircle = this.buildGuideCircle(geometry.axisEnd, geometry.axisDirection, geometry.radius);
+                const startCircle = this.buildGuideCircle(
+                    geometry.axisStart,
+                    geometry.axisDirection,
+                    geometry.radius
+                );
+                const endCircle = this.buildGuideCircle(
+                    geometry.axisEnd,
+                    geometry.axisDirection,
+                    geometry.radius
+                );
                 const snapCircle = geometry.snapCircleCenter
-                    ? this.buildGuideCircle(geometry.snapCircleCenter, geometry.axisDirection, geometry.radius)
+                    ? this.buildGuideCircle(
+                          geometry.snapCircleCenter,
+                          geometry.axisDirection,
+                          geometry.radius
+                      )
                     : null;
                 if (startCircle) {
                     group.add(startCircle);
@@ -842,7 +873,12 @@ export class ThreeViewer {
         this.scene.add(group);
     }
 
-    addMeshFromData(id: string, meshData: MeshData, material?: THREE.Material, edgeData?: EdgeData): THREE.Mesh {
+    addMeshFromData(
+        id: string,
+        meshData: MeshData,
+        material?: THREE.Material,
+        edgeData?: EdgeData
+    ): THREE.Mesh {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));
         geometry.setAttribute('normal', new THREE.BufferAttribute(meshData.normals, 3));
@@ -856,15 +892,18 @@ export class ThreeViewer {
             baseMaterial
         } as ViewerManagedMaterialState;
 
-        const edgePositions = edgeData && edgeData.vertices.length >= 6
-            ? edgeData.vertices
-            : (() => {
-                const fallbackEdges = new THREE.EdgesGeometry(geometry, 3);
-                const fallbackPositions = fallbackEdges.getAttribute('position');
-                const positions = new Float32Array(fallbackPositions.array as ArrayLike<number>);
-                fallbackEdges.dispose();
-                return positions;
-            })();
+        const edgePositions =
+            edgeData && edgeData.vertices.length >= 6
+                ? edgeData.vertices
+                : (() => {
+                      const fallbackEdges = new THREE.EdgesGeometry(geometry, 3);
+                      const fallbackPositions = fallbackEdges.getAttribute('position');
+                      const positions = new Float32Array(
+                          fallbackPositions.array as ArrayLike<number>
+                      );
+                      fallbackEdges.dispose();
+                      return positions;
+                  })();
         const edgesGeometry = new LineSegmentsGeometry();
         edgesGeometry.setPositions(edgePositions);
         const edgeMaterial = this.edgeMaterial ?? (this.edgeMaterial = this.createEdgeMaterial());
@@ -908,7 +947,9 @@ export class ThreeViewer {
             this.scene.remove(mesh);
             mesh.geometry.dispose();
 
-            const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
+            const state = mesh.userData.viewerMaterialState as
+                | ViewerManagedMaterialState
+                | undefined;
             if (state?.baseMaterial) {
                 state.baseMaterial.dispose();
             } else if (mesh.material instanceof THREE.Material) {
@@ -986,11 +1027,7 @@ export class ThreeViewer {
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
 
-            this.camera.position.set(
-                center.x + maxDim,
-                center.y + maxDim,
-                center.z + maxDim
-            );
+            this.camera.position.set(center.x + maxDim, center.y + maxDim, center.z + maxDim);
             this.controls.target.copy(center);
             this.controls.update();
             this.sceneBoundsSphere = box.getBoundingSphere(new THREE.Sphere());
@@ -1081,7 +1118,7 @@ export class ThreeViewer {
         }
 
         const box = new THREE.Box3();
-        this.meshes.forEach((mesh) => {
+        this.meshes.forEach(mesh => {
             if (mesh.visible) {
                 box.expandByObject(mesh);
             }
@@ -1107,8 +1144,8 @@ export class ThreeViewer {
         const targetFar = Math.max(targetNear + 10, distance + radius * 3.0);
 
         if (
-            Math.abs(this.camera.near - targetNear) < 1e-3
-            && Math.abs(this.camera.far - targetFar) < 1e-2
+            Math.abs(this.camera.near - targetNear) < 1e-3 &&
+            Math.abs(this.camera.far - targetFar) < 1e-2
         ) {
             return;
         }
@@ -1119,14 +1156,20 @@ export class ThreeViewer {
     }
 
     private syncFrameSelectionVisuals(): void {
-        this.frameVisualizer.getAllFrameIds().forEach((id) => {
-            this.frameVisualizer.setFrameSelected(id, this.selectionManager?.isSelected(id) ?? false);
+        this.frameVisualizer.getAllFrameIds().forEach(id => {
+            this.frameVisualizer.setFrameSelected(
+                id,
+                this.selectionManager?.isSelected(id) ?? false
+            );
         });
     }
 
     private syncJointSelectionVisuals(): void {
-        this.jointVisualizer.getAllJointIds().forEach((id) => {
-            this.jointVisualizer.setJointSelected(id, this.selectionManager?.isSelected(id) ?? false);
+        this.jointVisualizer.getAllJointIds().forEach(id => {
+            this.jointVisualizer.setJointSelected(
+                id,
+                this.selectionManager?.isSelected(id) ?? false
+            );
         });
     }
 
@@ -1206,6 +1249,14 @@ export class ThreeViewer {
         this.selectionManager?.setEnabled(enabled);
     }
 
+    setSelectionFilter(filter: SelectionFilter | null): void {
+        this.selectionManager?.setSelectionFilter(filter);
+    }
+
+    setHoveredId(id: string | null): void {
+        this.selectionManager?.setHoveredId(id);
+    }
+
     setSelectionBoundsBoxes(boxes: SelectionBoundsBox[]): void {
         this.clearSelectionBoundsBoxesInternal();
         if (!Array.isArray(boxes) || boxes.length === 0) {
@@ -1213,7 +1264,7 @@ export class ThreeViewer {
         }
 
         const group = new THREE.Group();
-        boxes.forEach((bounds) => {
+        boxes.forEach(bounds => {
             const helper = this.buildSelectionBoundsHelper(bounds);
             if (helper) {
                 group.add(helper);
@@ -1400,12 +1451,18 @@ export class ThreeViewer {
     /**
      * 从屏幕坐标获取射线 (用于拾取面法向)
      */
-    getRayFromScreenPoint(x: number, y: number): { origin: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } } | null {
+    getRayFromScreenPoint(
+        x: number,
+        y: number
+    ): {
+        origin: { x: number; y: number; z: number };
+        direction: { x: number; y: number; z: number };
+    } | null {
         const rect = this.renderer.domElement.getBoundingClientRect();
 
         // 归一化设备坐标 (NDC): -1 到 +1
         const mouse = new THREE.Vector2(
-            (((x - rect.left) / rect.width) * 2) - 1,
+            ((x - rect.left) / rect.width) * 2 - 1,
             -(((y - rect.top) / rect.height) * 2) + 1
         );
 

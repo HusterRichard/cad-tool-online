@@ -15,6 +15,7 @@ export interface SelectionEvent {
 }
 
 export type SelectionCallback = (event: SelectionEvent) => void;
+export type SelectionFilter = (id: string, object: THREE.Object3D) => boolean;
 
 type MaterialObject3D = THREE.Object3D & {
     material: THREE.Material | THREE.Material[];
@@ -33,7 +34,8 @@ export class SelectionManager {
     private selectedIds: Set<string> = new Set();
     private hoveredId: string | null = null;
 
-    private originalMaterials: Map<string, Map<string, THREE.Material | THREE.Material[]>> = new Map();
+    private originalMaterials: Map<string, Map<string, THREE.Material | THREE.Material[]>> =
+        new Map();
     private highlightMaterial: THREE.MeshPhongMaterial;
     private hoverMaterial: THREE.MeshPhongMaterial;
     private highlightLineMaterial: LineMaterial;
@@ -42,6 +44,7 @@ export class SelectionManager {
     private callbacks: SelectionCallback[] = [];
     private enabled: boolean = true;
     private hoverEnabled: boolean = true;
+    private selectionFilter: SelectionFilter | null = null;
 
     private readonly onClickHandler: (event: MouseEvent) => void;
     private readonly onMouseMoveHandler: (event: MouseEvent) => void;
@@ -142,6 +145,28 @@ export class SelectionManager {
         return this.raycaster.intersectObjects(objects, true);
     }
 
+    private resolveIntersectedObjectId(intersects: THREE.Intersection[]): string | null {
+        for (const intersect of intersects) {
+            const objectId = this.findObjectId(intersect.object);
+            if (!objectId) {
+                continue;
+            }
+
+            const object = this.selectableObjects.get(objectId);
+            if (!object) {
+                continue;
+            }
+
+            if (this.selectionFilter && !this.selectionFilter(objectId, object)) {
+                continue;
+            }
+
+            return objectId;
+        }
+
+        return null;
+    }
+
     private findObjectId(object: THREE.Object3D): string | null {
         for (const [id, obj] of this.selectableObjects) {
             if (obj === object || this.isDescendant(obj, object)) {
@@ -164,19 +189,16 @@ export class SelectionManager {
         if (!this.enabled) return;
 
         this.updateMouse(event);
-        const intersects = this.raycast();
+        const objectId = this.resolveIntersectedObjectId(this.raycast());
 
-        if (intersects.length > 0) {
-            const objectId = this.findObjectId(intersects[0].object);
-            if (objectId) {
-                if (event.ctrlKey || event.metaKey) {
-                    // 多选模式
-                    this.toggleSelection(objectId);
-                } else {
-                    // 单选模式
-                    this.clearSelection();
-                    this.select(objectId);
-                }
+        if (objectId) {
+            if (event.ctrlKey || event.metaKey) {
+                // 多选模式
+                this.toggleSelection(objectId);
+            } else {
+                // 单选模式
+                this.clearSelection();
+                this.select(objectId);
             }
         } else if (!event.ctrlKey && !event.metaKey) {
             this.clearSelection();
@@ -187,13 +209,10 @@ export class SelectionManager {
         if (!this.enabled || !this.hoverEnabled) return;
 
         this.updateMouse(event);
-        const intersects = this.raycast();
+        const newHoveredId = this.resolveIntersectedObjectId(this.raycast());
+        this.setHoveredIdInternal(newHoveredId);
 
-        const newHoveredId = intersects.length > 0
-            ? this.findObjectId(intersects[0].object)
-            : null;
-
-        if (newHoveredId !== this.hoveredId) {
+        if (false && newHoveredId !== this.hoveredId) {
             // 取消之前的悬停
             if (this.hoveredId && !this.selectedIds.has(this.hoveredId)) {
                 this.restoreMaterial(this.hoveredId);
@@ -208,7 +227,7 @@ export class SelectionManager {
             this.emitEvent({
                 type: 'hover',
                 objectId: newHoveredId,
-                object: newHoveredId ? this.selectableObjects.get(newHoveredId) ?? null : null
+                object: newHoveredId ? (this.selectableObjects.get(newHoveredId) ?? null) : null
             });
         }
     }
@@ -220,13 +239,17 @@ export class SelectionManager {
             return;
         }
 
-        const cachedMaterials = this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
+        const cachedMaterials =
+            this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
         if (!this.originalMaterials.has(id)) {
             this.originalMaterials.set(id, cachedMaterials);
         }
 
-        object.traverse((child) => {
-            if ((child instanceof LineSegments2 || child.userData.viewerEdgeOverlay) && this.isMaterialObject(child)) {
+        object.traverse(child => {
+            if (
+                (child instanceof LineSegments2 || child.userData.viewerEdgeOverlay) &&
+                this.isMaterialObject(child)
+            ) {
                 if (!cachedMaterials.has(child.uuid)) {
                     cachedMaterials.set(child.uuid, child.material);
                 }
@@ -255,13 +278,17 @@ export class SelectionManager {
             return;
         }
 
-        const cachedMaterials = this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
+        const cachedMaterials =
+            this.originalMaterials.get(id) ?? new Map<string, THREE.Material | THREE.Material[]>();
         if (!this.originalMaterials.has(id)) {
             this.originalMaterials.set(id, cachedMaterials);
         }
 
-        object.traverse((child) => {
-            if ((child instanceof LineSegments2 || child.userData.viewerEdgeOverlay) && this.isMaterialObject(child)) {
+        object.traverse(child => {
+            if (
+                (child instanceof LineSegments2 || child.userData.viewerEdgeOverlay) &&
+                this.isMaterialObject(child)
+            ) {
                 if (!cachedMaterials.has(child.uuid)) {
                     cachedMaterials.set(child.uuid, child.material);
                 }
@@ -293,8 +320,14 @@ export class SelectionManager {
         }
         if (!originalMaterials) return;
 
-        object.traverse((child) => {
-            if ((child instanceof LineSegments2 || child.userData.viewerEdgeOverlay || child instanceof THREE.Mesh || child instanceof THREE.LineSegments) && this.isMaterialObject(child)) {
+        object.traverse(child => {
+            if (
+                (child instanceof LineSegments2 ||
+                    child.userData.viewerEdgeOverlay ||
+                    child instanceof THREE.Mesh ||
+                    child instanceof THREE.LineSegments) &&
+                this.isMaterialObject(child)
+            ) {
                 const originalMaterial = originalMaterials.get(child.uuid);
                 if (originalMaterial) {
                     child.material = originalMaterial;
@@ -306,6 +339,37 @@ export class SelectionManager {
 
     private emitEvent(event: SelectionEvent): void {
         this.callbacks.forEach(cb => cb(event));
+    }
+
+    private setHoveredIdInternal(id: string | null): void {
+        if (this.hoveredId === id) {
+            return;
+        }
+
+        if (this.hoveredId && !this.selectedIds.has(this.hoveredId)) {
+            this.restoreMaterial(this.hoveredId);
+        }
+
+        let nextHoveredId: string | null = null;
+        if (id) {
+            const hoveredObject = this.selectableObjects.get(id);
+            if (
+                hoveredObject &&
+                (!this.selectionFilter || this.selectionFilter(id, hoveredObject))
+            ) {
+                nextHoveredId = id;
+                if (!this.selectedIds.has(nextHoveredId)) {
+                    this.applyHoverMaterial(nextHoveredId);
+                }
+            }
+        }
+
+        this.hoveredId = nextHoveredId;
+        this.emitEvent({
+            type: 'hover',
+            objectId: nextHoveredId,
+            object: nextHoveredId ? (this.selectableObjects.get(nextHoveredId) ?? null) : null
+        });
     }
 
     // 公共 API
@@ -407,12 +471,7 @@ export class SelectionManager {
 
     pickObjectIdAtScreenPoint(x: number, y: number): string | null {
         this.updateMouseFromScreenPoint(x, y);
-        const intersects = this.raycast();
-        if (intersects.length === 0) {
-            return null;
-        }
-
-        return this.findObjectId(intersects[0].object);
+        return this.resolveIntersectedObjectId(this.raycast());
     }
 
     isSelected(id: string): boolean {
@@ -441,10 +500,23 @@ export class SelectionManager {
 
         this.hoverEnabled = enabled;
         if (!enabled) {
-            if (this.hoveredId && !this.selectedIds.has(this.hoveredId)) {
-                this.restoreMaterial(this.hoveredId);
-            }
-            this.hoveredId = null;
+            this.setHoveredIdInternal(null);
+        }
+    }
+
+    setHoveredId(id: string | null): void {
+        this.setHoveredIdInternal(id);
+    }
+
+    setSelectionFilter(filter: SelectionFilter | null): void {
+        this.selectionFilter = filter;
+        if (!this.hoveredId) {
+            return;
+        }
+
+        const hoveredObject = this.selectableObjects.get(this.hoveredId);
+        if (!hoveredObject || (filter && !filter(this.hoveredId, hoveredObject))) {
+            this.setHoveredIdInternal(null);
         }
     }
 

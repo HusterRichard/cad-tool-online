@@ -1041,6 +1041,24 @@ function isJointId(id: string): boolean {
     return mbsJoints.has(id);
 }
 
+function updateRefFrameSelectionFilter(): void {
+    if (!viewer) {
+        return;
+    }
+
+    if (!refFrameCreationPanelActive) {
+        viewer?.setSelectionFilter(null);
+        return;
+    }
+
+    if (!pendingRefFrameBaseId) {
+        viewer?.setSelectionFilter(id => isMarkerId(id));
+        return;
+    }
+
+    viewer?.setSelectionFilter(id => meshIdToShapeId.has(id));
+}
+
 function collectMeshBackedShapeIds(shape: LoadedShape): string[] {
     if (shape.meshId) {
         return [shape.id];
@@ -1702,6 +1720,7 @@ function syncSelectionFromViewer(activeObjectId: string | null): void {
                 renderRefFrameCreationPanel();
             }
         }
+        updateRefFrameSelectionFilter();
     }
 
     if (motionCreationPanelActive && selectedJointId) {
@@ -6029,6 +6048,7 @@ function resetCanvasInteraction(): void {
     contactDraft = null;
     clearMarkerDraftPreview();
     viewer?.setSelectionEnabled(true);
+    viewer?.setSelectionFilter(null);
     setCanvasCursor('default');
 }
 
@@ -8080,6 +8100,20 @@ function createReferenceFrameFromSelection(baseMarkerId: string, targetShapeId: 
         isPrimary: false
     });
     updateModelTree();
+    if (refFrameCreationMode === 'fast') {
+        pendingRefFrameBaseId = null;
+        pendingRefFrameTargetShapeId = null;
+        selectSelection(null);
+        window.requestAnimationFrame(() => {
+            renderRefFrameCreationPanel();
+            updateRefFrameSelectionFilter();
+            viewer?.setHoveredId(relatedMarker.id);
+            setStatus('Pick a marker in 3D view, then select a target part to create reference marker');
+            setStatusInfo(`Reference marker created: ${refFrame.name}`);
+        });
+        return true;
+    }
+
     selectSelection({ kind: 'refFrame', id: refFrame.id });
     expandAndScrollToTreeNode(`refFrame_${refFrame.id}`);
     renderRefFrameCreationPanel();
@@ -10073,6 +10107,7 @@ function startRefFrameCreation(): void {
     pendingRefFrameTargetShapeId = null;
     selectSelection(null);
     renderRefFrameCreationPanel();
+    updateRefFrameSelectionFilter();
     setStatus('Pick a marker in 3D view, then select a target part to create reference marker');
     setStatusInfo('Reference marker creation mode active');
 }
