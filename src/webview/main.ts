@@ -46,11 +46,11 @@ import {
     type RenderConfigState,
     type VisualPreset
 } from './renderConfig';
+import { applyViewerRenderConfig } from './applyViewerRenderConfig';
 import {
     GroupMassPropertiesCoordinator,
     type GroupMassSummary
 } from './groupMassPropertiesCoordinator';
-import { invokeViewerMethod } from './viewerCapabilities';
 import { MassPropertiesCoordinator } from './massPropertiesCoordinator';
 import { MassPropertiesWorkerClient } from './massPropertiesWorkerClient';
 
@@ -2350,23 +2350,11 @@ function applyRenderConfigToViewer(): void {
     const config = normalizeRenderConfig(renderConfig);
     renderConfig = config;
 
-    const presetApplied = invokeViewerMethod(viewer, ['setVisualPreset'], config.visualPreset);
-    const materialApplied = invokeViewerMethod(viewer, ['setMaterialMode'], config.materialMode);
-    const postApplied =
-        invokeViewerMethod(viewer, ['setPostProcessingEnabled'], config.postProcessing) ||
-        invokeViewerMethod(viewer, ['setOutlineEnabled'], config.postProcessing);
-    const edgeApplied =
-        invokeViewerMethod(viewer, ['setEdgeLayerVisible'], config.edgeLayerVisible) ||
-        invokeViewerMethod(viewer, ['setEdgesVisible'], config.edgeLayerVisible) ||
-        invokeViewerMethod(viewer, ['setEdgeVisibility'], config.edgeLayerVisible);
-
-    if (!presetApplied || !materialApplied || !postApplied || !edgeApplied) {
-        const missing: string[] = [];
-        if (!presetApplied) missing.push('visual preset');
-        if (!materialApplied) missing.push('material');
-        if (!postApplied) missing.push('post-processing');
-        if (!edgeApplied) missing.push('edge layer');
-        setStatusInfo(`Some rendering capabilities are not available: ${missing.join(' / ')}`);
+    const result = applyViewerRenderConfig(viewer, config);
+    if (viewer && result.missing.length > 0) {
+        setStatusInfo(
+            `Some rendering capabilities are not available: ${result.missing.join(' / ')}`
+        );
     }
 }
 
@@ -11106,6 +11094,9 @@ async function initViewer(): Promise<void> {
 
         viewer = new ThreeViewer(container, {
             backgroundColor: 0xe9edf2,
+            materialMode: config.materialMode,
+            enablePostProcessing: config.postProcessing,
+            enableOutline: config.postProcessing,
             enableSelection: true,
             selectionOptions: {
                 highlightColor: 0x58a6ff,

@@ -25,6 +25,7 @@ import {
 } from './SelectionManager';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
 import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
+import { RenderFrameBudget } from './RenderFrameBudget';
 
 export type MaterialMode = 'matcap' | 'pbr' | 'flat' | 'phong';
 export type VisualPreset = 'cad' | 'cinematic';
@@ -106,9 +107,11 @@ export class ThreeViewer {
     private markerGuideMaterial: THREE.LineBasicMaterial | null = null;
     private selectionBoundsGroup: THREE.Group | null = null;
     private hoverBoundsGroup: THREE.Group | null = null;
+    private readonly renderFrameBudget = new RenderFrameBudget();
 
     private readonly onResizeHandler: () => void;
     private readonly onControlStartHandler: () => void;
+    private readonly onControlChangeHandler: () => void;
     private readonly onControlEndHandler: () => void;
     private sceneBoundsSphere: THREE.Sphere | null = null;
     private sceneBoundsDirty = true;
@@ -157,12 +160,18 @@ export class ThreeViewer {
         this.controls.enableDamping = false;
         this.onControlStartHandler = () => {
             this.selectionManager?.setHoverEnabled(false);
+            this.requestRender();
+        };
+        this.onControlChangeHandler = () => {
+            this.requestRender();
         };
         this.onControlEndHandler = () => {
             this.selectionManager?.setHoverEnabled(true);
             this.updateCameraClippingRange();
+            this.requestRender();
         };
         this.controls.addEventListener('start', this.onControlStartHandler);
+        this.controls.addEventListener('change', this.onControlChangeHandler);
         this.controls.addEventListener('end', this.onControlEndHandler);
 
         this.setupLights();
@@ -580,6 +589,7 @@ export class ThreeViewer {
 
     private updateOutlineTargets(): void {
         if (!this.outlinePass) {
+            this.requestRender();
             return;
         }
 
@@ -595,6 +605,7 @@ export class ThreeViewer {
 
         // 选中变更后跳过 1 帧后处理，让高亮材质即时可见
         this._postProcessSkipFrames = 1;
+        this.requestRender(this.shouldUsePostProcessing() ? 2 : 1);
     }
 
     private shouldUsePostProcessing(): boolean {
@@ -607,8 +618,15 @@ export class ThreeViewer {
 
     private _lastFrameLog = 0;
 
+    private requestRender(frameCount: number = 1): void {
+        this.renderFrameBudget.schedule(frameCount);
+    }
+
     private animate(): void {
         requestAnimationFrame(this.animate.bind(this));
+        if (!this.renderFrameBudget.consume()) {
+            return;
+        }
         this.controls.update();
         this.updateCameraClippingRange();
 
@@ -645,6 +663,7 @@ export class ThreeViewer {
             this.updateLineMaterialResolution(this.edgeMaterial);
         }
         this.selectionManager?.setViewportSize(width, height);
+        this.requestRender();
     }
 
     private updateFxaaResolution(): void {
@@ -804,6 +823,7 @@ export class ThreeViewer {
         });
         this.scene.remove(this.markerGuideGroup);
         this.markerGuideGroup = null;
+        this.requestRender();
     }
 
     setMarkerGuide(guide: MarkerGuideData | null): void {
@@ -871,6 +891,7 @@ export class ThreeViewer {
         group.renderOrder = 6;
         this.markerGuideGroup = group;
         this.scene.add(group);
+        this.requestRender();
     }
 
     addMeshFromData(
@@ -925,6 +946,7 @@ export class ThreeViewer {
         }
 
         this.updateOutlineTargets();
+        this.requestRender();
 
         return mesh;
     }
@@ -959,6 +981,7 @@ export class ThreeViewer {
             this.meshes.delete(id);
             this.updateOutlineTargets();
             this.markSceneBoundsDirty();
+            this.requestRender();
         }
     }
 
@@ -976,6 +999,7 @@ export class ThreeViewer {
         if (edgeOverlay) {
             edgeOverlay.visible = visible && this.edgeLayerVisible;
         }
+        this.requestRender();
     }
 
     setMeshColor(id: string, color: number): void {
@@ -1006,6 +1030,7 @@ export class ThreeViewer {
                 base.needsUpdate = true;
             }
         }
+        this.requestRender();
     }
 
     setMeshPosition(id: string, offset: { x: number; y: number; z: number }): void {
@@ -1013,6 +1038,7 @@ export class ThreeViewer {
         if (mesh) {
             mesh.position.set(offset.x, offset.y, offset.z);
             this.markSceneBoundsDirty();
+            this.requestRender();
         }
     }
 
@@ -1033,6 +1059,7 @@ export class ThreeViewer {
             this.sceneBoundsSphere = box.getBoundingSphere(new THREE.Sphere());
             this.sceneBoundsDirty = false;
             this.updateCameraClippingRange();
+            this.requestRender();
         }
     }
 
@@ -1044,6 +1071,7 @@ export class ThreeViewer {
         this.materialMode = mode;
         this.updateSceneEnvironment();
         this.updateManagedMeshMaterials();
+        this.requestRender();
     }
 
     getMaterialMode(): MaterialMode {
@@ -1056,6 +1084,7 @@ export class ThreeViewer {
         }
         this.visualPreset = preset;
         this.applyVisualPreset();
+        this.requestRender();
     }
 
     getVisualPreset(): VisualPreset {
@@ -1068,6 +1097,7 @@ export class ThreeViewer {
             const mesh = this.meshes.get(id);
             edgeOverlay.visible = visible && (mesh?.visible ?? true);
         });
+        this.requestRender();
     }
 
     setPostProcessingEnabled(enabled: boolean): void {
@@ -1082,6 +1112,7 @@ export class ThreeViewer {
             this.composer = null;
             this.outlinePass = null;
             this.fxaaPass = null;
+            this.requestRender();
             return;
         }
 
@@ -1089,6 +1120,7 @@ export class ThreeViewer {
         this.setupPostProcessing();
         this.applyVisualPreset();
         this.updateOutlineTargets();
+        this.requestRender();
     }
 
     setOutlineEnabled(enabled: boolean): void {
@@ -1099,6 +1131,7 @@ export class ThreeViewer {
         this.outlineEnabled = enabled;
 
         if (!this.postProcessingEnabled) {
+            this.requestRender();
             return;
         }
 
@@ -1106,6 +1139,7 @@ export class ThreeViewer {
         this.setupPostProcessing();
         this.applyVisualPreset();
         this.updateOutlineTargets();
+        this.requestRender();
     }
 
     private markSceneBoundsDirty(): void {
@@ -1176,6 +1210,7 @@ export class ThreeViewer {
     dispose(): void {
         window.removeEventListener('resize', this.onResizeHandler);
         this.controls.removeEventListener('start', this.onControlStartHandler);
+        this.controls.removeEventListener('change', this.onControlChangeHandler);
         this.controls.removeEventListener('end', this.onControlEndHandler);
         this.clearMarkerGuide();
         this.clearSelectionBoundsBoxesInternal();
@@ -1247,14 +1282,17 @@ export class ThreeViewer {
 
     setSelectionEnabled(enabled: boolean): void {
         this.selectionManager?.setEnabled(enabled);
+        this.requestRender();
     }
 
     setSelectionFilter(filter: SelectionFilter | null): void {
         this.selectionManager?.setSelectionFilter(filter);
+        this.requestRender();
     }
 
     setHoveredId(id: string | null): void {
         this.selectionManager?.setHoveredId(id);
+        this.requestRender();
     }
 
     setSelectionBoundsBoxes(boxes: SelectionBoundsBox[]): void {
@@ -1278,6 +1316,7 @@ export class ThreeViewer {
         group.renderOrder = 7;
         this.selectionBoundsGroup = group;
         this.scene.add(group);
+        this.requestRender();
     }
 
     setHoverBoundsBox(box: SelectionBoundsBox | null): void {
@@ -1296,6 +1335,7 @@ export class ThreeViewer {
         group.renderOrder = 8;
         this.hoverBoundsGroup = group;
         this.scene.add(group);
+        this.requestRender();
     }
 
     pickSelectableIdAtScreenPoint(x: number, y: number): string | null {
@@ -1330,6 +1370,7 @@ export class ThreeViewer {
             this.selectionManager?.registerObject(data.id, group);
         }
         this.syncFrameSelectionVisuals();
+        this.requestRender();
         return group;
     }
 
@@ -1346,6 +1387,7 @@ export class ThreeViewer {
             this.selectionManager?.registerObject(data.id, group);
         }
         this.syncFrameSelectionVisuals();
+        this.requestRender();
     }
 
     /**
@@ -1357,6 +1399,7 @@ export class ThreeViewer {
         }
         this.frameVisualizer.removeFrame(id);
         this.syncFrameSelectionVisuals();
+        this.requestRender();
     }
 
     /**
@@ -1364,6 +1407,7 @@ export class ThreeViewer {
      */
     setFrameVisible(id: string, visible: boolean): void {
         this.frameVisualizer.setFrameVisible(id, visible);
+        this.requestRender();
     }
 
     /**
@@ -1371,6 +1415,7 @@ export class ThreeViewer {
      */
     setAllFramesVisible(visible: boolean): void {
         this.frameVisualizer.setAllFramesVisible(visible);
+        this.requestRender();
     }
 
     // ========================================================================
@@ -1384,6 +1429,7 @@ export class ThreeViewer {
         const group = this.jointVisualizer.addJoint(data);
         this.selectionManager?.registerObject(data.id, group);
         this.syncJointSelectionVisuals();
+        this.requestRender();
         return group;
     }
 
@@ -1398,6 +1444,7 @@ export class ThreeViewer {
             this.selectionManager?.registerObject(data.id, group);
         }
         this.syncJointSelectionVisuals();
+        this.requestRender();
     }
 
     /**
@@ -1407,6 +1454,7 @@ export class ThreeViewer {
         this.selectionManager?.unregisterObject(id);
         this.jointVisualizer.removeJoint(id);
         this.syncJointSelectionVisuals();
+        this.requestRender();
     }
 
     /**
@@ -1414,6 +1462,7 @@ export class ThreeViewer {
      */
     setJointVisible(id: string, visible: boolean): void {
         this.jointVisualizer.setJointVisible(id, visible);
+        this.requestRender();
     }
 
     /**
@@ -1421,6 +1470,7 @@ export class ThreeViewer {
      */
     setAllJointsVisible(visible: boolean): void {
         this.jointVisualizer.setAllJointsVisible(visible);
+        this.requestRender();
     }
 
     // ========================================================================
