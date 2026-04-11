@@ -412,8 +412,8 @@ export class ThreeViewer {
 
     private updateLineMaterialResolution(material: LineMaterial): void {
         material.resolution.set(
-            Math.max(this.container.clientWidth, 1),
-            Math.max(this.container.clientHeight, 1)
+            Math.max(this.container.clientWidth * this.renderer.getPixelRatio(), 1),
+            Math.max(this.container.clientHeight * this.renderer.getPixelRatio(), 1)
         );
     }
 
@@ -652,9 +652,12 @@ export class ThreeViewer {
     private onResize(): void {
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
+        const pixelRatio = Math.min(window.devicePixelRatio, 2);
 
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
+        this.renderer.setPixelRatio(pixelRatio);
+        this.composer?.setPixelRatio(pixelRatio);
         this.renderer.setSize(width, height);
         this.composer?.setSize(width, height);
         this.outlinePass?.setSize(width, height);
