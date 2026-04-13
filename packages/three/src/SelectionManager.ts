@@ -211,25 +211,6 @@ export class SelectionManager {
         this.updateMouse(event);
         const newHoveredId = this.resolveIntersectedObjectId(this.raycast());
         this.setHoveredIdInternal(newHoveredId);
-
-        if (false && newHoveredId !== this.hoveredId) {
-            // 取消之前的悬停
-            if (this.hoveredId && !this.selectedIds.has(this.hoveredId)) {
-                this.restoreMaterial(this.hoveredId);
-            }
-
-            // 设置新的悬停
-            if (newHoveredId && !this.selectedIds.has(newHoveredId)) {
-                this.applyHoverMaterial(newHoveredId);
-            }
-
-            this.hoveredId = newHoveredId;
-            this.emitEvent({
-                type: 'hover',
-                objectId: newHoveredId,
-                object: newHoveredId ? (this.selectableObjects.get(newHoveredId) ?? null) : null
-            });
-        }
     }
 
     private applyHighlightMaterial(id: string): void {

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { generateCssVariables } from '@cadtool-online/ui';
 import {
@@ -9,6 +10,9 @@ import {
     type CadtoolNotificationLevel,
     type CadtoolRuntimeNotification
 } from '@cadtool-online/core';
+
+const STEP_IMPORT_DIRECTORY_SETTING = 'stepImport.defaultDirectory';
+const DEFAULT_STEP_IMPORT_SUBDIRECTORY = path.join('syslab-server', 'sysplorer', 'model');
 
 export class CadEditorPanel {
     public static currentPanel: CadEditorPanel | undefined;
@@ -132,7 +136,8 @@ export class CadEditorPanel {
             filters: {
                 'STEP Files': ['step', 'stp', 'STEP', 'STP'],
                 'All Files': ['*']
-            }
+            },
+            defaultUri: vscode.Uri.file(this._resolveStepImportDefaultDirectory())
         };
 
         const fileUri = await vscode.window.showOpenDialog(options);
@@ -164,6 +169,31 @@ export class CadEditorPanel {
             }));
             this._setStatus('Ready');
         }
+    }
+
+    private _resolveStepImportDefaultDirectory(): string {
+        const homeDir = os.homedir();
+        const configuredDirectory = vscode.workspace
+            .getConfiguration('cadtool-online')
+            .get<string>(STEP_IMPORT_DIRECTORY_SETTING, DEFAULT_STEP_IMPORT_SUBDIRECTORY)
+            ?.trim();
+
+        if (!configuredDirectory) {
+            return homeDir;
+        }
+
+        let candidateDirectory: string;
+        if (configuredDirectory === '~') {
+            candidateDirectory = homeDir;
+        } else if (configuredDirectory.startsWith('~/') || configuredDirectory.startsWith('~\\')) {
+            candidateDirectory = path.join(homeDir, configuredDirectory.slice(2));
+        } else if (path.isAbsolute(configuredDirectory)) {
+            candidateDirectory = configuredDirectory;
+        } else {
+            candidateDirectory = path.join(homeDir, configuredDirectory);
+        }
+
+        return fs.existsSync(candidateDirectory) ? candidateDirectory : homeDir;
     }
 
     private async _handleExportModel(data: string): Promise<void> {

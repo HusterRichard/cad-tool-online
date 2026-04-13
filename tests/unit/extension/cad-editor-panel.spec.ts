@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as path from 'path';
 
 type MessageHandler = (message: { command: string; [key: string]: unknown }) => unknown;
 
@@ -40,9 +41,13 @@ const mocks = vi.hoisted(() => {
         showWarningMessage: vi.fn(),
         showErrorMessage: vi.fn(),
         executeCommand: vi.fn().mockResolvedValue(undefined),
+        getConfiguration: vi.fn(),
+        configurationGet: vi.fn(),
+        existsSync: vi.fn(),
         readFileSync: vi.fn(),
         writeFileSync: vi.fn(),
         generateCssVariables: vi.fn(() => ':root {}'),
+        homedir: vi.fn(() => '/home/user'),
         uriFile: vi.fn((fsPath: string) => ({ fsPath, toString: () => fsPath })),
         uriJoinPath: vi.fn((base: { fsPath?: string; path?: string }, ...parts: string[]) => {
             const root = base.fsPath ?? base.path ?? '';
@@ -70,7 +75,8 @@ vi.mock('vscode', () => ({
         executeCommand: mocks.executeCommand
     },
     workspace: {
-        workspaceFolders: [{ uri: { fsPath: 'C:/workspace' } }]
+        workspaceFolders: [{ uri: { fsPath: 'C:/workspace' } }],
+        getConfiguration: mocks.getConfiguration
     },
     ViewColumn: {
         One: 1
@@ -82,8 +88,13 @@ vi.mock('vscode', () => ({
 }), { virtual: true });
 
 vi.mock('fs', () => ({
+    existsSync: mocks.existsSync,
     readFileSync: mocks.readFileSync,
     writeFileSync: mocks.writeFileSync
+}));
+
+vi.mock('os', () => ({
+    homedir: mocks.homedir
 }));
 
 vi.mock('@cadtool-online/ui', () => ({
@@ -99,6 +110,10 @@ describe('CadEditorPanel', () => {
         mocks.showOpenDialog.mockResolvedValue(undefined);
         mocks.showSaveDialog.mockResolvedValue(undefined);
         mocks.executeCommand.mockResolvedValue(undefined);
+        mocks.getConfiguration.mockReturnValue({ get: mocks.configurationGet });
+        mocks.configurationGet.mockImplementation((_key: string, fallback?: string) => fallback);
+        mocks.existsSync.mockReturnValue(true);
+        mocks.homedir.mockReturnValue('/home/user');
     });
 
     it('creates a webview panel once and reuses it on subsequent open requests', async () => {
@@ -172,6 +187,76 @@ describe('CadEditorPanel', () => {
             fileName: 'assembly.step',
             fileContent: new Uint8Array([1, 2, 3, 4])
         });
+    });
+
+    it('opens STEP import from the sysplorer model directory when it exists', async () => {
+        mocks.showOpenDialog.mockResolvedValue([{ fsPath: 'C:/workspace/assembly.step' }]);
+        mocks.readFileSync.mockReturnValue(Buffer.from([1, 2, 3, 4]));
+
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        const handler = mocks.getMessageHandler();
+        await handler?.({ command: 'importStep' });
+
+        const stepModelDir = path.join('/home/user', 'syslab-server', 'sysplorer', 'model');
+        expect(mocks.existsSync).toHaveBeenCalledWith(stepModelDir);
+        expect(mocks.uriFile).toHaveBeenCalledWith(stepModelDir);
+        expect(mocks.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+            defaultUri: expect.objectContaining({ fsPath: stepModelDir })
+        }));
+    });
+
+    it('uses a configured relative STEP import directory when provided', async () => {
+        mocks.configurationGet.mockImplementation((key: string, fallback?: string) => (
+            key === 'stepImport.defaultDirectory' ? 'custom/models' : fallback
+        ));
+        mocks.showOpenDialog.mockResolvedValue([{ fsPath: 'C:/workspace/assembly.step' }]);
+        mocks.readFileSync.mockReturnValue(Buffer.from([1, 2, 3, 4]));
+
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        const handler = mocks.getMessageHandler();
+        await handler?.({ command: 'importStep' });
+
+        const configuredDir = path.join('/home/user', 'custom', 'models');
+        expect(mocks.getConfiguration).toHaveBeenCalledWith('cadtool-online');
+        expect(mocks.existsSync).toHaveBeenCalledWith(configuredDir);
+        expect(mocks.uriFile).toHaveBeenCalledWith(configuredDir);
+        expect(mocks.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+            defaultUri: expect.objectContaining({ fsPath: configuredDir })
+        }));
+    });
+
+    it('uses a configured absolute STEP import directory when provided', async () => {
+        mocks.configurationGet.mockImplementation((key: string, fallback?: string) => (
+            key === 'stepImport.defaultDirectory' ? '/mnt/shared/step-models' : fallback
+        ));
+        mocks.showOpenDialog.mockResolvedValue([{ fsPath: 'C:/workspace/assembly.step' }]);
+        mocks.readFileSync.mockReturnValue(Buffer.from([1, 2, 3, 4]));
+
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        const handler = mocks.getMessageHandler();
+        await handler?.({ command: 'importStep' });
+
+        expect(mocks.existsSync).toHaveBeenCalledWith('/mnt/shared/step-models');
+        expect(mocks.uriFile).toHaveBeenCalledWith('/mnt/shared/step-models');
+        expect(mocks.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+            defaultUri: expect.objectContaining({ fsPath: '/mnt/shared/step-models' })
+        }));
+    });
+
+    it('falls back to the home directory when the sysplorer model directory is missing', async () => {
+        mocks.existsSync.mockReturnValue(false);
+        mocks.showOpenDialog.mockResolvedValue([{ fsPath: 'C:/workspace/assembly.step' }]);
+        mocks.readFileSync.mockReturnValue(Buffer.from([1, 2, 3, 4]));
+
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        const handler = mocks.getMessageHandler();
+        await handler?.({ command: 'importStep' });
+
+        expect(mocks.existsSync).toHaveBeenCalledWith(path.join('/home/user', 'syslab-server', 'sysplorer', 'model'));
+        expect(mocks.uriFile).toHaveBeenCalledWith('/home/user');
+        expect(mocks.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+            defaultUri: expect.objectContaining({ fsPath: '/home/user' })
+        }));
     });
 
     it('forwards point-point contact ribbon actions with the normalized contact type', async () => {

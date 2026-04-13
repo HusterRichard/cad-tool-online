@@ -1,6 +1,6 @@
 {
     "name": "cadtool-online",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "private": true,
     "type": "module",
     "displayName": "CadToolOnline",
@@ -83,6 +83,16 @@
                 "path": "./snippets/cadtool.code-snippets"
             }
         ],
+        "configuration": {
+            "title": "CadToolOnline",
+            "properties": {
+                "cadtool-online.stepImport.defaultDirectory": {
+                    "type": "string",
+                    "default": "syslab-server/sysplorer/model",
+                    "markdownDescription": "STEP 导入文件选择框的默认目录。相对路径会基于当前用户 Home 目录解析，绝对路径会直接使用；目录不存在时会回退到 Home 目录。"
+                }
+            }
+        },
         "menus": {
             "file/newFile": [
                 {
