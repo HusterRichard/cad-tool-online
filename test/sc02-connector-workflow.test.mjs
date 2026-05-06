@@ -75,6 +75,7 @@ test('SC02 joint finalization persists canonical connector data and keeps contin
     assert.match(finalizeSource, /iconSize: jointDraft\.iconSize/);
     assert.match(finalizeSource, /inferenceEnabled: jointDraft\.inferenceEnabled/);
     assert.match(finalizeSource, /zAxisReversed: jointDraft\.zAxisReversed/);
+    assert.match(finalizeSource, /clearJointDraftPreview\(\);/);
     assert.match(finalizeSource, /viewer\?\.addJoint\(buildJointViewerData\(joint\)\);/);
     assert.match(finalizeSource, /updateModelTree\(\);/);
     assert.match(finalizeSource, /selectSelection\(\{ kind: 'joint', id: joint\.id \}\);/);
@@ -83,8 +84,125 @@ test('SC02 joint finalization persists canonical connector data and keeps contin
     assert.match(finalizeSource, /jointDraftPickStage = 'part1';/);
 });
 
+test('SC02 joint default naming uses per-type numbering and retargets auto names on type change', async () => {
+    const source = await readWebviewSource();
+    const nextSequenceSource = extractFunction(
+        source,
+        /function getNextJointSequenceNumber\(jointType: string\): number \{[\s\S]*?\n\}/,
+        'getNextJointSequenceNumber implementation'
+    );
+    const defaultNameSource = extractFunction(
+        source,
+        /function getDefaultJointName\(jointType: string\): string \{[\s\S]*?\n\}/,
+        'getDefaultJointName implementation'
+    );
+    const previewDraftSource = extractFunction(
+        source,
+        /function buildTransientJointPreviewDraft\([\s\S]*?\): JointDraft \{[\s\S]*?\n\}/,
+        'buildTransientJointPreviewDraft implementation'
+    );
+    const createDraftSource = extractFunction(
+        source,
+        /function createDefaultJointDraft\(jointType: string\): JointDraft \{[\s\S]*?\n\}/,
+        'createDefaultJointDraft implementation'
+    );
+    const syncDraftSource = extractFunction(
+        source,
+        /function syncJointDraftFromInputs\(\): void \{[\s\S]*?\n\}/,
+        'syncJointDraftFromInputs implementation'
+    );
+
+    assert.match(
+        nextSequenceSource,
+        /const usedNumbers = new Set<number>\(\);/
+    );
+    assert.match(nextSequenceSource, /normalizeConnectorType\(joint\.jointType\) !== normalizedType/);
+    assert.match(nextSequenceSource, /joint\.name\.match\(new RegExp\(`\^\$\{normalizedType\}_\(\\\\d\+\)\$`\)\)/);
+    assert.match(nextSequenceSource, /while \(usedNumbers\.has\(nextSequence\)\) \{/);
+    assert.match(
+        defaultNameSource,
+        /return `\$\{normalizedType\}_\$\{getNextJointSequenceNumber\(normalizedType\)\}`;/
+    );
+    assert.match(previewDraftSource, /getDefaultJointName\(jointType\)/);
+    assert.match(createDraftSource, /name: getDefaultJointName\(normalizedType\),/);
+    assert.match(syncDraftSource, /const previousType = normalizeConnectorType\(jointDraft\.jointType\);/);
+    assert.match(syncDraftSource, /const previousAutoName = getDefaultJointName\(previousType\);/);
+    assert.match(syncDraftSource, /const nextType = normalizeConnectorType\(/);
+    assert.match(syncDraftSource, /const nextDefaultName = getDefaultJointName\(nextType\);/);
+    assert.match(syncDraftSource, /const shouldRefreshAutoName =/);
+    assert.match(syncDraftSource, /jointDraft\.name = shouldRefreshAutoName \? nextDefaultName : typedName;/);
+});
+
+test('SC02 joint preview and persisted rendering stay anchored to part1 and separate draft from created visuals', async () => {
+    const source = await readWebviewSource();
+    const recomputeSource = extractFunction(
+        source,
+        /function recomputeJointDraftPlacement\(\): void \{[\s\S]*?\n\}/,
+        'recomputeJointDraftPlacement implementation'
+    );
+    const buildViewerSource = extractFunction(
+        source,
+        /function buildJointViewerData\(joint: MbsJointEntity\): JointData \{[\s\S]*?\n\}/,
+        'buildJointViewerData implementation'
+    );
+    const buildPreviewSource = extractFunction(
+        source,
+        /function buildJointPreviewData\(draft: JointDraft\): JointData \{[\s\S]*?\n\}/,
+        'buildJointPreviewData implementation'
+    );
+    const pointerMoveSource = extractFunction(
+        source,
+        /function handleCanvasPointerMove\(event: MouseEvent\): void \{[\s\S]*?\n\}/,
+        'handleCanvasPointerMove implementation'
+    );
+    const finalizeSource = extractFunction(
+        source,
+        /function finalizeJointDraft\(\): boolean \{[\s\S]*?\n\}/,
+        'finalizeJointDraft implementation'
+    );
+    const resetSource = extractFunction(
+        source,
+        /function resetCanvasInteraction\(\): void \{[\s\S]*?\n\}/,
+        'resetCanvasInteraction implementation'
+    );
+
+    assert.match(
+        recomputeSource,
+        /pickedDirection:\s*part1Pick\?\.direction\s*\?\?\s*part2Pick\?\.direction\s*\?\?\s*DEFAULT_CONNECTOR_DIRECTION/
+    );
+    assert.match(recomputeSource, /jointDraft\.position = cloneVec3\(part1Pick\.position\);/);
+    assert.doesNotMatch(
+        recomputeSource,
+        /x:\s*\(part1Pick\.position\.x\s*\+\s*part2Pick\.position\.x\)\s*\/\s*2/
+    );
+
+    assert.match(buildViewerSource, /connectorType: normalizeConnectorType\(joint\.jointType\)/);
+    assert.match(buildViewerSource, /displayState: 'created'/);
+    assert.match(buildPreviewSource, /connectorType: normalizeConnectorType\(draft\.jointType\)/);
+    assert.match(buildPreviewSource, /displayState: 'draft'/);
+    assert.match(finalizeSource, /jointDraftPreviewBlockedUntil = Date\.now\(\) \+ 180;/);
+    assert.match(
+        source,
+        /jointOptions:\s*\{[\s\S]*iconBaseUrl:\s*resolveIcons32Base\(\)\s*\?\?\s*undefined[\s\S]*preferSceneIcons:\s*false[\s\S]*\}/
+    );
+    assert.match(
+        pointerMoveSource,
+        /Date\.now\(\) < jointDraftPreviewBlockedUntil/,
+    );
+    assert.match(
+        pointerMoveSource,
+        /jointPlacementActive[\s\S]*jointDraftPickStage === 'part1'[\s\S]*showJointPreview\(\s*buildTransientJointPreviewDraft\(\s*placement\.selectedShape,\s*placement\.position,\s*placement\.normal\s*\)\s*\)/
+    );
+    assert.match(resetSource, /clearJointDraftPreview\(\);/);
+});
+
 test('SC02 joint nodes remain directly selectable and editable from tree and properties panel', async () => {
     const source = await readWebviewSource();
+    const iconAssetSource = extractFunction(
+        source,
+        /function iconAssetForNode\(node: ModelTreeNode\): string \| null \{[\s\S]*?\n\}/,
+        'iconAssetForNode implementation'
+    );
     const propertiesSource = extractFunction(
         source,
         /function renderJointPropertiesPanel\(jointId: string\): void \{[\s\S]*?\n\}/,
@@ -96,6 +214,17 @@ test('SC02 joint nodes remain directly selectable and editable from tree and pro
         /connectionsCategory\.children = Array\.from\(mbsJoints\.values\(\)\)\.map\(joint => \(\{[\s\S]*selectionKey: toJointSelectionKey\(joint\.id\)/
     );
     assert.match(propertiesSource, /buildDropdown\('prop-joint-type', '类型'/);
+    assert.match(iconAssetSource, /const joint = node\.jointId \? mbsJoints\.get\(node\.jointId\) : null;/);
+    assert.match(iconAssetSource, /switch \(normalizeConnectorType\(joint\?\.jointType\)\) \{/);
+    assert.match(iconAssetSource, /case 'fixed':\s*return treeIconPath\('joint_cad_fixed\.png'\);/);
+    assert.match(iconAssetSource, /case 'revolute':\s*return treeIconPath\('joint_cad_revolute\.png'\);/);
+    assert.match(iconAssetSource, /case 'prismatic':\s*return treeIconPath\('joint_cad_prismatic\.png'\);/);
+    assert.match(iconAssetSource, /case 'cylindrical':\s*return treeIconPath\('joint_cad_cylindrical\.png'\);/);
+    assert.match(iconAssetSource, /case 'spherical':\s*return treeIconPath\('joint_cad_spherical\.png'\);/);
+    assert.match(iconAssetSource, /case 'universal':\s*return treeIconPath\('joint_cad_universal\.png'\);/);
+    assert.match(iconAssetSource, /case 'screw':\s*return treeIconPath\('joint_cad_screw\.png'\);/);
+    assert.match(iconAssetSource, /case 'planar':\s*return treeIconPath\('joint_cad_planar\.png'\);/);
+    assert.match(iconAssetSource, /default:\s*return treeIconPath\('model_tree_cad_unknown_cnt\.png'\);/);
     assert.match(propertiesSource, /id="prop-joint-inference"/);
     assert.match(propertiesSource, /id="prop-joint-reverse"/);
     assert.match(propertiesSource, /id="prop-joint-size"/);

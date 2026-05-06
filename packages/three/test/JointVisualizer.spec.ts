@@ -5,6 +5,27 @@ import { MbsJointType } from '@cadtool-online/geo';
 import { JointVisualizer } from '../src/JointVisualizer';
 
 describe('JointVisualizer', () => {
+    function collectLineColors(group: THREE.Group): number[] {
+        const colors: number[] = [];
+        group.traverse((child) => {
+            const material = (child as THREE.Line).material;
+            if (material instanceof THREE.LineBasicMaterial) {
+                colors.push(material.color.getHex());
+            }
+        });
+        return colors;
+    }
+
+    function hasJointRole(group: THREE.Group, role: string): boolean {
+        let found = false;
+        group.traverse((child) => {
+            if (child.userData?.jointRole === role) {
+                found = true;
+            }
+        });
+        return found;
+    }
+
     it('creates joints with mapped metadata, position, quaternion, and selection state', () => {
         const scene = new THREE.Scene();
         const visualizer = new JointVisualizer(scene, { jointSize: 6, showAxis: true });
@@ -82,5 +103,43 @@ describe('JointVisualizer', () => {
         visualizer.clear();
         expect(visualizer.getAllJointIds()).toEqual([]);
         expect(scene.children).toHaveLength(0);
+    });
+
+    it('renders draft joints in white, created joints in light blue, and keeps screw distinct from cylindrical', () => {
+        const scene = new THREE.Scene();
+        const visualizer = new JointVisualizer(scene, { jointSize: 8, showAxis: true });
+
+        const draft = visualizer.addJoint({
+            id: '__draft_joint__',
+            name: 'Draft Screw',
+            type: MbsJointType.Cylindrical,
+            connectorType: 'screw',
+            displayState: 'draft',
+            position: { x: 0, y: 0, z: 0 },
+            axis: { x: 0, y: 0, z: 1 }
+        });
+        const created = visualizer.addJoint({
+            id: 'joint-4',
+            name: 'Created Cylindrical',
+            type: MbsJointType.Cylindrical,
+            connectorType: 'cylindrical',
+            displayState: 'created',
+            position: { x: 1, y: 0, z: 0 },
+            axis: { x: 0, y: 0, z: 1 }
+        });
+
+        expect(draft.userData).toMatchObject({
+            jointConnectorType: 'screw',
+            jointDisplayState: 'draft'
+        });
+        expect(created.userData).toMatchObject({
+            jointConnectorType: 'cylindrical',
+            jointDisplayState: 'created'
+        });
+
+        expect(hasJointRole(draft, 'helix')).toBe(true);
+        expect(hasJointRole(created, 'helix')).toBe(false);
+        expect(new Set(collectLineColors(draft))).toEqual(new Set([0xffffff]));
+        expect(new Set(collectLineColors(created))).toEqual(new Set([0x74c9ff]));
     });
 });

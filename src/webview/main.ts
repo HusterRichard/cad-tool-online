@@ -133,6 +133,7 @@ let jointCreationMode: 'fast' | 'standard' = 'fast';
 let jointCreationPanelActive = false;
 let jointFeatureInferenceEnabled = true;
 let pendingJointIconSize = 20;
+let jointDraftPreviewBlockedUntil = 0;
 let jointDraftPickStage: 'part1' | 'part2' = 'part1';
 let jointDraft: JointDraft | null = null;
 let pendingDesignPointSize = 20;
@@ -179,6 +180,7 @@ type CanvasInteractionMode =
 let canvasInteractionMode: CanvasInteractionMode = 'none';
 
 const DRAFT_MARKER_ID = '__draft_marker__';
+const DRAFT_JOINT_ID = '__draft_joint__';
 const GROUND_PART_ID = '__ground__';
 const CAD_BODY_DISPLAY_COLOR = '#D4A017';
 const CAD_DARK_COMPONENT_COLOR = '#2B2B2B';
@@ -3561,7 +3563,29 @@ function iconAssetForNode(node: ModelTreeNode): string | null {
         case 'designPoint':
             return treeIconPath('cad_design_pnt.png');
         case 'connection':
-            return treeIconPath('model_tree_cad_unknown_cnt.png');
+            return (() => {
+                const joint = node.jointId ? mbsJoints.get(node.jointId) : null;
+                switch (normalizeConnectorType(joint?.jointType)) {
+                    case 'fixed':
+                        return treeIconPath('joint_cad_fixed.png');
+                    case 'revolute':
+                        return treeIconPath('joint_cad_revolute.png');
+                    case 'prismatic':
+                        return treeIconPath('joint_cad_prismatic.png');
+                    case 'cylindrical':
+                        return treeIconPath('joint_cad_cylindrical.png');
+                    case 'spherical':
+                        return treeIconPath('joint_cad_spherical.png');
+                    case 'universal':
+                        return treeIconPath('joint_cad_universal.png');
+                    case 'screw':
+                        return treeIconPath('joint_cad_screw.png');
+                    case 'planar':
+                        return treeIconPath('joint_cad_planar.png');
+                    default:
+                        return treeIconPath('model_tree_cad_unknown_cnt.png');
+                }
+            })();
         case 'motion':
             return (() => {
                 const motion = node.motionId ? mbsMotions.get(node.motionId) : null;
@@ -4384,29 +4408,53 @@ function resolveJointViewerType(jointType: string): MbsJointType {
 }
 
 function buildJointViewerData(joint: MbsJointEntity): JointData {
-    const position =
-        joint.position ??
-        (joint.part2 === GROUND_PART_ID
-            ? calculateShapeWorldCenter(joint.part1)
-            : (() => {
-                  const p1 = calculateShapeWorldCenter(joint.part1);
-                  const p2 = calculateShapeWorldCenter(joint.part2);
-                  return {
-                      x: (p1.x + p2.x) / 2,
-                      y: (p1.y + p2.y) / 2,
-                      z: (p1.z + p2.z) / 2
-                  };
-              })());
+    const position = joint.position ?? calculateShapeWorldCenter(joint.part1);
 
     return {
         id: joint.id,
         name: joint.name,
         type: resolveJointViewerType(joint.jointType),
+        connectorType: normalizeConnectorType(joint.jointType),
         position,
         axis: normalizeVector(joint.direction) ?? DEFAULT_CONNECTOR_DIRECTION,
         size: Math.max(1, joint.iconSize),
+        displayState: 'created',
         selected: selectedJointId === joint.id
     };
+}
+
+function buildJointPreviewData(draft: JointDraft): JointData {
+    return {
+        id: DRAFT_JOINT_ID,
+        name: draft.name,
+        type: resolveJointViewerType(draft.jointType),
+        connectorType: normalizeConnectorType(draft.jointType),
+        position: cloneVec3(draft.position),
+        axis: normalizeVector(draft.direction) ?? DEFAULT_CONNECTOR_DIRECTION,
+        size: Math.max(1, draft.iconSize),
+        displayState: 'draft'
+    };
+}
+
+function showJointPreview(draft: JointDraft): void {
+    if (!viewer) {
+        return;
+    }
+
+    viewer.addJoint(buildJointPreviewData(draft));
+}
+
+function clearJointDraftPreview(): void {
+    viewer?.removeJoint(DRAFT_JOINT_ID);
+}
+
+function syncJointDraftPreview(): void {
+    if (!jointDraft?.part1Pick) {
+        clearJointDraftPreview();
+        return;
+    }
+
+    showJointPreview(jointDraft);
 }
 
 function syncJointEntityToViewer(id: string): void {
@@ -5729,6 +5777,55 @@ function showMarkerPreview(draft: MarkerDraft): void {
     });
 }
 
+function buildTransientJointPreviewDraft(
+    selectedShape: LoadedShape,
+    position: Vec3,
+    normal: Vec3
+): JointDraft {
+    const nameInput = document.getElementById('opt-joint-name') as HTMLInputElement | null;
+    const typeInput = document.getElementById('opt-joint-type') as HTMLSelectElement | null;
+    const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
+    const inferenceInput = document.getElementById(
+        'opt-joint-inference'
+    ) as HTMLInputElement | null;
+    const reverseInput = document.getElementById('opt-joint-reverse') as HTMLInputElement | null;
+    const fallbackType = normalizeConnectorType(jointDraft?.jointType, 'revolute');
+    const jointType = normalizeConnectorType(typeInput?.value, fallbackType);
+    const iconSize = Math.max(
+        1,
+        Number.parseFloat(sizeInput?.value ?? `${jointDraft?.iconSize ?? pendingJointIconSize}`) ||
+            jointDraft?.iconSize ||
+            pendingJointIconSize
+    );
+    const inferenceEnabled =
+        inferenceInput?.checked ?? jointDraft?.inferenceEnabled ?? jointFeatureInferenceEnabled;
+    const zAxisReversed = reverseInput?.checked ?? jointDraft?.zAxisReversed ?? false;
+    const pickedDirection = inferenceEnabled ? normal : DEFAULT_CONNECTOR_DIRECTION;
+
+    return {
+        name:
+            nameInput?.value?.trim() ||
+            jointDraft?.name ||
+            getDefaultJointName(jointType),
+        jointType,
+        part1: selectedShape.id,
+        position: cloneVec3(position),
+        direction: resolveConnectorDirection({
+            inferenceEnabled: true,
+            pickedDirection,
+            reverseDirection: zAxisReversed
+        }),
+        iconSize,
+        inferenceEnabled,
+        zAxisReversed,
+        part1Pick: {
+            partId: selectedShape.id,
+            position: cloneVec3(position),
+            direction: cloneVec3(pickedDirection)
+        }
+    };
+}
+
 function buildMarkerPreviewDraft(
     selectedShape: LoadedShape,
     position: Vec3,
@@ -6015,6 +6112,8 @@ function resetCanvasInteraction(): void {
     designPointCreationMode = 'pick';
     designPointCalcMode = 'midpoint';
     designPointDraft = null;
+    jointDraftPreviewBlockedUntil = 0;
+    clearJointDraftPreview();
     jointDraft = null;
     motionDraft = null;
     contactDraft = null;
@@ -8594,10 +8693,41 @@ const JOINT_TYPE_OPTIONS: Array<{ value: string; text: string }> = [
     { value: 'fixed', text: 'Fixed（固定）' }
 ];
 
+function getNextJointSequenceNumber(jointType: string): number {
+    const normalizedType = normalizeConnectorType(jointType);
+    const usedNumbers = new Set<number>();
+    Array.from(mbsJoints.values()).forEach(joint => {
+        if (normalizeConnectorType(joint.jointType) !== normalizedType) {
+            return;
+        }
+
+        const match = joint.name.match(new RegExp(`^${normalizedType}_(\\d+)$`));
+        if (!match) {
+            return;
+        }
+
+        const parsed = Number.parseInt(match[1], 10);
+        if (Number.isInteger(parsed) && parsed > 0) {
+            usedNumbers.add(parsed);
+        }
+    });
+
+    let nextSequence = 1;
+    while (usedNumbers.has(nextSequence)) {
+        nextSequence += 1;
+    }
+    return nextSequence;
+}
+
+function getDefaultJointName(jointType: string): string {
+    const normalizedType = normalizeConnectorType(jointType);
+    return `${normalizedType}_${getNextJointSequenceNumber(normalizedType)}`;
+}
+
 function createDefaultJointDraft(jointType: string): JointDraft {
     const normalizedType = normalizeConnectorType(jointType);
     return {
-        name: `${normalizedType}_${mbsJoints.size + 1}`,
+        name: getDefaultJointName(normalizedType),
         jointType: normalizedType,
         position: { x: 0, y: 0, z: 0 },
         direction: { ...DEFAULT_CONNECTOR_DIRECTION },
@@ -8622,6 +8752,7 @@ function updateJointDraftSize(nextValue: number): number {
         jointDraft.iconSize = normalized;
     }
     syncJointSizeInputs(normalized);
+    syncJointDraftPreview();
     return normalized;
 }
 
@@ -8630,6 +8761,7 @@ function syncJointDraftFromInputs(): void {
         return;
     }
 
+    const previousType = normalizeConnectorType(jointDraft.jointType);
     const nameInput = document.getElementById('opt-joint-name') as HTMLInputElement | null;
     const typeInput = document.getElementById('opt-joint-type') as HTMLSelectElement | null;
     const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
@@ -8638,11 +8770,17 @@ function syncJointDraftFromInputs(): void {
     ) as HTMLInputElement | null;
     const reverseInput = document.getElementById('opt-joint-reverse') as HTMLInputElement | null;
 
-    jointDraft.name = nameInput?.value?.trim() || jointDraft.name;
-    jointDraft.jointType = normalizeConnectorType(
-        typeInput?.value,
-        normalizeConnectorType(jointDraft.jointType)
-    );
+    const previousAutoName = getDefaultJointName(previousType);
+    const typedName = nameInput?.value?.trim() ?? '';
+    const nextType = normalizeConnectorType(typeInput?.value, previousType);
+    const nextDefaultName = getDefaultJointName(nextType);
+    const shouldRefreshAutoName =
+        typedName.length === 0 ||
+        typedName === previousAutoName ||
+        jointDraft.name === previousAutoName;
+
+    jointDraft.name = shouldRefreshAutoName ? nextDefaultName : typedName;
+    jointDraft.jointType = nextType;
     jointDraft.iconSize = Math.max(
         1,
         Number.parseFloat(sizeInput?.value ?? `${jointDraft.iconSize}`) || jointDraft.iconSize
@@ -8651,6 +8789,9 @@ function syncJointDraftFromInputs(): void {
     jointDraft.zAxisReversed = reverseInput?.checked ?? jointDraft.zAxisReversed;
     pendingJointIconSize = jointDraft.iconSize;
     jointFeatureInferenceEnabled = jointDraft.inferenceEnabled;
+    if (nameInput && shouldRefreshAutoName && nameInput.value !== nextDefaultName) {
+        nameInput.value = nextDefaultName;
+    }
 
     if (jointCreationMode === 'standard') {
         jointDraft.position = readVec3FromInputs('opt-joint-pos');
@@ -8660,6 +8801,8 @@ function syncJointDraftFromInputs(): void {
             reverseDirection: jointDraft.zAxisReversed
         });
     }
+
+    syncJointDraftPreview();
 }
 
 function recomputeJointDraftPlacement(): void {
@@ -8672,19 +8815,9 @@ function recomputeJointDraftPlacement(): void {
     const nextDirection = resolveConnectorDirection({
         inferenceEnabled: jointDraft.inferenceEnabled,
         pickedDirection:
-            part2Pick?.direction ?? part1Pick?.direction ?? DEFAULT_CONNECTOR_DIRECTION,
+            part1Pick?.direction ?? part2Pick?.direction ?? DEFAULT_CONNECTOR_DIRECTION,
         reverseDirection: jointDraft.zAxisReversed
     });
-
-    if (part1Pick && part2Pick) {
-        jointDraft.position = {
-            x: (part1Pick.position.x + part2Pick.position.x) / 2,
-            y: (part1Pick.position.y + part2Pick.position.y) / 2,
-            z: (part1Pick.position.z + part2Pick.position.z) / 2
-        };
-        jointDraft.direction = nextDirection;
-        return;
-    }
 
     if (part1Pick) {
         jointDraft.position = cloneVec3(part1Pick.position);
@@ -8726,6 +8859,7 @@ function finalizeJointDraft(): boolean {
     };
 
     mbsJoints.set(joint.id, joint);
+    clearJointDraftPreview();
     viewer?.addJoint(buildJointViewerData(joint));
     updateModelTree();
     selectSelection({ kind: 'joint', id: joint.id });
@@ -8734,6 +8868,7 @@ function finalizeJointDraft(): boolean {
     const nextType = jointDraft.jointType;
     jointDraft = createDefaultJointDraft(nextType);
     jointCreationPanelActive = true;
+    jointDraftPreviewBlockedUntil = Date.now() + 180;
     jointDraftPickStage = 'part1';
     renderJointOptionsPanel();
     setStatus('请选择零件 1');
@@ -8757,6 +8892,7 @@ function setJointDraftGroundTarget(): void {
     jointDraft.part2Pick = undefined;
     jointDraftPickStage = 'part2';
     recomputeJointDraftPlacement();
+    syncJointDraftPreview();
     if (jointCreationMode === 'fast') {
         finalizeJointDraft();
         return;
@@ -8845,9 +8981,23 @@ function renderJointOptionsPanel(): void {
         jointCreationMode = 'fast';
         renderJointOptionsPanel();
     });
+    const typeInput = document.getElementById('opt-joint-type') as HTMLSelectElement | null;
     const sizeInput = document.getElementById('opt-joint-size') as HTMLInputElement | null;
+    const inferenceInput = document.getElementById(
+        'opt-joint-inference'
+    ) as HTMLInputElement | null;
+    const reverseInput = document.getElementById('opt-joint-reverse') as HTMLInputElement | null;
+    typeInput?.addEventListener('change', () => {
+        syncJointDraftFromInputs();
+    });
     sizeInput?.addEventListener('input', () => {
         updateJointDraftSize(Number.parseFloat(sizeInput.value));
+    });
+    inferenceInput?.addEventListener('change', () => {
+        syncJointDraftFromInputs();
+    });
+    reverseInput?.addEventListener('change', () => {
+        syncJointDraftFromInputs();
     });
     document.getElementById('opt-joint-mode-standard')?.addEventListener('click', () => {
         syncJointDraftFromInputs();
@@ -10446,9 +10596,11 @@ function handleCanvasPointerMove(event: MouseEvent): void {
     if (!placement) {
         if (markerPlacementActive && !markerDraft) {
             clearMarkerDraftPreview();
-        } else {
-            viewer?.setMarkerGuide(null);
         }
+        if (jointPlacementActive && jointDraftPickStage === 'part1' && !jointDraft?.part1Pick) {
+            clearJointDraftPreview();
+        }
+        viewer?.setMarkerGuide(null);
         return;
     }
 
@@ -10457,6 +10609,23 @@ function handleCanvasPointerMove(event: MouseEvent): void {
         showMarkerPreview(
             buildMarkerPreviewDraft(placement.selectedShape, placement.position, placement.normal)
         );
+    }
+    if (jointPlacementActive) {
+        if (jointDraftPickStage === 'part1') {
+            if (Date.now() < jointDraftPreviewBlockedUntil) {
+                clearJointDraftPreview();
+                return;
+            }
+            showJointPreview(
+                buildTransientJointPreviewDraft(
+                    placement.selectedShape,
+                    placement.position,
+                    placement.normal
+                )
+            );
+        } else {
+            syncJointDraftPreview();
+        }
     }
 }
 
@@ -10560,6 +10729,7 @@ function createJointFromPlacement(selectedShape: LoadedShape, position: Vec3, no
         jointDraft.part2Pick = undefined;
         jointDraftPickStage = 'part2';
         recomputeJointDraftPlacement();
+        syncJointDraftPreview();
         renderJointOptionsPanel();
         setStatus('请选择零件 2');
         setStatusInfo(`零件 1 已选择：${selectedShape.name}`);
@@ -10576,11 +10746,13 @@ function createJointFromPlacement(selectedShape: LoadedShape, position: Vec3, no
             command: 'alert',
             text: validation.reason ?? '连接创建失败。'
         });
+        syncJointDraftPreview();
         renderJointOptionsPanel();
         return;
     }
 
     recomputeJointDraftPlacement();
+    syncJointDraftPreview();
     if (jointCreationMode === 'fast') {
         finalizeJointDraft();
         return;
@@ -11085,6 +11257,10 @@ async function initViewer(): Promise<void> {
             selectionOptions: {
                 highlightColor: 0x58a6ff,
                 highlightOpacity: 0.32
+            },
+            jointOptions: {
+                iconBaseUrl: resolveIcons32Base() ?? undefined,
+                preferSceneIcons: false
             },
             visualPreset: config.visualPreset
         });

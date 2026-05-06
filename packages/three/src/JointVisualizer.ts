@@ -1,21 +1,25 @@
 import * as THREE from 'three';
-import type { Vec3 } from '@cadtool-online/core';
+import type { ConnectorTypeValue, Vec3 } from '@cadtool-online/core';
 import { MbsJointType } from '@cadtool-online/geo';
 
 export interface JointVisualizerOptions {
     jointSize?: number;
     showAxis?: boolean;
     showLimits?: boolean;
+    iconBaseUrl?: string;
+    preferSceneIcons?: boolean;
 }
 
 export interface JointData {
     id: string;
     name: string;
     type: MbsJointType;
+    connectorType?: ConnectorTypeValue;
     position: Vec3;
     axis: Vec3;
     size?: number;
     selected?: boolean;
+    displayState?: 'draft' | 'created';
     currentValue?: number[];
     limits?: { lower: number[]; upper: number[] };
 }
@@ -26,284 +30,626 @@ export interface JointData {
 export class JointVisualizer {
     private scene: THREE.Scene;
     private joints: Map<string, THREE.Group> = new Map();
-    private options: Required<JointVisualizerOptions>;
-
-    // 关节类型颜色
-    private static readonly JOINT_COLORS: Record<MbsJointType, number> = {
-        [MbsJointType.Revolute]: 0xff6600,     // 橙色 - 旋转
-        [MbsJointType.Prismatic]: 0x0066ff,   // 蓝色 - 移动
-        [MbsJointType.Cylindrical]: 0x9900ff, // 紫色 - 圆柱
-        [MbsJointType.Spherical]: 0xff0066,   // 粉色 - 球
-        [MbsJointType.Universal]: 0x00ff66,   // 青绿 - 万向
-        [MbsJointType.Planar]: 0xffff00,      // 黄色 - 平面
-        [MbsJointType.Fixed]: 0x666666,       // 灰色 - 固定
+    private options: {
+        jointSize: number;
+        showAxis: boolean;
+        showLimits: boolean;
+        iconBaseUrl?: string;
+        preferSceneIcons: boolean;
     };
+    private textureLoader: THREE.TextureLoader | null;
+    private iconTextureCache = new Map<string, THREE.Texture>();
+
+    private static readonly JOINT_DRAFT_COLOR = 0xffffff;
+    private static readonly JOINT_CREATED_COLOR = 0x74c9ff;
+    private static readonly JOINT_SELECTED_LINE_COLOR = 0x38bdf8;
     private static readonly JOINT_SELECTED_EMISSIVE = 0x58a6ff;
+    private static readonly JOINT_DRAFT_OPACITY = 0.94;
+    private static readonly JOINT_CREATED_OPACITY = 0.98;
 
     constructor(scene: THREE.Scene, options: JointVisualizerOptions = {}) {
         this.scene = scene;
         this.options = {
             jointSize: options.jointSize ?? 10,
             showAxis: options.showAxis ?? true,
-            showLimits: options.showLimits ?? false
+            showLimits: options.showLimits ?? false,
+            iconBaseUrl: options.iconBaseUrl,
+            preferSceneIcons: options.preferSceneIcons ?? false
         };
+        this.textureLoader =
+            this.options.iconBaseUrl && typeof document !== 'undefined'
+                ? new THREE.TextureLoader()
+                : null;
     }
 
-    /**
-     * 创建旋转关节可视化
-     */
-    private createRevoluteJoint(data: JointData): THREE.Group {
-        const group = new THREE.Group();
-        const size = data.size && data.size > 0 ? data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Revolute];
+    private getJointSize(data: JointData): number {
+        return data.size && data.size > 0 ? data.size : this.options.jointSize;
+    }
 
-        // 圆环表示旋转
-        const torusGeometry = new THREE.TorusGeometry(size, size * 0.15, 16, 32);
-        const torusMaterial = new THREE.MeshPhongMaterial({
-            color,
+    private resolveConnectorType(data: JointData): ConnectorTypeValue {
+        if (data.connectorType) {
+            return data.connectorType;
+        }
+
+        switch (data.type) {
+            case MbsJointType.Fixed:
+                return 'fixed';
+            case MbsJointType.Prismatic:
+                return 'prismatic';
+            case MbsJointType.Cylindrical:
+                return 'cylindrical';
+            case MbsJointType.Spherical:
+                return 'spherical';
+            case MbsJointType.Universal:
+                return 'universal';
+            case MbsJointType.Planar:
+                return 'planar';
+            case MbsJointType.Revolute:
+            default:
+                return 'revolute';
+        }
+    }
+
+    private resolveStrokeColor(data: JointData): number {
+        return data.displayState === 'draft'
+            ? JointVisualizer.JOINT_DRAFT_COLOR
+            : JointVisualizer.JOINT_CREATED_COLOR;
+    }
+
+    private resolveStrokeOpacity(data: JointData): number {
+        return data.displayState === 'draft'
+            ? JointVisualizer.JOINT_DRAFT_OPACITY
+            : JointVisualizer.JOINT_CREATED_OPACITY;
+    }
+
+    private createStrokeMaterial(data: JointData): THREE.LineBasicMaterial {
+        const material = new THREE.LineBasicMaterial({
+            color: this.resolveStrokeColor(data),
             transparent: true,
-            opacity: 0.8
+            opacity: this.resolveStrokeOpacity(data),
+            depthTest: false
         });
-        const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-        group.add(torus);
+        material.depthWrite = false;
+        material.toneMapped = false;
+        material.userData.baseColor = this.resolveStrokeColor(data);
+        material.userData.baseOpacity = this.resolveStrokeOpacity(data);
+        return material;
+    }
 
-        // 旋转轴
-        if (this.options.showAxis) {
-            const axisArrow = new THREE.ArrowHelper(
-                new THREE.Vector3(data.axis.x, data.axis.y, data.axis.z).normalize(),
-                new THREE.Vector3(0, 0, 0),
-                size * 1.5,
-                color
+    private attachRole<T extends THREE.Object3D>(object: T, role: string): T {
+        object.userData.jointRole = role;
+        return object;
+    }
+
+    private createPolyline(points: THREE.Vector3[], data: JointData, role: string): THREE.Line {
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        return this.attachRole(
+            new THREE.Line(geometry, this.createStrokeMaterial(data)),
+            role
+        );
+    }
+
+    private createLoop(points: THREE.Vector3[], data: JointData, role: string): THREE.LineLoop {
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        return this.attachRole(
+            new THREE.LineLoop(geometry, this.createStrokeMaterial(data)),
+            role
+        );
+    }
+
+    private createRectOutline(
+        width: number,
+        height: number,
+        data: JointData,
+        role: string
+    ): THREE.LineLoop {
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        return this.createLoop(
+            [
+                new THREE.Vector3(-halfWidth, -halfHeight, 0),
+                new THREE.Vector3(halfWidth, -halfHeight, 0),
+                new THREE.Vector3(halfWidth, halfHeight, 0),
+                new THREE.Vector3(-halfWidth, halfHeight, 0)
+            ],
+            data,
+            role
+        );
+    }
+
+    private createArcArrow(
+        radius: number,
+        startAngle: number,
+        endAngle: number,
+        data: JointData,
+        role: string,
+        arrowSize: number
+    ): THREE.Group {
+        const group = new THREE.Group();
+        group.add(this.createArc(radius, startAngle, endAngle, data, role));
+
+        const direction = endAngle >= startAngle ? 1 : -1;
+        const tip = new THREE.Vector3(Math.cos(endAngle) * radius, Math.sin(endAngle) * radius, 0);
+        const tangent = new THREE.Vector3(
+            -Math.sin(endAngle) * direction,
+            Math.cos(endAngle) * direction,
+            0
+        ).normalize();
+        const inward = tip.clone().normalize().multiplyScalar(-1);
+        const leftWing = tip
+            .clone()
+            .addScaledVector(tangent, -arrowSize)
+            .addScaledVector(inward, arrowSize * 0.55);
+        const rightWing = tip
+            .clone()
+            .addScaledVector(tangent, -arrowSize * 0.22)
+            .addScaledVector(inward, arrowSize * 0.9);
+        group.add(this.createPolyline([leftWing, tip, rightWing], data, `${role}-head`));
+
+        return group;
+    }
+
+    private getSceneIconPath(connectorType: ConnectorTypeValue): string | null {
+        if (!this.options.iconBaseUrl || !this.options.preferSceneIcons) {
+            return null;
+        }
+        return `${this.options.iconBaseUrl}/joint_scene_${connectorType}.svg`;
+    }
+
+    private getSceneIconTexture(connectorType: ConnectorTypeValue): THREE.Texture | null {
+        const path = this.getSceneIconPath(connectorType);
+        if (!path || !this.textureLoader) {
+            return null;
+        }
+
+        const cached = this.iconTextureCache.get(path);
+        if (cached) {
+            return cached;
+        }
+
+        const texture = this.textureLoader.load(path);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
+        this.iconTextureCache.set(path, texture);
+        return texture;
+    }
+
+    private getSceneIconDimensions(
+        connectorType: ConnectorTypeValue,
+        size: number
+    ): { width: number; height: number } {
+        switch (connectorType) {
+            case 'prismatic':
+            case 'cylindrical':
+                return { width: size * 2.05, height: size * 2.8 };
+            case 'screw':
+                return { width: size * 2.35, height: size * 3.1 };
+            case 'planar':
+                return { width: size * 3, height: size * 2.6 };
+            case 'fixed':
+                return { width: size * 2.35, height: size * 2.45 };
+            case 'revolute':
+            case 'spherical':
+            case 'universal':
+            default:
+                return { width: size * 2.8, height: size * 2.8 };
+        }
+    }
+
+    private createSceneIconJoint(
+        data: JointData,
+        connectorType: ConnectorTypeValue
+    ): THREE.Group | null {
+        const texture = this.getSceneIconTexture(connectorType);
+        if (!texture) {
+            return null;
+        }
+
+        const size = this.getJointSize(data);
+        const dimensions = this.getSceneIconDimensions(connectorType, size);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            color: this.resolveStrokeColor(data),
+            transparent: true,
+            opacity: this.resolveStrokeOpacity(data),
+            side: THREE.DoubleSide,
+            alphaTest: 0.05,
+            depthTest: false,
+            depthWrite: false,
+            toneMapped: false
+        });
+        material.userData.baseColor = this.resolveStrokeColor(data);
+        material.userData.baseOpacity = this.resolveStrokeOpacity(data);
+        material.userData.isSceneIconMaterial = true;
+
+        const plane = this.attachRole(
+            new THREE.Mesh(
+                new THREE.PlaneGeometry(dimensions.width, dimensions.height),
+                material
+            ),
+            'icon'
+        );
+        plane.renderOrder = 40;
+
+        const group = new THREE.Group();
+        group.add(plane);
+        return group;
+    }
+
+    private createWireBox(
+        width: number,
+        height: number,
+        depth: number,
+        data: JointData,
+        role: string
+    ): THREE.LineSegments {
+        const geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, depth));
+        return this.attachRole(
+            new THREE.LineSegments(geometry, this.createStrokeMaterial(data)),
+            role
+        );
+    }
+
+    private createWireCylinder(
+        radius: number,
+        height: number,
+        data: JointData,
+        role: string
+    ): THREE.Group {
+        const group = this.attachRole(new THREE.Group(), role);
+        const top = this.createCircle(radius, data, `${role}-ring`);
+        top.position.z = height / 2;
+        group.add(top);
+
+        const bottom = this.createCircle(radius, data, `${role}-ring`);
+        bottom.position.z = -height / 2;
+        group.add(bottom);
+
+        for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            group.add(
+                this.createPolyline(
+                    [
+                        new THREE.Vector3(x, y, -height / 2),
+                        new THREE.Vector3(x, y, height / 2)
+                    ],
+                    data,
+                    `${role}-side`
+                )
             );
-            group.add(axisArrow);
         }
 
         return group;
     }
 
-    /**
-     * 创建移动关节可视化
-     */
+    private createCircle(
+        radius: number,
+        data: JointData,
+        role: string,
+        segments = 48
+    ): THREE.LineLoop {
+        const points: THREE.Vector3[] = [];
+        for (let index = 0; index < segments; index += 1) {
+            const angle = (index / segments) * Math.PI * 2;
+            points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0));
+        }
+        return this.createLoop(points, data, role);
+    }
+
+    private createArc(
+        radius: number,
+        startAngle: number,
+        endAngle: number,
+        data: JointData,
+        role: string,
+        segments = 32
+    ): THREE.Line {
+        const points: THREE.Vector3[] = [];
+        for (let index = 0; index <= segments; index += 1) {
+            const angle = startAngle + ((endAngle - startAngle) * index) / segments;
+            points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0));
+        }
+        return this.createPolyline(points, data, role);
+    }
+
+    private createAxisGuide(length: number, data: JointData, role = 'axis'): THREE.Line | null {
+        if (!this.options.showAxis) {
+            return null;
+        }
+        return this.createPolyline(
+            [
+                new THREE.Vector3(0, 0, -length / 2),
+                new THREE.Vector3(0, 0, length / 2)
+            ],
+            data,
+            role
+        );
+    }
+
+    private createHelix(
+        radius: number,
+        height: number,
+        turns: number,
+        data: JointData,
+        role: string,
+        segments = 96
+    ): THREE.Line {
+        const points: THREE.Vector3[] = [];
+        for (let index = 0; index <= segments; index += 1) {
+            const t = index / segments;
+            const angle = turns * Math.PI * 2 * t;
+            points.push(
+                new THREE.Vector3(
+                    Math.cos(angle) * radius,
+                    Math.sin(angle) * radius,
+                    height * (t - 0.5)
+                )
+            );
+        }
+        return this.createPolyline(points, data, role);
+    }
+
+    private createFixedJoint(data: JointData): THREE.Group {
+        const group = new THREE.Group();
+        const size = this.getJointSize(data);
+
+        const body = this.createRectOutline(size * 1.92, size * 1.38, data, 'body');
+        body.position.y = -size * 0.18;
+        group.add(body);
+
+        const shackle = this.createArc(size * 0.62, 0, Math.PI, data, 'shackle');
+        shackle.position.y = size * 0.58;
+        group.add(shackle);
+
+        group.add(
+            this.createPolyline(
+                [
+                    new THREE.Vector3(-size * 0.62, size * 0.58, 0),
+                    new THREE.Vector3(-size * 0.62, size * 0.1, 0)
+                ],
+                data,
+                'shackle-leg'
+            )
+        );
+        group.add(
+            this.createPolyline(
+                [
+                    new THREE.Vector3(size * 0.62, size * 0.58, 0),
+                    new THREE.Vector3(size * 0.62, size * 0.1, 0)
+                ],
+                data,
+                'shackle-leg'
+            )
+        );
+
+        group.add(
+            this.createPolyline(
+                [
+                    new THREE.Vector3(-size * 0.22, size * 0.5, 0),
+                    new THREE.Vector3(-size * 0.22, -size * 0.86, 0)
+                ],
+                data,
+                'body-seam'
+            )
+        );
+
+        const keyCircle = this.createCircle(size * 0.2, data, 'keyhole');
+        keyCircle.position.set(size * 0.26, -size * 0.02, 0);
+        group.add(keyCircle);
+        group.add(
+            this.createPolyline(
+                [
+                    new THREE.Vector3(size * 0.26, -size * 0.22, 0),
+                    new THREE.Vector3(size * 0.26, -size * 0.6, 0),
+                    new THREE.Vector3(size * 0.16, -size * 0.74, 0),
+                    new THREE.Vector3(size * 0.36, -size * 0.74, 0)
+                ],
+                data,
+                'key-stem'
+            )
+        );
+
+        return group;
+    }
+
+    private createRevoluteJoint(data: JointData): THREE.Group {
+        const group = new THREE.Group();
+        const size = this.getJointSize(data);
+
+        const plate = this.createRectOutline(size * 2.48, size * 2.48, data, 'plate');
+        plate.rotation.z = Math.PI / 5;
+        group.add(plate);
+
+        for (const [x, y] of [
+            [-0.78, 0.56],
+            [-0.22, -0.82],
+            [0.8, -0.16],
+            [0.24, 0.84]
+        ]) {
+            const hole = this.createCircle(size * 0.16, data, 'mount-hole');
+            hole.position.set(size * x, size * y, 0);
+            group.add(hole);
+        }
+
+        group.add(
+            this.createArcArrow(
+                size * 0.82,
+                Math.PI * 0.62,
+                Math.PI * 1.32,
+                data,
+                'rotation',
+                size * 0.18
+            )
+        );
+        group.add(
+            this.createArcArrow(
+                size * 0.54,
+                -Math.PI * 0.1,
+                Math.PI * 0.62,
+                data,
+                'rotation',
+                size * 0.14
+            )
+        );
+
+        const axisGuide = this.createAxisGuide(size * 1.85, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
+
+        return group;
+    }
+
     private createPrismaticJoint(data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = data.size && data.size > 0 ? data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Prismatic];
+        const size = this.getJointSize(data);
 
-        // 双箭头表示平移
-        const axis = new THREE.Vector3(data.axis.x, data.axis.y, data.axis.z).normalize();
+        const middle = this.createWireBox(size * 1.86, size * 1.28, size * 1.34, data, 'carriage');
+        middle.position.z = size * 0.04;
+        group.add(middle);
 
-        const arrow1 = new THREE.ArrowHelper(
-            axis,
-            new THREE.Vector3(0, 0, 0),
-            size,
-            color
-        );
-        const arrow2 = new THREE.ArrowHelper(
-            axis.clone().negate(),
-            new THREE.Vector3(0, 0, 0),
-            size,
-            color
-        );
-        group.add(arrow1);
-        group.add(arrow2);
+        const upper = this.createWireBox(size * 1.18, size * 1.18, size * 1.1, data, 'carriage');
+        upper.position.z = size * 0.98;
+        group.add(upper);
 
-        // 滑块
-        const boxGeometry = new THREE.BoxGeometry(size * 0.4, size * 0.4, size * 0.8);
-        const boxMaterial = new THREE.MeshPhongMaterial({
-            color,
-            transparent: true,
-            opacity: 0.8
-        });
-        const box = new THREE.Mesh(boxGeometry, boxMaterial);
-        group.add(box);
+        const lower = this.createWireBox(size * 1.18, size * 1.18, size * 1.1, data, 'carriage');
+        lower.position.z = -size * 0.98;
+        group.add(lower);
+
+        const axisGuide = this.createAxisGuide(size * 3.35, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
 
         return group;
     }
 
-    /**
-     * 创建圆柱关节可视化
-     */
-    private createCylindricalJoint(_data: JointData): THREE.Group {
+    private createCylindricalJoint(data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Cylindrical];
+        const size = this.getJointSize(data);
 
-        // 圆柱体
-        const cylinderGeometry = new THREE.CylinderGeometry(
-            size * 0.5, size * 0.5, size * 1.2, 32
+        const outer = this.createWireCylinder(size * 0.72, size * 1.48, data, 'shell');
+        outer.position.z = -size * 0.14;
+        group.add(outer);
+
+        const inner = this.createWireCylinder(size * 0.44, size * 2.48, data, 'shell');
+        inner.position.z = size * 0.52;
+        group.add(inner);
+
+        const axisGuide = this.createAxisGuide(size * 3.35, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
+
+        return group;
+    }
+
+    private createSphericalJoint(data: JointData): THREE.Group {
+        const group = new THREE.Group();
+        const size = this.getJointSize(data);
+
+        const xyRing = this.createCircle(size * 0.94, data, 'ring');
+        group.add(xyRing);
+
+        const yzRing = this.createCircle(size * 0.94, data, 'ring');
+        yzRing.rotation.y = Math.PI / 2;
+        group.add(yzRing);
+
+        const xzRing = this.createCircle(size * 0.94, data, 'ring');
+        xzRing.rotation.x = Math.PI / 2;
+        group.add(xzRing);
+
+        const axisGuide = this.createAxisGuide(size * 2.2, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
+
+        return group;
+    }
+
+    private createUniversalJoint(data: JointData): THREE.Group {
+        const group = new THREE.Group();
+        const size = this.getJointSize(data);
+
+        const firstYoke = this.createCircle(size * 1.46, data, 'yoke');
+        firstYoke.rotation.y = Math.PI / 2;
+        group.add(firstYoke);
+
+        const secondYoke = this.createCircle(size * 1.18, data, 'yoke');
+        secondYoke.rotation.x = Math.PI / 2;
+        group.add(secondYoke);
+
+        const topBridge = this.createRectOutline(size * 1.32, size * 0.34, data, 'yoke-arm');
+        topBridge.position.y = size * 1.26;
+        group.add(topBridge);
+
+        const bottomBridge = this.createRectOutline(size * 1.32, size * 0.34, data, 'yoke-arm');
+        bottomBridge.position.y = -size * 1.26;
+        group.add(bottomBridge);
+
+        const hub = this.createRectOutline(size * 0.62, size * 0.62, data, 'hub');
+        hub.rotation.z = Math.PI / 4;
+        group.add(hub);
+
+        const axisGuide = this.createAxisGuide(size * 2.2, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
+
+        return group;
+    }
+
+    private createPlanarJoint(data: JointData): THREE.Group {
+        const group = new THREE.Group();
+        const size = this.getJointSize(data);
+
+        const lower = this.createWireBox(size * 2.34, size * 1.52, size * 0.7, data, 'plane');
+        lower.position.set(-size * 0.2, -size * 0.08, -size * 0.62);
+        lower.rotation.z = -Math.PI / 8;
+        group.add(lower);
+
+        const upper = this.createWireBox(size * 2.34, size * 1.52, size * 0.7, data, 'plane');
+        upper.position.set(size * 0.28, size * 0.12, size * 0.62);
+        upper.rotation.z = Math.PI / 12;
+        group.add(upper);
+
+        group.add(
+            this.createPolyline(
+                [
+                    new THREE.Vector3(-size * 2.08, -size * 1.24, -size * 1.08),
+                    new THREE.Vector3(size * 2.08, size * 1.24, size * 1.08)
+                ],
+                data,
+                'plane-axis'
+            )
         );
-        const cylinderMaterial = new THREE.MeshPhongMaterial({
-            color,
-            transparent: true,
-            opacity: 0.6
-        });
-        const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
-        group.add(cylinder);
 
-        // 旋转环
-        const torusGeometry = new THREE.TorusGeometry(size * 0.6, size * 0.08, 16, 32);
-        const torusMaterial = new THREE.MeshPhongMaterial({ color });
-        const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-        torus.rotation.x = Math.PI / 2;
-        group.add(torus);
+        const axisGuide = this.createAxisGuide(size * 3.2, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
 
         return group;
     }
 
-    /**
-     * 创建球关节可视化
-     */
-    private createSphericalJoint(_data: JointData): THREE.Group {
+    private createScrewJoint(data: JointData): THREE.Group {
         const group = new THREE.Group();
-        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Spherical];
+        const size = this.getJointSize(data);
 
-        // 球体
-        const sphereGeometry = new THREE.SphereGeometry(size * 0.5, 32, 32);
-        const sphereMaterial = new THREE.MeshPhongMaterial({
-            color,
-            transparent: true,
-            opacity: 0.6
-        });
-        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-        group.add(sphere);
+        const body = this.createWireBox(size * 1.82, size * 1.42, size * 1.08, data, 'nut');
+        body.position.set(-size * 0.12, 0, -size * 0.18);
+        group.add(body);
 
-        // 三个旋转环
-        const ringColors = [0xff0000, 0x00ff00, 0x0000ff];
-        const rotations = [
-            { x: 0, y: 0, z: 0 },
-            { x: Math.PI / 2, y: 0, z: 0 },
-            { x: 0, y: Math.PI / 2, z: 0 }
-        ];
+        const helix = this.createHelix(size * 0.72, size * 3.45, 4.2, data, 'helix');
+        group.add(helix);
 
-        ringColors.forEach((ringColor, i) => {
-            const ringGeometry = new THREE.TorusGeometry(size * 0.7, size * 0.05, 16, 32);
-            const ringMaterial = new THREE.MeshBasicMaterial({ color: ringColor });
-            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-            ring.rotation.set(rotations[i].x, rotations[i].y, rotations[i].z);
-            group.add(ring);
-        });
-
-        return group;
-    }
-
-    /**
-     * 创建万向关节可视化
-     */
-    private createUniversalJoint(_data: JointData): THREE.Group {
-        const group = new THREE.Group();
-        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Universal];
-
-        // 十字形
-        const crossGeometry = new THREE.BoxGeometry(size * 0.2, size, size * 0.2);
-        const crossMaterial = new THREE.MeshPhongMaterial({ color });
-
-        const cross1 = new THREE.Mesh(crossGeometry, crossMaterial);
-        const cross2 = new THREE.Mesh(crossGeometry.clone(), crossMaterial);
-        cross2.rotation.z = Math.PI / 2;
-
-        group.add(cross1);
-        group.add(cross2);
-
-        // 两个旋转环
-        const ring1Geometry = new THREE.TorusGeometry(size * 0.6, size * 0.08, 16, 32);
-        const ring1Material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        const ring1 = new THREE.Mesh(ring1Geometry, ring1Material);
-        ring1.rotation.y = Math.PI / 2;
-        group.add(ring1);
-
-        const ring2Geometry = new THREE.TorusGeometry(size * 0.6, size * 0.08, 16, 32);
-        const ring2Material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const ring2 = new THREE.Mesh(ring2Geometry, ring2Material);
-        ring2.rotation.x = Math.PI / 2;
-        group.add(ring2);
-
-        return group;
-    }
-
-    /**
-     * 创建平面关节可视化
-     */
-    private createPlanarJoint(_data: JointData): THREE.Group {
-        const group = new THREE.Group();
-        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Planar];
-
-        // 平面
-        const planeGeometry = new THREE.PlaneGeometry(size * 2, size * 2);
-        const planeMaterial = new THREE.MeshPhongMaterial({
-            color,
-            transparent: true,
-            opacity: 0.4,
-            side: THREE.DoubleSide
-        });
-        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-        group.add(plane);
-
-        // XY 方向箭头
-        const xArrow = new THREE.ArrowHelper(
-            new THREE.Vector3(1, 0, 0),
-            new THREE.Vector3(-size * 0.8, 0, 0),
-            size * 1.6,
-            0xff0000
-        );
-        const yArrow = new THREE.ArrowHelper(
-            new THREE.Vector3(0, 1, 0),
-            new THREE.Vector3(0, -size * 0.8, 0),
-            size * 1.6,
-            0x00ff00
-        );
-        group.add(xArrow);
-        group.add(yArrow);
-
-        // 旋转符号
-        const arcGeometry = new THREE.TorusGeometry(size * 0.3, size * 0.05, 8, 16, Math.PI * 1.5);
-        const arcMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-        const arc = new THREE.Mesh(arcGeometry, arcMaterial);
-        arc.position.z = 0.1;
-        group.add(arc);
-
-        return group;
-    }
-
-    /**
-     * 创建固定关节可视化
-     */
-    private createFixedJoint(_data: JointData): THREE.Group {
-        const group = new THREE.Group();
-        const size = _data.size && _data.size > 0 ? _data.size : this.options.jointSize;
-        const color = JointVisualizer.JOINT_COLORS[MbsJointType.Fixed];
-
-        // 立方体表示固定
-        const boxGeometry = new THREE.BoxGeometry(size * 0.6, size * 0.6, size * 0.6);
-        const boxMaterial = new THREE.MeshPhongMaterial({
-            color,
-            transparent: true,
-            opacity: 0.8
-        });
-        const box = new THREE.Mesh(boxGeometry, boxMaterial);
-        group.add(box);
-
-        // 锁定符号 (X)
-        const linesMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-        const line1Points = [
-            new THREE.Vector3(-size * 0.4, -size * 0.4, size * 0.31),
-            new THREE.Vector3(size * 0.4, size * 0.4, size * 0.31)
-        ];
-        const line2Points = [
-            new THREE.Vector3(-size * 0.4, size * 0.4, size * 0.31),
-            new THREE.Vector3(size * 0.4, -size * 0.4, size * 0.31)
-        ];
-
-        const line1Geometry = new THREE.BufferGeometry().setFromPoints(line1Points);
-        const line2Geometry = new THREE.BufferGeometry().setFromPoints(line2Points);
-
-        const line1 = new THREE.Line(line1Geometry, linesMaterial);
-        const line2 = new THREE.Line(line2Geometry, linesMaterial);
-
-        group.add(line1);
-        group.add(line2);
+        const axisGuide = this.createAxisGuide(size * 3.4, data);
+        if (axisGuide) {
+            group.add(axisGuide);
+        }
 
         return group;
     }
@@ -311,15 +657,52 @@ export class JointVisualizer {
     private applySelectionAppearance(group: THREE.Group, selected: boolean): void {
         group.scale.setScalar(selected ? 1.12 : 1);
         group.traverse((child) => {
-            const material = (child as THREE.Mesh).material;
-            if (material instanceof THREE.MeshPhongMaterial) {
-                material.emissive.setHex(selected ? JointVisualizer.JOINT_SELECTED_EMISSIVE : 0x000000);
-                material.opacity = selected ? 0.95 : Math.min(material.opacity, 0.8);
-                material.transparent = material.opacity < 1;
-            } else if (material instanceof THREE.MeshBasicMaterial) {
-                material.opacity = selected ? 0.95 : 0.8;
-                material.transparent = material.opacity < 1;
-            }
+            const renderable = child as THREE.Object3D & {
+                material?: THREE.Material | THREE.Material[];
+            };
+            const materials = Array.isArray(renderable.material)
+                ? renderable.material
+                : renderable.material
+                  ? [renderable.material]
+                  : [];
+
+            materials.forEach((material) => {
+                const baseOpacity =
+                    typeof material.userData.baseOpacity === 'number'
+                        ? material.userData.baseOpacity
+                        : 1;
+                const baseColor =
+                    typeof material.userData.baseColor === 'number'
+                        ? material.userData.baseColor
+                        : JointVisualizer.JOINT_CREATED_COLOR;
+
+                if (material instanceof THREE.MeshPhongMaterial) {
+                    material.emissive.setHex(
+                        selected ? JointVisualizer.JOINT_SELECTED_EMISSIVE : 0x000000
+                    );
+                }
+                if (
+                    material instanceof THREE.MeshPhongMaterial ||
+                    material instanceof THREE.MeshBasicMaterial ||
+                    material instanceof THREE.LineBasicMaterial
+                ) {
+                    if (
+                        material instanceof THREE.MeshBasicMaterial &&
+                        material.userData.isSceneIconMaterial === true
+                    ) {
+                        material.color.setHex(
+                            selected ? JointVisualizer.JOINT_SELECTED_LINE_COLOR : baseColor
+                        );
+                    }
+                    if (material instanceof THREE.LineBasicMaterial) {
+                        material.color.setHex(
+                            selected ? JointVisualizer.JOINT_SELECTED_LINE_COLOR : baseColor
+                        );
+                    }
+                    material.opacity = selected ? Math.min(1, baseOpacity + 0.12) : baseOpacity;
+                    material.transparent = material.opacity < 1;
+                }
+            });
         });
         group.userData.jointSelected = selected;
     }
@@ -329,37 +712,44 @@ export class JointVisualizer {
      */
     private createJointGroup(data: JointData): THREE.Group {
         let group: THREE.Group;
+        const connectorType = this.resolveConnectorType(data);
+        const sceneIconGroup = this.createSceneIconJoint(data, connectorType);
 
-        switch (data.type) {
-            case MbsJointType.Revolute:
-                group = this.createRevoluteJoint(data);
-                break;
-            case MbsJointType.Prismatic:
-                group = this.createPrismaticJoint(data);
-                break;
-            case MbsJointType.Cylindrical:
-                group = this.createCylindricalJoint(data);
-                break;
-            case MbsJointType.Spherical:
-                group = this.createSphericalJoint(data);
-                break;
-            case MbsJointType.Universal:
-                group = this.createUniversalJoint(data);
-                break;
-            case MbsJointType.Planar:
-                group = this.createPlanarJoint(data);
-                break;
-            case MbsJointType.Fixed:
-                group = this.createFixedJoint(data);
-                break;
-            default:
-                group = new THREE.Group();
+        if (sceneIconGroup) {
+            group = sceneIconGroup;
+        } else {
+            switch (connectorType) {
+                case 'fixed':
+                    group = this.createFixedJoint(data);
+                    break;
+                case 'prismatic':
+                    group = this.createPrismaticJoint(data);
+                    break;
+                case 'cylindrical':
+                    group = this.createCylindricalJoint(data);
+                    break;
+                case 'spherical':
+                    group = this.createSphericalJoint(data);
+                    break;
+                case 'universal':
+                    group = this.createUniversalJoint(data);
+                    break;
+                case 'screw':
+                    group = this.createScrewJoint(data);
+                    break;
+                case 'planar':
+                    group = this.createPlanarJoint(data);
+                    break;
+                case 'revolute':
+                default:
+                    group = this.createRevoluteJoint(data);
+                    break;
+            }
         }
 
         group.name = `joint_${data.id}`;
         group.position.set(data.position.x, data.position.y, data.position.z);
 
-        // 根据轴方向旋转
         if (data.axis) {
             const axis = new THREE.Vector3(data.axis.x, data.axis.y, data.axis.z).normalize();
             const defaultAxis = new THREE.Vector3(0, 0, 1);
@@ -371,6 +761,8 @@ export class JointVisualizer {
             jointId: data.id,
             jointName: data.name,
             jointType: data.type,
+            jointConnectorType: connectorType,
+            jointDisplayState: data.displayState ?? 'created',
             jointSelected: Boolean(data.selected)
         };
         this.applySelectionAppearance(group, Boolean(data.selected));
@@ -409,12 +801,21 @@ export class JointVisualizer {
         if (group) {
             this.scene.remove(group);
             group.traverse((child) => {
-                if (child instanceof THREE.Mesh) {
-                    child.geometry.dispose();
-                    if (child.material instanceof THREE.Material) {
-                        child.material.dispose();
-                    }
+                const renderable = child as THREE.Object3D & {
+                    geometry?: THREE.BufferGeometry;
+                    material?: THREE.Material | THREE.Material[];
+                };
+
+                if (renderable.geometry) {
+                    renderable.geometry.dispose();
                 }
+
+                const materials = Array.isArray(renderable.material)
+                    ? renderable.material
+                    : renderable.material
+                      ? [renderable.material]
+                      : [];
+                materials.forEach((material) => material.dispose());
             });
             this.joints.delete(id);
         }

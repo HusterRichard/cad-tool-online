@@ -1464,7 +1464,9 @@ export class ThreeViewer {
      */
     addJoint(data: JointData): THREE.Group {
         const group = this.jointVisualizer.addJoint(data);
-        this.selectionManager?.registerObject(data.id, group);
+        if (!data.id.startsWith('__draft_')) {
+            this.selectionManager?.registerObject(data.id, group);
+        }
         this.syncJointSelectionVisuals();
         this.requestRender();
         return group;
@@ -1474,10 +1476,12 @@ export class ThreeViewer {
      * 更新关节
      */
     updateJoint(data: JointData): void {
-        this.selectionManager?.unregisterObject(data.id);
+        if (!data.id.startsWith('__draft_')) {
+            this.selectionManager?.unregisterObject(data.id);
+        }
         this.jointVisualizer.updateJoint(data);
         const group = this.jointVisualizer.getJoint(data.id);
-        if (group) {
+        if (group && !data.id.startsWith('__draft_')) {
             this.selectionManager?.registerObject(data.id, group);
         }
         this.syncJointSelectionVisuals();
@@ -1488,7 +1492,9 @@ export class ThreeViewer {
      * 移除关节
      */
     removeJoint(id: string): void {
-        this.selectionManager?.unregisterObject(id);
+        if (!id.startsWith('__draft_')) {
+            this.selectionManager?.unregisterObject(id);
+        }
         this.jointVisualizer.removeJoint(id);
         this.syncJointSelectionVisuals();
         this.requestRender();
