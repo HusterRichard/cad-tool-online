@@ -54,6 +54,7 @@ export interface MeshResult {
     vertices: number[];
     normals: number[];
     indices: number[];
+    colors?: number[];
     vertexCount: number;
     triangleCount: number;
     error?: string;

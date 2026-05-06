@@ -9,7 +9,13 @@ ShapeStore& ShapeStore::instance() {
 }
 
 void ShapeStore::addShape(const std::string& id, const TopoDS_Shape& shape) {
-    shapes_[id] = shape;
+    shapes_[id] = StoredShapeData { shape, {} };
+}
+
+void ShapeStore::addShape(const std::string& id,
+                          const TopoDS_Shape& shape,
+                          const std::vector<float>& faceColorsLinear) {
+    shapes_[id] = StoredShapeData { shape, faceColorsLinear };
 }
 
 void ShapeStore::removeShape(const std::string& id) {
@@ -19,7 +25,15 @@ void ShapeStore::removeShape(const std::string& id) {
 std::optional<TopoDS_Shape> ShapeStore::getShape(const std::string& id) const {
     auto it = shapes_.find(id);
     if (it != shapes_.end()) {
-        return it->second;
+        return it->second.shape;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::vector<float>> ShapeStore::getFaceColors(const std::string& id) const {
+    auto it = shapes_.find(id);
+    if (it != shapes_.end()) {
+        return it->second.faceColorsLinear;
     }
     return std::nullopt;
 }

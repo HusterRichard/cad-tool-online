@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import CadGeoFactory from '../../packages/geo/wasm/cad-geo.js';
-import type { StepNode, StepReadResult } from '../../packages/geo/src/types';
+import type { MeshData, StepNode, StepReadResult } from '../../packages/geo/src/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../..');
@@ -49,6 +49,47 @@ export async function readStepFixture(relativePath: string, baseId = 'fixture'):
     return JSON.parse(
         mod.readStepFromBuffer(new Uint8Array(stepData), baseId)
     ) as StepReadResult;
+}
+
+export async function readStoredShapeMesh(
+    shapeId: string,
+    linearDeflection = 0.0005,
+    angularDeflection = 0.2
+): Promise<MeshData | null> {
+    const mod = await getCadGeoModule();
+    const meshShapeData = (
+        mod as Awaited<ReturnType<typeof CadGeoFactory>> & {
+            meshShapeData?: (
+                id: string,
+                linearDeflection: number,
+                angularDeflection: number
+            ) => {
+                success: boolean;
+                vertices: number[];
+                normals: number[];
+                indices: number[];
+                colors?: number[];
+                error?: string;
+            };
+        }
+    ).meshShapeData;
+
+    if (!meshShapeData) {
+        throw new Error('meshShapeData is not available in the current cad-geo module');
+    }
+
+    const result = meshShapeData(shapeId, linearDeflection, angularDeflection);
+    if (!result.success) {
+        return null;
+    }
+
+    return {
+        vertices: new Float32Array(result.vertices),
+        normals: new Float32Array(result.normals),
+        indices: new Uint32Array(result.indices),
+        colors:
+            result.colors && result.colors.length > 0 ? new Float32Array(result.colors) : undefined
+    };
 }
 
 async function getCadGeoModule(): Promise<Awaited<ReturnType<typeof CadGeoFactory>>> {

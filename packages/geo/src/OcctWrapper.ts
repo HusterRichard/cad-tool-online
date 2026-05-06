@@ -32,6 +32,7 @@ interface CadGeoModule {
         vertices: number[];
         normals: number[];
         indices: number[];
+        colors?: number[];
         vertexCount: number;
         triangleCount: number;
         error?: string;
@@ -41,6 +42,7 @@ interface CadGeoModule {
         vertices: number[];
         normals: number[];
         indices: number[];
+        colors?: number[];
         vertexCount: number;
         triangleCount: number;
         error?: string;
@@ -173,7 +175,11 @@ export class OcctWrapper implements IOcctWrapper {
             return {
                 vertices: new Float32Array(result.vertices),
                 normals: new Float32Array(result.normals),
-                indices: new Uint32Array(result.indices)
+                indices: new Uint32Array(result.indices),
+                colors:
+                    result.colors && result.colors.length > 0
+                        ? new Float32Array(result.colors)
+                        : undefined
             };
         }
 
@@ -190,7 +196,11 @@ export class OcctWrapper implements IOcctWrapper {
         return {
             vertices: new Float32Array(result.vertices),
             normals: new Float32Array(result.normals),
-            indices: new Uint32Array(result.indices)
+            indices: new Uint32Array(result.indices),
+            colors:
+                result.colors && result.colors.length > 0
+                    ? new Float32Array(result.colors)
+                    : undefined
         };
     }
 
@@ -215,7 +225,11 @@ export class OcctWrapper implements IOcctWrapper {
                 result.set(shapeId, {
                     vertices: new Float32Array(item.vertices),
                     normals: new Float32Array(item.normals),
-                    indices: new Uint32Array(item.indices)
+                    indices: new Uint32Array(item.indices),
+                    colors:
+                        item.colors && item.colors.length > 0
+                            ? new Float32Array(item.colors)
+                            : undefined
                 });
             }
             return result;

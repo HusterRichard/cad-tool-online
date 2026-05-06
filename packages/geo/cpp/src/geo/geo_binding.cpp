@@ -7,6 +7,7 @@
 #include <vector>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <streambuf>
 
 #include "ShapeStore.h"
@@ -692,6 +693,10 @@ bool tryGetColorFromLabel(const Handle(XCAFDoc_ColorTool)& colorTool,
 
 std::string toHexColor(const Quantity_Color& color);
 
+std::vector<float> collectMultiFaceLinearColors(const Handle(XCAFDoc_ColorTool)& colorTool,
+                                                const TopoDS_Shape& shape,
+                                                const Quantity_Color* fallbackColor);
+
 bool tryGetColorFromShape(const Handle(XCAFDoc_ColorTool)& colorTool,
                           const TopoDS_Shape& shape,
                           Quantity_Color& color)
@@ -700,7 +705,10 @@ bool tryGetColorFromShape(const Handle(XCAFDoc_ColorTool)& colorTool,
         return false;
     }
 
-    return colorTool->GetColor(shape, XCAFDoc_ColorSurf, color)
+    return colorTool->GetInstanceColor(shape, XCAFDoc_ColorSurf, color)
+        || colorTool->GetInstanceColor(shape, XCAFDoc_ColorGen, color)
+        || colorTool->GetInstanceColor(shape, XCAFDoc_ColorCurv, color)
+        || colorTool->GetColor(shape, XCAFDoc_ColorSurf, color)
         || colorTool->GetColor(shape, XCAFDoc_ColorGen, color)
         || colorTool->GetColor(shape, XCAFDoc_ColorCurv, color);
 }
@@ -752,27 +760,50 @@ bool tryResolveNodeColor(const Handle(XCAFDoc_ShapeTool)& shapeTool,
     TopoDS_Shape shape = shapeTool->GetShape(label);
     TopoDS_Shape resolvedShape = shapeTool->GetShape(resolvedLabel);
 
-    // 1) Prefer colors bound to the actual instance/definition geometry.
-    if (tryGetColorFromShape(colorTool, shape, color) || tryGetColorFromShape(colorTool, resolvedShape, color)) {
+    Quantity_Color shapeColor;
+    const bool hasShapeColor =
+        tryGetColorFromShape(colorTool, shape, shapeColor)
+        || tryGetColorFromShape(colorTool, resolvedShape, shapeColor);
+
+    Quantity_Color faceColor;
+    const bool hasFaceColor =
+        tryGetDominantFaceColor(colorTool, shape, faceColor)
+        || tryGetDominantFaceColor(colorTool, resolvedShape, faceColor);
+
+    // 1) If the direct part color is just the default white fallback but faces carry
+    // richer styling, prefer the dominant face color for display.
+    if (hasShapeColor && hasFaceColor) {
+        const bool isNearlyWhiteShapeColor =
+            shapeColor.Red() >= 0.95 && shapeColor.Green() >= 0.95 && shapeColor.Blue() >= 0.95;
+        if (isNearlyWhiteShapeColor && toHexColor(shapeColor) != toHexColor(faceColor)) {
+            color = faceColor;
+            return true;
+        }
+    }
+
+    // 2) Prefer colors bound to the actual instance/definition geometry.
+    if (hasShapeColor) {
+        color = shapeColor;
         return true;
     }
 
-    // 2) If only sub-face styling exists, use the dominant face color as the part display color.
-    if (tryGetDominantFaceColor(colorTool, shape, color) || tryGetDominantFaceColor(colorTool, resolvedShape, color)) {
+    // 3) If only sub-face styling exists, use the dominant face color as the part display color.
+    if (hasFaceColor) {
+        color = faceColor;
         return true;
     }
 
-    // 3) Fall back to direct label colors.
+    // 4) Fall back to direct label colors.
     if (tryGetColorFromLabel(colorTool, label, color)) {
         return true;
     }
 
-    // 4) Try the resolved/referred label for instance-bound styles.
+    // 5) Try the resolved/referred label for instance-bound styles.
     if (resolvedLabel != label && tryGetColorFromLabel(colorTool, resolvedLabel, color)) {
         return true;
     }
 
-    // 5) Inherit from parent labels.
+    // 6) Inherit from parent labels.
     TDF_Label parent = label.Father();
     while (!parent.IsNull()) {
         if (tryGetColorFromLabel(colorTool, parent, color)) {
@@ -791,13 +822,53 @@ bool tryResolveNodeColor(const Handle(XCAFDoc_ShapeTool)& shapeTool,
 
 std::string toHexColor(const Quantity_Color& color)
 {
-    int r = static_cast<int>(color.Red() * 255.0);
-    int g = static_cast<int>(color.Green() * 255.0);
-    int b = static_cast<int>(color.Blue() * 255.0);
+    Standard_Real sr = 0.0;
+    Standard_Real sg = 0.0;
+    Standard_Real sb = 0.0;
+    color.Values(sr, sg, sb, Quantity_TOC_sRGB);
+
+    int r = static_cast<int>(std::clamp(sr, 0.0, 1.0) * 255.0 + 0.5);
+    int g = static_cast<int>(std::clamp(sg, 0.0, 1.0) * 255.0 + 0.5);
+    int b = static_cast<int>(std::clamp(sb, 0.0, 1.0) * 255.0 + 0.5);
 
     char hexColor[8];
     snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
     return std::string(hexColor);
+}
+
+std::vector<float> collectMultiFaceLinearColors(const Handle(XCAFDoc_ColorTool)& colorTool,
+                                                const TopoDS_Shape& shape,
+                                                const Quantity_Color* fallbackColor)
+{
+    if (shape.IsNull()) {
+        return {};
+    }
+
+    std::vector<float> faceColors;
+    std::unordered_set<std::string> uniqueColors;
+    int faceCount = 0;
+
+    for (TopExp_Explorer explorer(shape, TopAbs_FACE); explorer.More(); explorer.Next()) {
+        Quantity_Color faceColor;
+        if (!tryGetColorFromShape(colorTool, explorer.Current(), faceColor)) {
+            if (fallbackColor == nullptr) {
+                return {};
+            }
+            faceColor = *fallbackColor;
+        }
+
+        faceColors.push_back(static_cast<float>(faceColor.Red()));
+        faceColors.push_back(static_cast<float>(faceColor.Green()));
+        faceColors.push_back(static_cast<float>(faceColor.Blue()));
+        uniqueColors.insert(toHexColor(faceColor));
+        faceCount++;
+    }
+
+    if (faceCount == 0 || uniqueColors.size() <= 1) {
+        return {};
+    }
+
+    return faceColors;
 }
 
 // Helper function to recursively build hierarchy JSON
@@ -849,7 +920,9 @@ void buildHierarchyJson(const Handle(XCAFDoc_ShapeTool)& shapeTool,
         TopoDS_Shape shape = shapeTool->GetShape(shapeLabel);
         if (!shape.IsNull()) {
             std::string shapeId = nodeId + "_shape";
-            store.addShape(shapeId, shape);
+            const std::vector<float> faceColors =
+                collectMultiFaceLinearColors(colorTool, shape, hasColor ? &color : nullptr);
+            store.addShape(shapeId, shape, faceColors);
             result << ",\"shapeId\":\"" << shapeId << "\"";
         }
     }
@@ -987,6 +1060,7 @@ struct MeshShapeDataResult {
     val vertices;
     val normals;
     val indices;
+    val colors;
     int vertexCount;
     int triangleCount;
     std::optional<std::string> error;
@@ -1148,6 +1222,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
             val::array(std::vector<double>()),
             val::array(std::vector<double>()),
             val::array(std::vector<int>()),
+            val::array(std::vector<double>()),
             0,
             0,
             std::optional<std::string>("Shape not found")
@@ -1167,6 +1242,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
                 val::array(std::vector<double>()),
                 val::array(std::vector<double>()),
                 val::array(std::vector<int>()),
+                val::array(std::vector<double>()),
                 0,
                 0,
                 std::optional<std::string>("Meshing failed")
@@ -1176,7 +1252,11 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
         std::vector<double> vertices;
         std::vector<double> normals;
         std::vector<int> indices;
+        std::vector<double> colors;
+        const auto faceColorsOpt = store.getFaceColors(id);
+        const bool hasFaceColors = faceColorsOpt.has_value() && !faceColorsOpt->empty();
         int vertexOffset = 0;
+        int faceIndex = 0;
 
         TopExp_Explorer explorer(shape, TopAbs_FACE);
         for (; explorer.More(); explorer.Next()) {
@@ -1184,7 +1264,10 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
             TopLoc_Location location;
             Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, location);
 
-            if (triangulation.IsNull()) continue;
+            if (triangulation.IsNull()) {
+                faceIndex++;
+                continue;
+            }
 
             gp_Trsf transform = location.Transformation();
             bool reversed = (face.Orientation() == TopAbs_REVERSED);
@@ -1218,6 +1301,17 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
                 appendFallbackNormals(triangulation, transform, reversed, normals);
             }
 
+            if (hasFaceColors && faceColorsOpt->size() >= static_cast<size_t>((faceIndex + 1) * 3)) {
+                const double faceR = (*faceColorsOpt)[faceIndex * 3];
+                const double faceG = (*faceColorsOpt)[faceIndex * 3 + 1];
+                const double faceB = (*faceColorsOpt)[faceIndex * 3 + 2];
+                for (int i = 0; i < nbNodes; ++i) {
+                    colors.push_back(faceR);
+                    colors.push_back(faceG);
+                    colors.push_back(faceB);
+                }
+            }
+
             int nbTriangles = triangulation->NbTriangles();
             for (int i = 1; i <= nbTriangles; ++i) {
                 Poly_Triangle tri = triangulation->Triangle(i);
@@ -1236,6 +1330,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
             }
 
             vertexOffset += nbNodes;
+            faceIndex++;
         }
 
         return {
@@ -1243,6 +1338,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
             val::array(vertices),
             val::array(normals),
             val::array(indices),
+            val::array(colors),
             static_cast<int>(vertices.size() / 3),
             static_cast<int>(indices.size() / 3),
             std::nullopt
@@ -1253,6 +1349,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
             val::array(std::vector<double>()),
             val::array(std::vector<double>()),
             val::array(std::vector<int>()),
+            val::array(std::vector<double>()),
             0,
             0,
             std::optional<std::string>(e.what())
@@ -1263,6 +1360,7 @@ MeshShapeDataResult meshShapeData(const std::string& id, double linearDeflection
             val::array(std::vector<double>()),
             val::array(std::vector<double>()),
             val::array(std::vector<int>()),
+            val::array(std::vector<double>()),
             0,
             0,
             std::optional<std::string>("Unknown error during meshing")
@@ -1277,6 +1375,7 @@ val meshShapeDataToVal(const MeshShapeDataResult& data)
     obj.set("vertices", data.vertices);
     obj.set("normals", data.normals);
     obj.set("indices", data.indices);
+    obj.set("colors", data.colors);
     obj.set("vertexCount", data.vertexCount);
     obj.set("triangleCount", data.triangleCount);
     if (data.error.has_value()) {
@@ -1324,7 +1423,11 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
         std::vector<double> vertices;
         std::vector<double> normals;
         std::vector<int> indices;
+        std::vector<double> colors;
+        const auto faceColorsOpt = store.getFaceColors(id);
+        const bool hasFaceColors = faceColorsOpt.has_value() && !faceColorsOpt->empty();
         int vertexOffset = 0;
+        int faceIndex = 0;
 
         // Iterate over all faces
         TopExp_Explorer explorer(shape, TopAbs_FACE);
@@ -1333,7 +1436,10 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
             TopLoc_Location location;
             Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, location);
 
-            if (triangulation.IsNull()) continue;
+            if (triangulation.IsNull()) {
+                faceIndex++;
+                continue;
+            }
 
             gp_Trsf transform = location.Transformation();
             bool reversed = (face.Orientation() == TopAbs_REVERSED);
@@ -1369,6 +1475,17 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
                 appendFallbackNormals(triangulation, transform, reversed, normals);
             }
 
+            if (hasFaceColors && faceColorsOpt->size() >= static_cast<size_t>((faceIndex + 1) * 3)) {
+                const double faceR = (*faceColorsOpt)[faceIndex * 3];
+                const double faceG = (*faceColorsOpt)[faceIndex * 3 + 1];
+                const double faceB = (*faceColorsOpt)[faceIndex * 3 + 2];
+                for (int i = 0; i < nbNodes; ++i) {
+                    colors.push_back(faceR);
+                    colors.push_back(faceG);
+                    colors.push_back(faceB);
+                }
+            }
+
             // Get triangles
             int nbTriangles = triangulation->NbTriangles();
             for (int i = 1; i <= nbTriangles; ++i) {
@@ -1389,6 +1506,7 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
             }
 
             vertexOffset += nbNodes;
+            faceIndex++;
         }
 
         // Build JSON result
@@ -1407,6 +1525,12 @@ std::string meshShape(const std::string& id, double linearDeflection, double ang
         for (size_t i = 0; i < indices.size(); ++i) {
             if (i > 0) result << ",";
             result << indices[i];
+        }
+        result << "]";
+        result << ",\"colors\":[";
+        for (size_t i = 0; i < colors.size(); ++i) {
+            if (i > 0) result << ",";
+            result << colors[i];
         }
         result << "],\"vertexCount\":" << (vertices.size() / 3);
         result << ",\"triangleCount\":" << (indices.size() / 3) << "}";
@@ -1733,6 +1857,7 @@ EMSCRIPTEN_BINDINGS(geo_module) {
         .field("vertices", &MeshShapeDataResult::vertices)
         .field("normals", &MeshShapeDataResult::normals)
         .field("indices", &MeshShapeDataResult::indices)
+        .field("colors", &MeshShapeDataResult::colors)
         .field("vertexCount", &MeshShapeDataResult::vertexCount)
         .field("triangleCount", &MeshShapeDataResult::triangleCount)
         .field("error", &MeshShapeDataResult::error);

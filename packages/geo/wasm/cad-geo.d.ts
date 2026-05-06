@@ -326,6 +326,7 @@ export type MeshShapeDataResult = {
   vertices: any,
   normals: any,
   indices: any,
+  colors: any,
   vertexCount: number,
   triangleCount: number,
   error: EmbindString | undefined

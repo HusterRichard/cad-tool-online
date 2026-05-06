@@ -264,34 +264,7 @@ function normalizeImportedDisplayColor(
         return type === 'assembly' ? '#C0C0C0' : CAD_BODY_DISPLAY_COLOR;
     }
 
-    const normalized = color.toUpperCase();
-    const r = parseInt(normalized.slice(1, 3), 16);
-    const g = parseInt(normalized.slice(3, 5), 16);
-    const b = parseInt(normalized.slice(5, 7), 16);
-    const lowerName = name.toLowerCase();
-    const isNearlyWhite = r >= 0xec && g >= 0xec && b >= 0xec;
-    const isNeutralMetal = Math.abs(r - g) <= 10 && Math.abs(g - b) <= 10 && r >= 0xc0;
-    const isWarmBodyPaint = r >= 0xd0 && g >= 0x78 && b <= 0x50;
-
-    if (
-        /(tire|tyre|rubber|seat|cushion|damping|damper)/.test(lowerName) &&
-        (isNearlyWhite || isNeutralMetal)
-    ) {
-        return CAD_DARK_COMPONENT_COLOR;
-    }
-
-    if (
-        /(cylinder|rod|shaft|axle|eje|piston|hub|nave|rim)/.test(lowerName) &&
-        (isNearlyWhite || isNeutralMetal)
-    ) {
-        return CAD_LIGHT_METAL_COLOR;
-    }
-
-    if (type !== 'assembly' && (isWarmBodyPaint || isNearlyWhite || isNeutralMetal)) {
-        return CAD_BODY_DISPLAY_COLOR;
-    }
-
-    return normalized;
+    return color.toUpperCase();
 }
 
 interface MbsDesignPointEntity {
@@ -2615,7 +2588,8 @@ function applyRigidTransformToMeshData(meshData: MeshData, transform: RigidTrans
     return {
         vertices,
         normals,
-        indices: new Uint32Array(meshData.indices)
+        indices: new Uint32Array(meshData.indices),
+        colors: meshData.colors ? new Float32Array(meshData.colors) : undefined
     };
 }
 
@@ -3030,12 +3004,14 @@ async function remeshLoadedModelWithCurrentPrecision(): Promise<void> {
             const edgeData = occt.getBrepEdges(shape.shapeId, edgeLinearDeflection);
             if (meshData && meshData.vertices.length > 0) {
                 viewer.removeMesh(shape.meshId);
-                viewer.addMeshFromData(shape.meshId, meshData, undefined, edgeData ?? undefined);
+                viewer.addMeshFromData(
+                    shape.meshId,
+                    meshData,
+                    undefined,
+                    edgeData ?? undefined,
+                    shape.color ? parseInt(shape.color.replace('#', ''), 16) : undefined
+                );
                 viewer.setVisibility(shape.meshId, shape.visible);
-                if (shape.color) {
-                    const colorHex = parseInt(shape.color.replace('#', ''), 16);
-                    viewer.setMeshColor(shape.meshId, colorHex);
-                }
                 shape.meshData = meshData;
                 shape.edgeData = edgeData ?? undefined;
                 meshIdToShapeId.set(shape.meshId, shape.id);
@@ -5137,13 +5113,15 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
                     const meshData = applyRigidTransformToMeshData(node._meshData, worldTransform);
                     const edgeData = applyRigidTransformToEdgeData(node._edgeData, worldTransform);
                     if (viewer) {
-                        viewer.addMeshFromData(meshId, meshData, undefined, edgeData);
-
-                        // Apply color if available
-                        if (displayColor) {
-                            const colorHex = parseInt(displayColor.replace('#', ''), 16);
-                            viewer.setMeshColor(meshId, colorHex);
-                        }
+                        viewer.addMeshFromData(
+                            meshId,
+                            meshData,
+                            undefined,
+                            edgeData,
+                            displayColor
+                                ? parseInt(displayColor.replace('#', ''), 16)
+                                : undefined
+                        );
                     }
                     shape.meshId = meshId;
                     shape.meshData = meshData;
@@ -5240,7 +5218,13 @@ async function loadStepFile(fileName: string, fileContent: unknown): Promise<voi
 
                     // Add to viewer
                     if (viewer) {
-                        viewer.addMeshFromData(meshId, meshData, undefined, edgeData ?? undefined);
+                        viewer.addMeshFromData(
+                            meshId,
+                            meshData,
+                            undefined,
+                            edgeData ?? undefined,
+                            shape.color ? parseInt(shape.color.replace('#', ''), 16) : undefined
+                        );
                     }
 
                     // Register mesh ID to shape ID mapping for selection sync

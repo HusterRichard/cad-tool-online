@@ -18,6 +18,7 @@ export interface MeshData {
     vertices: Float32Array;
     normals: Float32Array;
     indices: Uint32Array;
+    colors?: Float32Array;
 }
 
 export interface EdgeData {

@@ -47,6 +47,11 @@ export interface ThreeViewerOptions {
 interface ViewerManagedMaterialState {
     managedByViewer: boolean;
     baseMaterial: THREE.Material;
+    baseColor: number;
+    usesVertexColors: boolean;
+    originalBaseColor: number;
+    originalUsesVertexColors: boolean;
+    importedDisplayColor?: number;
 }
 
 type EdgeOverlay = LineSegments2;
@@ -478,11 +483,16 @@ export class ThreeViewer {
         }
     }
 
-    private createSurfaceMaterial(color: number): THREE.Material {
+    private createSurfaceMaterial(
+        color: number,
+        options: { vertexColors?: boolean } = {}
+    ): THREE.Material {
+        const vertexColors = options.vertexColors ?? false;
         switch (this.materialMode) {
             case 'matcap':
                 return new THREE.MeshMatcapMaterial({
                     color,
+                    vertexColors,
                     matcap: this.matcapTexture,
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
@@ -492,6 +502,7 @@ export class ThreeViewer {
             case 'pbr':
                 return new THREE.MeshPhysicalMaterial({
                     color,
+                    vertexColors,
                     roughness: 0.55,
                     metalness: 0.05,
                     clearcoat: 0.02,
@@ -505,6 +516,7 @@ export class ThreeViewer {
             case 'flat':
                 return new THREE.MeshStandardMaterial({
                     color,
+                    vertexColors,
                     metalness: 0,
                     roughness: 0.88,
                     flatShading: true,
@@ -516,6 +528,7 @@ export class ThreeViewer {
             case 'phong':
                 return new THREE.MeshPhongMaterial({
                     color,
+                    vertexColors,
                     shininess: 20,
                     specular: new THREE.Color(0x1a1a1a),
                     polygonOffset: true,
@@ -526,6 +539,7 @@ export class ThreeViewer {
             default:
                 return new THREE.MeshMatcapMaterial({
                     color,
+                    vertexColors,
                     matcap: this.matcapTexture,
                     polygonOffset: true,
                     polygonOffsetFactor: 1,
@@ -535,16 +549,19 @@ export class ThreeViewer {
         }
     }
 
-    private extractMaterialColor(material: THREE.Material | THREE.Material[] | undefined): number {
-        const candidate = Array.isArray(material) ? material[0] : material;
-        if (!candidate) {
-            return 0x808080;
+    private updateSurfaceMaterialAppearance(
+        material: THREE.Material,
+        color: number,
+        usesVertexColors: boolean
+    ): void {
+        const candidate = material as THREE.MeshStandardMaterial & { vertexColors?: boolean };
+        if (candidate.color instanceof THREE.Color) {
+            candidate.color.setHex(color);
         }
-        const meshMaterial = candidate as THREE.MeshStandardMaterial;
-        if (meshMaterial.color instanceof THREE.Color) {
-            return meshMaterial.color.getHex();
+        if ('vertexColors' in candidate) {
+            candidate.vertexColors = usesVertexColors;
         }
-        return 0x808080;
+        candidate.needsUpdate = true;
     }
 
     private applyMeshMaterial(mesh: THREE.Mesh, nextBaseMaterial: THREE.Material): void {
@@ -554,11 +571,9 @@ export class ThreeViewer {
             state.baseMaterial.dispose();
         }
 
-        mesh.userData.viewerMaterialState = {
-            managedByViewer: true,
-            baseMaterial: nextBaseMaterial
-        } as ViewerManagedMaterialState;
-
+        if (state) {
+            state.baseMaterial = nextBaseMaterial;
+        }
         mesh.material = nextBaseMaterial;
     }
 
@@ -573,8 +588,9 @@ export class ThreeViewer {
                 return;
             }
 
-            const color = this.extractMaterialColor(state.baseMaterial);
-            const nextMaterial = this.createSurfaceMaterial(color);
+            const nextMaterial = this.createSurfaceMaterial(state.baseColor, {
+                vertexColors: state.usesVertexColors
+            });
             this.applyMeshMaterial(mesh, nextMaterial);
         });
 
@@ -901,19 +917,35 @@ export class ThreeViewer {
         id: string,
         meshData: MeshData,
         material?: THREE.Material,
-        edgeData?: EdgeData
+        edgeData?: EdgeData,
+        displayColor?: number
     ): THREE.Mesh {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));
         geometry.setAttribute('normal', new THREE.BufferAttribute(meshData.normals, 3));
+        if (meshData.colors && meshData.colors.length === meshData.vertices.length) {
+            geometry.setAttribute('color', new THREE.BufferAttribute(meshData.colors, 3));
+        }
         geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
 
-        const baseMaterial = material ?? this.createSurfaceMaterial(0x808080);
+        const usesVertexColors = Boolean(meshData.colors && meshData.colors.length > 0 && !material);
+        const initialDisplayColor = displayColor ?? 0x808080;
+        const initialBaseColor = usesVertexColors ? 0xffffff : initialDisplayColor;
+        const baseMaterial =
+            material ??
+            this.createSurfaceMaterial(initialBaseColor, {
+                vertexColors: usesVertexColors
+            });
 
         const mesh = new THREE.Mesh(geometry, baseMaterial);
         mesh.userData.viewerMaterialState = {
             managedByViewer: !material,
-            baseMaterial
+            baseMaterial,
+            baseColor: initialBaseColor,
+            usesVertexColors,
+            originalBaseColor: initialBaseColor,
+            originalUsesVertexColors: usesVertexColors,
+            importedDisplayColor: displayColor
         } as ViewerManagedMaterialState;
 
         const edgePositions =
@@ -1011,27 +1043,29 @@ export class ThreeViewer {
             return;
         }
 
-        const updateColor = (mat: THREE.Material): void => {
-            const typed = mat as THREE.MeshStandardMaterial;
-            if (typed.color instanceof THREE.Color) {
-                typed.color.setHex(color);
-                typed.needsUpdate = true;
-            }
-        };
-
-        if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(updateColor);
-        } else {
-            updateColor(mesh.material);
-        }
-
         const state = mesh.userData.viewerMaterialState as ViewerManagedMaterialState | undefined;
-        if (state?.baseMaterial) {
-            const base = state.baseMaterial as THREE.MeshStandardMaterial;
-            if (base.color instanceof THREE.Color) {
-                base.color.setHex(color);
-                base.needsUpdate = true;
+        if (state?.baseMaterial && state.managedByViewer) {
+            const restoreImportedVertexColors =
+                state.originalUsesVertexColors && state.importedDisplayColor === color;
+            state.usesVertexColors = restoreImportedVertexColors;
+            state.baseColor = restoreImportedVertexColors ? state.originalBaseColor : color;
+            this.updateSurfaceMaterialAppearance(
+                state.baseMaterial,
+                state.baseColor,
+                state.usesVertexColors
+            );
+
+            if (mesh.material === state.baseMaterial) {
+                this.updateSurfaceMaterialAppearance(
+                    mesh.material as THREE.Material,
+                    state.baseColor,
+                    state.usesVertexColors
+                );
             }
+        } else if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(mat => this.updateSurfaceMaterialAppearance(mat, color, false));
+        } else {
+            this.updateSurfaceMaterialAppearance(mesh.material, color, false);
         }
         this.requestRender();
     }
