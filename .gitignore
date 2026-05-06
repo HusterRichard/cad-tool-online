@@ -7,3 +7,5 @@ packages/geo/cpp/build/
 .VSCodeCounter/
 nul
 ref/
+.playwright-mcp/
+view-result/

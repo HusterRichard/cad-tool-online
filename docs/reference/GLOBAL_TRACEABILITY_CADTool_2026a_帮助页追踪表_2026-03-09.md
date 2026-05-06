@@ -64,7 +64,7 @@
 | `GroupParts.html` | WP-MB | 已落地 | `packages/core/src/groupDesign.ts`、`src/webview/main.ts` | `packages/core/test/group-design.spec.ts`、`SC13_PRD_对零件进行分组_2026-03-11.md` | 当前完成度最高 |
 | `BuildMarkers.html` | WP-MB | 部分落地 | `createFrame` / `createRefFrame` / `editFrame` / `deleteFrame` | `RIB-004` ~ `RIB-007` | 仍需按帮助页校对模式与属性流程 |
 | `BuildDesignPoints.html` | WP-MB | 部分落地 | `createDesignPoint` | `SC13_PRD_对零件进行分组_2026-03-11.md`、QA 文档 | 已能创建并挂组 |
-| `BuildConnectors.html` | WP-MB | 已落地 | `createJoint_*`、`src/webview/main.ts`、`packages/core/src/connectorDesign.ts`、`packages/three/src/ThreeViewer.ts`、`packages/three/src/JointVisualizer.ts`、`SC02_PRD/PLAN/QA` | `packages/core/test/connector-design.spec.ts`、`test/step-import-selection.test.mjs`、`SC02_QA_添加连接_2026-03-11.md` | 首版连接闭环已落地；完整点/线/面规则矩阵、万向节双叉语义、红蓝双色高亮仍待帮助页级对齐 |
+| `BuildConnectors.html` | WP-MB | 已落地 | `createJoint_*`、`src/webview/main.ts`、`packages/core/src/connectorDesign.ts`、`packages/three/src/ThreeViewer.ts`、`packages/three/src/JointVisualizer.ts`、`SC02_PRD/PLAN/QA` | `packages/core/test/connector-design.spec.ts`、`test/sc02-connector-workflow.test.mjs`、`SC02_QA_添加连接_2026-03-11.md` | 首版连接闭环已落地，且已补单场景独立回归基线；完整点/线/面规则矩阵、万向节双叉语义、红蓝双色高亮仍待帮助页级对齐 |
 | `ModifyUnknownConnectors.html` | WP-MB | 未开始 | `plan.md` | - | 尚无明确实现证据 |
 | `BuildMotions.html` | WP-MB | 部分落地 | `createMotion_*` | `RIB-011` `RIB-012` `RIB-013` | 已有基本驱动对象 |
 | `BuildContacts.html` | WP-MB | 部分落地 | `src/panels/CadEditorPanel.ts`、`src/webview/main.ts`、`docs/prd/scenarios/SC01_PRD_添加接触_2026-03-11.md` | `tests/unit/extension/cad-editor-panel.spec.ts` `tests/unit/webview/contact-workflow-source.spec.ts` `docs/qa/plans/SC01_QA_添加接触_2026-03-11.md` | 已具备接触创建、属性、删除、导入导出与入口拦截；严格几何规则与运行级交互自动化仍待补齐 |
