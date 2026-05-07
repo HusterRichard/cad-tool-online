@@ -38,7 +38,7 @@ test('SC02 joint picking supports Ground as part2 and differentiates fast versus
     const source = await readWebviewSource();
     const groundTargetSource = extractFunction(
         source,
-        /function setJointDraftGroundTarget\(\): void \{[\s\S]*?\n\}/,
+        /function setJointDraftGroundTarget\(options: \{ autoFinalize\?: boolean \} = \{\}\): void \{[\s\S]*?\n\}/,
         'setJointDraftGroundTarget implementation'
     );
     const placementSource = extractFunction(
@@ -59,6 +59,39 @@ test('SC02 joint picking supports Ground as part2 and differentiates fast versus
     assert.match(placementSource, /const validation = validateConnectorParticipants\(jointDraft\.part1, jointDraft\.part2\);/);
     assert.match(placementSource, /if \(jointCreationMode === 'fast'\) \{\s*finalizeJointDraft\(\);/);
     assert.match(placementSource, /setStatus\('可调整位置\/方向后点击添加'\);/);
+});
+
+test('SC02 fixed joint can finalize Ground from blank canvas and model tree Ground node', async () => {
+    const source = await readWebviewSource();
+    const groundShortcutSource = extractFunction(
+        source,
+        /function tryFinalizeFixedJointGroundShortcut\(\): boolean \{[\s\S]*?\n\}/,
+        'tryFinalizeFixedJointGroundShortcut implementation'
+    );
+    const canvasClickSource = extractFunction(
+        source,
+        /function handleCanvasClick\(event: MouseEvent\): void \{[\s\S]*?\n\}/,
+        'handleCanvasClick implementation'
+    );
+    const treeNodeSource = extractFunction(
+        source,
+        /function createTreeNode\(nodeData: ModelTreeNode, level: number\): HTMLElement \{[\s\S]*?\n\}/,
+        'createTreeNode implementation'
+    );
+
+    assert.match(groundShortcutSource, /jointDraftPickStage !== 'part2'/);
+    assert.match(groundShortcutSource, /!jointDraft\.part1/);
+    assert.match(groundShortcutSource, /normalizeConnectorType\(jointDraft\.jointType\) !== 'fixed'/);
+    assert.match(groundShortcutSource, /setJointDraftGroundTarget\(\{ autoFinalize: true \}\);/);
+
+    assert.match(
+        canvasClickSource,
+        /if \(!placement\) \{\s*if \(tryFinalizeFixedJointGroundShortcut\(\)\) \{\s*return;\s*\}\s*return;\s*\}/
+    );
+    assert.match(
+        treeNodeSource,
+        /if \(nodeData\.kind === 'ground'\) \{[\s\S]*?tryFinalizeFixedJointGroundShortcut\(\)[\s\S]*?return container;/
+    );
 });
 
 test('SC02 joint finalization persists canonical connector data and keeps continuous creation active', async () => {

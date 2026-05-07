@@ -3942,6 +3942,15 @@ function createTreeNode(nodeData: ModelTreeNode, level: number): HTMLElement {
             handleTreeNodeHoverEnd();
         });
     }
+    if (nodeData.kind === 'ground') {
+        node.addEventListener('click', event => {
+            if (!tryFinalizeFixedJointGroundShortcut()) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    }
 
     if (node.dataset.dropTarget) {
         node.addEventListener('dragover', event => {
@@ -8876,7 +8885,7 @@ function finalizeJointDraft(): boolean {
     return true;
 }
 
-function setJointDraftGroundTarget(): void {
+function setJointDraftGroundTarget(options: { autoFinalize?: boolean } = {}): void {
     if (!jointDraft) {
         return;
     }
@@ -8893,13 +8902,28 @@ function setJointDraftGroundTarget(): void {
     jointDraftPickStage = 'part2';
     recomputeJointDraftPlacement();
     syncJointDraftPreview();
-    if (jointCreationMode === 'fast') {
+    if (options.autoFinalize || jointCreationMode === 'fast') {
         finalizeJointDraft();
         return;
     }
     renderJointOptionsPanel();
     setStatus('可调整位置/方向后点击添加');
     setStatusInfo('零件 2 已设置为 Ground。');
+}
+
+function tryFinalizeFixedJointGroundShortcut(): boolean {
+    if (!jointDraft || canvasInteractionMode !== 'createJoint') {
+        return false;
+    }
+    if (jointDraftPickStage !== 'part2' || !jointDraft.part1) {
+        return false;
+    }
+    syncJointDraftFromInputs();
+    if (normalizeConnectorType(jointDraft.jointType) !== 'fixed') {
+        return false;
+    }
+    setJointDraftGroundTarget({ autoFinalize: true });
+    return true;
 }
 
 function renderJointOptionsPanel(): void {
@@ -8918,7 +8942,9 @@ function renderJointOptionsPanel(): void {
     const stageText = draft.part1
         ? draft.part2
             ? '已完成零件选择，可继续调整参数或连续创建。'
-            : '下一步：在三维视图中拾取零件 2，或使用 Ground。'
+            : normalizeConnectorType(draft.jointType) === 'fixed'
+              ? '下一步：在三维视图中拾取零件 2，或单击空白处 / 模型树 Ground 与大地固定。'
+              : '下一步：在三维视图中拾取零件 2，或使用 Ground。'
         : '下一步：在三维视图中拾取零件 1。';
     const modeRow = `<div class="opt-mode-row">
         <button id="opt-joint-mode-fast" class="${jointCreationMode === 'fast' ? 'opt-mode-btn-active' : 'opt-mode-btn'}">闪电模式</button>
@@ -10896,7 +10922,12 @@ function handleCanvasClick(event: MouseEvent): void {
         enableInference:
             canvasInteractionMode === 'createJoint' ? jointFeatureInferenceEnabled : undefined
     });
-    if (!placement) return;
+    if (!placement) {
+        if (tryFinalizeFixedJointGroundShortcut()) {
+            return;
+        }
+        return;
+    }
 
     let completed = false;
     switch (canvasInteractionMode) {
