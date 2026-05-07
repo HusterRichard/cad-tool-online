@@ -897,6 +897,63 @@ test('motion creation supports Alt plus mouse wheel icon sizing and delete key r
     assert.match(source, /handleMbsAction\('deleteSelection', \{\}\);/);
 });
 
+test('motion creation renders dedicated draft and created viewer shapes without face-pick alerts', async () => {
+    const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
+    const motionVisualizerSource = await readFile(
+        new URL('../packages/three/src/MotionVisualizer.ts', import.meta.url),
+        'utf8'
+    );
+    const threeViewerSource = await readFile(
+        new URL('../packages/three/src/ThreeViewer.ts', import.meta.url),
+        'utf8'
+    );
+    const handleCanvasClickSource = source.match(
+        /function handleCanvasClick\(event: MouseEvent\): void \{[\s\S]*?\n\}/
+    )?.[0];
+
+    assert.ok(handleCanvasClickSource, 'expected to find handleCanvasClick implementation');
+    assert.match(source, /const DRAFT_MOTION_ID = '__draft_motion__';/);
+    assert.match(source, /function buildMotionViewerData\(motion: MbsMotionEntity\): MotionData \| null \{/);
+    assert.match(source, /function buildMotionPreviewData\(draft: MotionDraft\): MotionData \| null \{/);
+    assert.match(source, /function syncMotionEntityToViewer\(id: string\): void \{/);
+    assert.match(source, /function syncMotionDraftPreview\(\): void \{/);
+    assert.match(source, /viewer\?\.removeMotion\(DRAFT_MOTION_ID\);/);
+    assert.match(source, /mbsMotions\.set\(id, motion\);\s*syncMotionEntityToViewer\(id\);/);
+    assert.match(source, /mbsMotions\.delete\(motionId\);\s*viewer\?\.removeMotion\(motionId\);/);
+    assert.match(
+        source,
+        /draft\.connectorRef = joint\.id;\s*motionDraft = draft;\s*syncMotionDraftPreview\(\);/
+    );
+    assert.match(
+        handleCanvasClickSource,
+        /if \(canvasInteractionMode === 'createMotion'\) \{\s*return;\s*\}[\s\S]*const placement = resolveFacePlacement\(event/
+    );
+
+    assert.match(motionVisualizerSource, /export interface MotionData \{/);
+    assert.match(motionVisualizerSource, /motionType: 'translational' \| 'rotational';/);
+    assert.match(motionVisualizerSource, /export class MotionVisualizer \{/);
+    assert.match(motionVisualizerSource, /private static readonly MOTION_CREATED_COLOR = 0xff5559;/);
+    assert.match(motionVisualizerSource, /private createTranslationalMotion\(data: MotionData\): THREE\.Group/);
+    assert.match(motionVisualizerSource, /private createRotationalMotion\(data: MotionData\): THREE\.Group/);
+    assert.match(motionVisualizerSource, /'motion-translational-outline'/);
+    assert.match(motionVisualizerSource, /'motion-rotational-outline'/);
+    assert.match(motionVisualizerSource, /'motion-rotational-head-top'/);
+    assert.match(motionVisualizerSource, /'motion-rotational-head-bottom'/);
+    assert.match(threeViewerSource, /private motionVisualizer: MotionVisualizer;/);
+    assert.match(threeViewerSource, /this\.motionVisualizer = new MotionVisualizer\(this\.scene, options\.motionOptions\);/);
+    assert.match(threeViewerSource, /addMotion\(data: MotionData\): THREE\.Group \{/);
+    assert.match(threeViewerSource, /updateMotion\(data: MotionData\): void \{/);
+    assert.match(threeViewerSource, /removeMotion\(id: string\): void \{/);
+    assert.match(source, /motionType:\s*motion\.motionType/);
+    assert.match(source, /motionType:\s*draft\.motionType/);
+    assert.match(source, /viewer\.addMotion\(preview\);/);
+    assert.match(source, /viewer\.updateMotion\(data\);/);
+    assert.match(source, /viewer\.setMotionVisible\(id, motion\.visible\);/);
+    assert.equal(/function resolveMotionIconPath/.test(source), false);
+    assert.equal(/function resolveMotionIconDimensions/.test(source), false);
+    assert.equal(/motion_cad_translational_body\.svg/.test(source), false);
+});
+
 test('delete selection handles joints alongside motions contacts and design points', async () => {
     const source = await readFile(new URL('../src/webview/main.ts', import.meta.url), 'utf8');
 

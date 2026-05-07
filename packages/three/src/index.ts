@@ -5,4 +5,5 @@ export * from './ThreeViewer';
 export * from './SelectionManager';
 export * from './FrameVisualizer';
 export * from './JointVisualizer';
+export * from './MotionVisualizer';
 export * from './ViewportAxesOverlay';

@@ -2,7 +2,7 @@
 // This file will be bundled by Vite for the WebView
 
 import * as THREE from 'three';
-import { ThreeViewer, type JointData, type MarkerGuideData } from '@cadtool-online/three';
+import { ThreeViewer, type JointData, type MarkerGuideData, type MotionData } from '@cadtool-online/three';
 import {
     MbsJointType,
     OcctWrapper,
@@ -181,6 +181,7 @@ let canvasInteractionMode: CanvasInteractionMode = 'none';
 
 const DRAFT_MARKER_ID = '__draft_marker__';
 const DRAFT_JOINT_ID = '__draft_joint__';
+const DRAFT_MOTION_ID = '__draft_motion__';
 const GROUND_PART_ID = '__ground__';
 const CAD_BODY_DISPLAY_COLOR = '#D4A017';
 const CAD_DARK_COMPONENT_COLOR = '#2B2B2B';
@@ -4445,6 +4446,47 @@ function buildJointPreviewData(draft: JointDraft): JointData {
     };
 }
 
+function buildMotionViewerData(motion: MbsMotionEntity): MotionData | null {
+    const joint = mbsJoints.get(motion.connectorRef);
+    if (!joint) {
+        return null;
+    }
+
+    const size = Math.max(1, motion.iconSize);
+    return {
+        id: motion.id,
+        name: motion.name,
+        motionType: motion.motionType,
+        position: cloneVec3(joint.position),
+        axis: normalizeVector(joint.direction) ?? DEFAULT_CONNECTOR_DIRECTION,
+        size,
+        selected: selectedMotionId === motion.id,
+        displayState: 'created'
+    };
+}
+
+function buildMotionPreviewData(draft: MotionDraft): MotionData | null {
+    if (!draft.connectorRef) {
+        return null;
+    }
+
+    const joint = mbsJoints.get(draft.connectorRef);
+    if (!joint) {
+        return null;
+    }
+
+    const size = Math.max(1, draft.iconSize);
+    return {
+        id: DRAFT_MOTION_ID,
+        name: draft.name,
+        motionType: draft.motionType,
+        position: cloneVec3(joint.position),
+        axis: normalizeVector(joint.direction) ?? DEFAULT_CONNECTOR_DIRECTION,
+        size,
+        displayState: 'draft'
+    };
+}
+
 function showJointPreview(draft: JointDraft): void {
     if (!viewer) {
         return;
@@ -4453,8 +4495,26 @@ function showJointPreview(draft: JointDraft): void {
     viewer.addJoint(buildJointPreviewData(draft));
 }
 
+function showMotionPreview(draft: MotionDraft): void {
+    if (!viewer) {
+        return;
+    }
+
+    const preview = buildMotionPreviewData(draft);
+    if (!preview) {
+        viewer.removeMotion(DRAFT_MOTION_ID);
+        return;
+    }
+
+    viewer.addMotion(preview);
+}
+
 function clearJointDraftPreview(): void {
     viewer?.removeJoint(DRAFT_JOINT_ID);
+}
+
+function clearMotionDraftPreview(): void {
+    viewer?.removeMotion(DRAFT_MOTION_ID);
 }
 
 function syncJointDraftPreview(): void {
@@ -4464,6 +4524,15 @@ function syncJointDraftPreview(): void {
     }
 
     showJointPreview(jointDraft);
+}
+
+function syncMotionDraftPreview(): void {
+    if (!motionDraft?.connectorRef) {
+        clearMotionDraftPreview();
+        return;
+    }
+
+    showMotionPreview(motionDraft);
 }
 
 function syncJointEntityToViewer(id: string): void {
@@ -4478,6 +4547,27 @@ function syncJointEntityToViewer(id: string): void {
     }
 
     viewer.updateJoint(buildJointViewerData(joint));
+}
+
+function syncMotionEntityToViewer(id: string): void {
+    if (!viewer) {
+        return;
+    }
+
+    const motion = mbsMotions.get(id);
+    if (!motion) {
+        viewer.removeMotion(id);
+        return;
+    }
+
+    const data = buildMotionViewerData(motion);
+    if (!data) {
+        viewer.removeMotion(id);
+        return;
+    }
+
+    viewer.updateMotion(data);
+    viewer.setMotionVisible(id, motion.visible);
 }
 
 function renderMarkerPropertiesPanel(markerId: string): void {
@@ -4729,6 +4819,7 @@ function renderMotionPropertiesPanel(motionId: string): void {
         );
         motion.phiStart = Number.parseFloat(phiInput?.value ?? `${motion.phiStart}`) || 0;
         motion.wStart = Number.parseFloat(wInput?.value ?? `${motion.wStart}`) || 0;
+        syncMotionEntityToViewer(motion.id);
         updateModelTree();
         renderMotionPropertiesPanel(motion.id);
     });
@@ -6123,6 +6214,7 @@ function resetCanvasInteraction(): void {
     designPointDraft = null;
     jointDraftPreviewBlockedUntil = 0;
     clearJointDraftPreview();
+    clearMotionDraftPreview();
     jointDraft = null;
     motionDraft = null;
     contactDraft = null;
@@ -6192,6 +6284,9 @@ function clearCadtoolRuntimeEntities(): void {
         });
         mbsJoints.forEach(joint => {
             viewer.removeJoint(joint.id);
+        });
+        mbsMotions.forEach(motion => {
+            viewer.removeMotion(motion.id);
         });
         Array.from(contactVisuals.keys()).forEach(contactId => {
             removeContactVisual(contactId);
@@ -6730,6 +6825,7 @@ function importCadtoolConfig(data: unknown, sourceName?: string): void {
             createdAt: new Date().toISOString()
         };
         mbsMotions.set(motion.id, motion);
+        syncMotionEntityToViewer(motion.id);
         stats.motions += 1;
     });
 
@@ -9177,6 +9273,7 @@ function updateMotionDraftSize(nextValue: number): number {
     if (motionDraft) {
         motionDraft.iconSize = normalized;
     }
+    syncMotionDraftPreview();
     syncMotionSizeInputs(normalized);
     return normalized;
 }
@@ -9272,6 +9369,8 @@ function createMotionFromDraft(): boolean {
     };
 
     mbsMotions.set(id, motion);
+    syncMotionEntityToViewer(id);
+    clearMotionDraftPreview();
     pendingMotionIconSize = motion.iconSize;
     updateModelTree();
     selectSelection({ kind: 'motion', id });
@@ -9304,6 +9403,7 @@ function applyMotionConnectorSelection(jointId: string): void {
         setStatusInfo(
             'Only revolute, prismatic, and cylindrical joints can be used as drive connectors.'
         );
+        syncMotionDraftPreview();
         renderMotionOptionsPanel();
         return;
     }
@@ -9315,11 +9415,13 @@ function applyMotionConnectorSelection(jointId: string): void {
                 ? '请选择转动或圆柱连接来创建旋转驱动。'
                 : '请选择移动或圆柱连接来创建平移驱动。'
         );
+        syncMotionDraftPreview();
         renderMotionOptionsPanel();
         return;
     }
     draft.connectorRef = joint.id;
     motionDraft = draft;
+    syncMotionDraftPreview();
     renderMotionOptionsPanel();
     setStatusInfo(`Drive connector selected: ${joint.name}`);
 
@@ -9349,6 +9451,8 @@ function startMotionCreation(motionTypeRaw: string): void {
     motionCreationPreset = motionType;
     motionCreationMode = 'fast';
     motionDraft = createDefaultMotionDraft(motionType);
+    viewer?.setSelectionEnabled(true);
+    viewer?.setSelectionFilter(id => isJointId(id));
     renderMotionOptionsPanel();
     setStatus('请选择转动/移动连接');
     setStatusInfo('Drive creation mode active');
@@ -9470,6 +9574,12 @@ function renderMotionOptionsPanel(): void {
     document.getElementById('opt-motion-add')?.addEventListener('click', () => {
         createMotionFromDraft();
     });
+
+    if (draft.connectorRef) {
+        syncMotionDraftPreview();
+    } else {
+        clearMotionDraftPreview();
+    }
 }
 
 function createDefaultContactDraft(contactType: ContactType = contactCreationPreset): ContactDraft {
@@ -10060,6 +10170,7 @@ function deleteMotionById(motionId: string): boolean {
     }
     selectedNodeIds.delete(toMotionSelectionKey(motionId));
     mbsMotions.delete(motionId);
+    viewer?.removeMotion(motionId);
     updateModelTree();
     setStatusInfo(`Motion deleted: ${motion.name}`);
     return true;
@@ -10610,8 +10721,32 @@ function handleCanvasPointerMove(event: MouseEvent): void {
         canvasInteractionMode === 'createMarker' && markerCreationPanelActive;
     const jointPlacementActive =
         canvasInteractionMode === 'createJoint' && jointCreationPanelActive;
+    const motionPlacementActive =
+        canvasInteractionMode === 'createMotion' && motionCreationPanelActive;
     const frameEditActive = canvasInteractionMode === 'editFrame' && editingFrameTarget !== null;
-    if (!markerPlacementActive && !jointPlacementActive && !frameEditActive) {
+    if (!markerPlacementActive && !jointPlacementActive && !motionPlacementActive && !frameEditActive) {
+        return;
+    }
+
+    if (motionPlacementActive) {
+        const draft = motionDraft ?? createDefaultMotionDraft();
+        motionDraft = draft;
+        const hoveredId = viewer?.pickSelectableIdAtScreenPoint(event.clientX, event.clientY);
+        const hoveredJoint = hoveredId ? (mbsJoints.get(hoveredId) ?? null) : null;
+        if (
+            hoveredJoint &&
+            isDriveCompatibleJointType(hoveredJoint.jointType) &&
+            isMotionTypeCompatibleWithJoint(draft.motionType, hoveredJoint.jointType)
+        ) {
+            showMotionPreview({
+                ...draft,
+                connectorRef: hoveredJoint.id
+            });
+        } else if (draft.connectorRef) {
+            syncMotionDraftPreview();
+        } else {
+            clearMotionDraftPreview();
+        }
         return;
     }
 
@@ -10917,6 +11052,9 @@ function editFrameFromPlacement(position: Vec3, normal: Vec3): boolean {
  */
 function handleCanvasClick(event: MouseEvent): void {
     if (canvasInteractionMode === 'none') return;
+    if (canvasInteractionMode === 'createMotion') {
+        return;
+    }
 
     const placement = resolveFacePlacement(event, {
         enableInference:

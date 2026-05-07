@@ -26,6 +26,7 @@ import {
 import { ViewportAxesOverlay } from './ViewportAxesOverlay';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
 import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
+import { MotionVisualizer, type MotionData, type MotionVisualizerOptions } from './MotionVisualizer';
 import { RenderFrameBudget } from './RenderFrameBudget';
 
 export type MaterialMode = 'matcap' | 'pbr' | 'flat' | 'phong';
@@ -38,6 +39,7 @@ export interface ThreeViewerOptions {
     selectionOptions?: SelectionOptions;
     frameOptions?: FrameVisualizerOptions;
     jointOptions?: JointVisualizerOptions;
+    motionOptions?: MotionVisualizerOptions;
     materialMode?: MaterialMode;
     visualPreset?: VisualPreset;
     enablePostProcessing?: boolean;
@@ -127,6 +129,7 @@ export class ThreeViewer {
     private selectionManager: SelectionManager | null = null;
     private frameVisualizer: FrameVisualizer;
     private jointVisualizer: JointVisualizer;
+    private motionVisualizer: MotionVisualizer;
     private viewportAxesOverlay: ViewportAxesOverlay;
 
     constructor(container: HTMLElement, options: ThreeViewerOptions = {}) {
@@ -202,11 +205,13 @@ export class ThreeViewer {
             this.selectionManager.onSelectionChange(() => {
                 this.syncFrameSelectionVisuals();
                 this.syncJointSelectionVisuals();
+                this.syncMotionSelectionVisuals();
                 this.updateOutlineTargets();
             });
         }
         this.frameVisualizer = new FrameVisualizer(this.scene, options.frameOptions);
         this.jointVisualizer = new JointVisualizer(this.scene, options.jointOptions);
+        this.motionVisualizer = new MotionVisualizer(this.scene, options.motionOptions);
         this.viewportAxesOverlay = new ViewportAxesOverlay({
             visible: options.showViewportAxes ?? true
         });
@@ -1264,6 +1269,15 @@ export class ThreeViewer {
         });
     }
 
+    private syncMotionSelectionVisuals(): void {
+        this.motionVisualizer.getAllMotionIds().forEach(id => {
+            this.motionVisualizer.setMotionSelected(
+                id,
+                this.selectionManager?.isSelected(id) ?? false
+            );
+        });
+    }
+
     dispose(): void {
         window.removeEventListener('resize', this.onResizeHandler);
         this.controls.removeEventListener('start', this.onControlStartHandler);
@@ -1276,6 +1290,7 @@ export class ThreeViewer {
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();
         this.jointVisualizer.dispose();
+        this.motionVisualizer.dispose();
         this.viewportAxesOverlay.dispose();
 
         this.composer?.dispose();
@@ -1314,6 +1329,7 @@ export class ThreeViewer {
         this.selectionManager?.replaceSelection(ids);
         this.syncFrameSelectionVisuals();
         this.syncJointSelectionVisuals();
+        this.syncMotionSelectionVisuals();
         this.updateOutlineTargets();
     }
 
@@ -1534,6 +1550,52 @@ export class ThreeViewer {
      */
     setAllJointsVisible(visible: boolean): void {
         this.jointVisualizer.setAllJointsVisible(visible);
+        this.requestRender();
+    }
+
+    // ========================================================================
+    // 驱动可视化 API
+    // ========================================================================
+
+    addMotion(data: MotionData): THREE.Group {
+        const group = this.motionVisualizer.addMotion(data);
+        if (!data.id.startsWith('__draft_')) {
+            this.selectionManager?.registerObject(data.id, group);
+        }
+        this.syncMotionSelectionVisuals();
+        this.requestRender();
+        return group;
+    }
+
+    updateMotion(data: MotionData): void {
+        if (!data.id.startsWith('__draft_')) {
+            this.selectionManager?.unregisterObject(data.id);
+        }
+        this.motionVisualizer.updateMotion(data);
+        const group = this.motionVisualizer.getMotion(data.id);
+        if (group && !data.id.startsWith('__draft_')) {
+            this.selectionManager?.registerObject(data.id, group);
+        }
+        this.syncMotionSelectionVisuals();
+        this.requestRender();
+    }
+
+    removeMotion(id: string): void {
+        if (!id.startsWith('__draft_')) {
+            this.selectionManager?.unregisterObject(id);
+        }
+        this.motionVisualizer.removeMotion(id);
+        this.syncMotionSelectionVisuals();
+        this.requestRender();
+    }
+
+    setMotionVisible(id: string, visible: boolean): void {
+        this.motionVisualizer.setMotionVisible(id, visible);
+        this.requestRender();
+    }
+
+    setAllMotionsVisible(visible: boolean): void {
+        this.motionVisualizer.setAllMotionsVisible(visible);
         this.requestRender();
     }
 

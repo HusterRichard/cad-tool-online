@@ -22,6 +22,9 @@ export interface JointData {
     displayState?: 'draft' | 'created';
     currentValue?: number[];
     limits?: { lower: number[]; upper: number[] };
+    iconPath?: string;
+    iconDimensions?: { width: number; height: number };
+    iconPlaneOrientation?: 'default' | 'coaxial';
 }
 
 /**
@@ -56,10 +59,7 @@ export class JointVisualizer {
             iconBaseUrl: options.iconBaseUrl,
             preferSceneIcons: options.preferSceneIcons ?? false
         };
-        this.textureLoader =
-            this.options.iconBaseUrl && typeof document !== 'undefined'
-                ? new THREE.TextureLoader()
-                : null;
+        this.textureLoader = typeof document !== 'undefined' ? new THREE.TextureLoader() : null;
     }
 
     private getJointSize(data: JointData): number {
@@ -164,8 +164,7 @@ export class JointVisualizer {
         return `${this.options.iconBaseUrl}/joint_scene_${connectorType}.svg`;
     }
 
-    private getSceneIconTexture(connectorType: ConnectorTypeValue): THREE.Texture | null {
-        const path = this.getSceneIconPath(connectorType);
+    private getIconTexture(path: string | null): THREE.Texture | null {
         if (!path || !this.textureLoader) {
             return null;
         }
@@ -206,17 +205,16 @@ export class JointVisualizer {
         }
     }
 
-    private createSceneIconJoint(
+    private createTexturedIconJoint(
         data: JointData,
-        connectorType: ConnectorTypeValue
+        path: string,
+        dimensions: { width: number; height: number }
     ): THREE.Group | null {
-        const texture = this.getSceneIconTexture(connectorType);
+        const texture = this.getIconTexture(path);
         if (!texture) {
             return null;
         }
 
-        const size = this.getJointSize(data);
-        const dimensions = this.getSceneIconDimensions(connectorType, size);
         const material = new THREE.MeshBasicMaterial({
             map: texture,
             color: this.resolveStrokeColor(data),
@@ -239,11 +237,46 @@ export class JointVisualizer {
             ),
             'icon'
         );
+        if (data.iconPlaneOrientation === 'coaxial') {
+            plane.rotation.x = Math.PI / 2;
+        }
         plane.renderOrder = 40;
 
         const group = new THREE.Group();
         group.add(plane);
         return group;
+    }
+
+    private createIconJoint(data: JointData): THREE.Group | null {
+        const connectorType = this.resolveConnectorType(data);
+        const iconPath = data.iconPath ?? this.getSceneIconPath(connectorType);
+        if (!data.iconPath || !iconPath) {
+            return null;
+        }
+
+        const size = this.getJointSize(data);
+        return this.createTexturedIconJoint(
+            data,
+            iconPath,
+            data.iconDimensions ?? this.getSceneIconDimensions(connectorType, size)
+        );
+    }
+
+    private createSceneIconJoint(
+        data: JointData,
+        connectorType: ConnectorTypeValue
+    ): THREE.Group | null {
+        const path = this.getSceneIconPath(connectorType);
+        if (!path) {
+            return null;
+        }
+
+        const size = this.getJointSize(data);
+        return this.createTexturedIconJoint(
+            data,
+            path,
+            this.getSceneIconDimensions(connectorType, size)
+        );
     }
 
     private createWireBox(
@@ -736,10 +769,10 @@ export class JointVisualizer {
     private createJointGroup(data: JointData): THREE.Group {
         let group: THREE.Group;
         const connectorType = this.resolveConnectorType(data);
-        const sceneIconGroup = this.createSceneIconJoint(data, connectorType);
+        const iconGroup = this.createIconJoint(data) ?? this.createSceneIconJoint(data, connectorType);
 
-        if (sceneIconGroup) {
-            group = sceneIconGroup;
+        if (iconGroup) {
+            group = iconGroup;
         } else {
             switch (connectorType) {
                 case 'fixed':
@@ -786,7 +819,8 @@ export class JointVisualizer {
             jointType: data.type,
             jointConnectorType: connectorType,
             jointDisplayState: data.displayState ?? 'created',
-            jointSelected: Boolean(data.selected)
+            jointSelected: Boolean(data.selected),
+            selectionAppearance: 'joint'
         };
         this.applySelectionAppearance(group, Boolean(data.selected));
 

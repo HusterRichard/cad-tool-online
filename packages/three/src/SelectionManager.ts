@@ -216,7 +216,10 @@ export class SelectionManager {
     private applyHighlightMaterial(id: string): void {
         const object = this.selectableObjects.get(id);
         if (!object) return;
-        if (object.userData.selectionAppearance === 'frame') {
+        if (
+            object.userData.selectionAppearance === 'frame' ||
+            object.userData.selectionAppearance === 'joint'
+        ) {
             return;
         }
 
@@ -255,7 +258,10 @@ export class SelectionManager {
     private applyHoverMaterial(id: string): void {
         const object = this.selectableObjects.get(id);
         if (!object) return;
-        if (object.userData.selectionAppearance === 'frame') {
+        if (
+            object.userData.selectionAppearance === 'frame' ||
+            object.userData.selectionAppearance === 'joint'
+        ) {
             return;
         }
 
@@ -295,7 +301,10 @@ export class SelectionManager {
         const object = this.selectableObjects.get(id);
         const originalMaterials = this.originalMaterials.get(id);
         if (!object) return;
-        if (object.userData.selectionAppearance === 'frame') {
+        if (
+            object.userData.selectionAppearance === 'frame' ||
+            object.userData.selectionAppearance === 'joint'
+        ) {
             this.originalMaterials.delete(id);
             return;
         }
