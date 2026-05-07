@@ -23,6 +23,7 @@ import {
     type SelectionFilter,
     type SelectionOptions
 } from './SelectionManager';
+import { ViewportAxesOverlay } from './ViewportAxesOverlay';
 import { FrameVisualizer, type FrameData, type FrameVisualizerOptions } from './FrameVisualizer';
 import { JointVisualizer, type JointData, type JointVisualizerOptions } from './JointVisualizer';
 import { RenderFrameBudget } from './RenderFrameBudget';
@@ -42,6 +43,7 @@ export interface ThreeViewerOptions {
     enablePostProcessing?: boolean;
     enableOutline?: boolean;
     useEnvironmentMap?: boolean;
+    showViewportAxes?: boolean;
 }
 
 interface ViewerManagedMaterialState {
@@ -125,6 +127,7 @@ export class ThreeViewer {
     private selectionManager: SelectionManager | null = null;
     private frameVisualizer: FrameVisualizer;
     private jointVisualizer: JointVisualizer;
+    private viewportAxesOverlay: ViewportAxesOverlay;
 
     constructor(container: HTMLElement, options: ThreeViewerOptions = {}) {
         this.container = container;
@@ -163,6 +166,9 @@ export class ThreeViewer {
         // Controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = false;
+        this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+        this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
+        this.controls.mouseButtons.RIGHT = null;
         this.onControlStartHandler = () => {
             this.selectionManager?.setHoverEnabled(false);
             this.requestRender();
@@ -201,6 +207,9 @@ export class ThreeViewer {
         }
         this.frameVisualizer = new FrameVisualizer(this.scene, options.frameOptions);
         this.jointVisualizer = new JointVisualizer(this.scene, options.jointOptions);
+        this.viewportAxesOverlay = new ViewportAxesOverlay({
+            visible: options.showViewportAxes ?? true
+        });
 
         this.animate();
 
@@ -657,6 +666,12 @@ export class ThreeViewer {
         } else {
             this.renderer.render(this.scene, this.camera);
         }
+        this.viewportAxesOverlay.render(
+            this.renderer,
+            this.camera,
+            this.container.clientWidth,
+            this.container.clientHeight
+        );
         const dt = performance.now() - t0;
         if (dt > 30 && t0 - this._lastFrameLog > 1000) {
             this._lastFrameLog = t0;
@@ -1179,6 +1194,11 @@ export class ThreeViewer {
         this.requestRender();
     }
 
+    setViewportAxesVisible(visible: boolean): void {
+        this.viewportAxesOverlay.setVisible(visible);
+        this.requestRender();
+    }
+
     private markSceneBoundsDirty(): void {
         this.sceneBoundsDirty = true;
     }
@@ -1256,6 +1276,7 @@ export class ThreeViewer {
         this.selectionManager?.dispose();
         this.frameVisualizer.dispose();
         this.jointVisualizer.dispose();
+        this.viewportAxesOverlay.dispose();
 
         this.composer?.dispose();
         this.pmremGenerator?.dispose();
