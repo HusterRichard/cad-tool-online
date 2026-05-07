@@ -157,38 +157,6 @@ export class JointVisualizer {
         );
     }
 
-    private createArcArrow(
-        radius: number,
-        startAngle: number,
-        endAngle: number,
-        data: JointData,
-        role: string,
-        arrowSize: number
-    ): THREE.Group {
-        const group = new THREE.Group();
-        group.add(this.createArc(radius, startAngle, endAngle, data, role));
-
-        const direction = endAngle >= startAngle ? 1 : -1;
-        const tip = new THREE.Vector3(Math.cos(endAngle) * radius, Math.sin(endAngle) * radius, 0);
-        const tangent = new THREE.Vector3(
-            -Math.sin(endAngle) * direction,
-            Math.cos(endAngle) * direction,
-            0
-        ).normalize();
-        const inward = tip.clone().normalize().multiplyScalar(-1);
-        const leftWing = tip
-            .clone()
-            .addScaledVector(tangent, -arrowSize)
-            .addScaledVector(inward, arrowSize * 0.55);
-        const rightWing = tip
-            .clone()
-            .addScaledVector(tangent, -arrowSize * 0.22)
-            .addScaledVector(inward, arrowSize * 0.9);
-        group.add(this.createPolyline([leftWing, tip, rightWing], data, `${role}-head`));
-
-        return group;
-    }
-
     private getSceneIconPath(connectorType: ConnectorTypeValue): string | null {
         if (!this.options.iconBaseUrl || !this.options.preferSceneIcons) {
             return null;
@@ -396,61 +364,67 @@ export class JointVisualizer {
         const group = new THREE.Group();
         const size = this.getJointSize(data);
 
-        const body = this.createRectOutline(size * 1.92, size * 1.38, data, 'body');
-        body.position.y = -size * 0.18;
+        const bodyWidth = size * 1.92;
+        const bodyHeight = size * 1.18;
+        const bodyCenterY = -size * 0.18;
+
+        const body = this.attachRole(new THREE.Group(), 'body');
+        body.position.y = bodyCenterY;
+        body.add(this.createRectOutline(bodyWidth, bodyHeight, data, 'body-outline'));
+
+        const keyholeHead = this.createCircle(size * 0.18, data, 'keyhole-head');
+        keyholeHead.position.set(0, size * 0.05, 0);
+        body.add(keyholeHead);
+        body.add(
+            this.createLoop(
+                [
+                    new THREE.Vector3(-size * 0.06, -size * 0.12, 0),
+                    new THREE.Vector3(-size * 0.18, -size * 0.36, 0),
+                    new THREE.Vector3(0, -size * 0.40, 0),
+                    new THREE.Vector3(size * 0.18, -size * 0.36, 0),
+                    new THREE.Vector3(size * 0.06, -size * 0.12, 0)
+                ],
+                data,
+                'keyhole-tail'
+            )
+        );
         group.add(body);
 
-        const shackle = this.createArc(size * 0.62, 0, Math.PI, data, 'shackle');
-        shackle.position.y = size * 0.58;
-        group.add(shackle);
+        const bodyTopY = bodyCenterY + bodyHeight / 2;
+        const shackleOuterRadius = size * 0.60;
+        const shackleInnerRadius = size * 0.42;
+        const shackleCenterY = bodyTopY + size * 0.05;
 
-        group.add(
-            this.createPolyline(
-                [
-                    new THREE.Vector3(-size * 0.62, size * 0.58, 0),
-                    new THREE.Vector3(-size * 0.62, size * 0.1, 0)
-                ],
-                data,
-                'shackle-leg'
-            )
-        );
-        group.add(
-            this.createPolyline(
-                [
-                    new THREE.Vector3(size * 0.62, size * 0.58, 0),
-                    new THREE.Vector3(size * 0.62, size * 0.1, 0)
-                ],
-                data,
-                'shackle-leg'
-            )
-        );
+        const outerArc = this.createArc(shackleOuterRadius, 0, Math.PI, data, 'outer-shackle');
+        outerArc.position.y = shackleCenterY;
+        group.add(outerArc);
 
-        group.add(
-            this.createPolyline(
-                [
-                    new THREE.Vector3(-size * 0.22, size * 0.5, 0),
-                    new THREE.Vector3(-size * 0.22, -size * 0.86, 0)
-                ],
-                data,
-                'body-seam'
-            )
-        );
+        const innerArc = this.createArc(shackleInnerRadius, 0, Math.PI, data, 'inner-shackle');
+        innerArc.position.y = shackleCenterY;
+        group.add(innerArc);
 
-        const keyCircle = this.createCircle(size * 0.2, data, 'keyhole');
-        keyCircle.position.set(size * 0.26, -size * 0.02, 0);
-        group.add(keyCircle);
-        group.add(
-            this.createPolyline(
-                [
-                    new THREE.Vector3(size * 0.26, -size * 0.22, 0),
-                    new THREE.Vector3(size * 0.26, -size * 0.6, 0),
-                    new THREE.Vector3(size * 0.16, -size * 0.74, 0),
-                    new THREE.Vector3(size * 0.36, -size * 0.74, 0)
-                ],
-                data,
-                'key-stem'
-            )
-        );
+        for (const direction of [-1, 1]) {
+            group.add(
+                this.createPolyline(
+                    [
+                        new THREE.Vector3(direction * shackleOuterRadius, shackleCenterY, 0),
+                        new THREE.Vector3(direction * shackleOuterRadius, bodyTopY, 0)
+                    ],
+                    data,
+                    'outer-shackle-leg'
+                )
+            );
+            group.add(
+                this.createPolyline(
+                    [
+                        new THREE.Vector3(direction * shackleInnerRadius, shackleCenterY, 0),
+                        new THREE.Vector3(direction * shackleInnerRadius, bodyTopY, 0)
+                    ],
+                    data,
+                    'inner-shackle-leg'
+                )
+            );
+        }
 
         return group;
     }
@@ -459,46 +433,95 @@ export class JointVisualizer {
         const group = new THREE.Group();
         const size = this.getJointSize(data);
 
-        const plate = this.createRectOutline(size * 2.48, size * 2.48, data, 'plate');
-        plate.rotation.z = Math.PI / 5;
-        group.add(plate);
+        const leaf = this.createLoop(
+            [
+                new THREE.Vector3(-size * 0.5, -size * 1.34, 0),
+                new THREE.Vector3(size * 0.78, -size * 1.18, 0),
+                new THREE.Vector3(size * 0.78, size * 1.32, 0),
+                new THREE.Vector3(-size * 0.5, size * 1.16, 0)
+            ],
+            data,
+            'leaf-outline'
+        );
+        group.add(leaf);
 
         for (const [x, y] of [
-            [-0.78, 0.56],
-            [-0.22, -0.82],
-            [0.8, -0.16],
-            [0.24, 0.84]
+            [-0.18, 0.85],
+            [0.18, 0.92],
+            [0.55, 0.99],
+            [-0.18, -0.99],
+            [0.18, -0.92],
+            [0.55, -0.85]
         ]) {
-            const hole = this.createCircle(size * 0.16, data, 'mount-hole');
+            const hole = this.createCircle(size * 0.085, data, 'leaf-hole');
             hole.position.set(size * x, size * y, 0);
             group.add(hole);
         }
 
-        group.add(
-            this.createArcArrow(
-                size * 0.82,
-                Math.PI * 0.62,
-                Math.PI * 1.32,
-                data,
-                'rotation',
-                size * 0.18
-            )
-        );
-        group.add(
-            this.createArcArrow(
-                size * 0.54,
-                -Math.PI * 0.1,
-                Math.PI * 0.62,
-                data,
-                'rotation',
-                size * 0.14
-            )
-        );
+        const pinStart = new THREE.Vector3(-size * 0.94, -size * 0.13, 0);
+        const pinEnd = new THREE.Vector3(size * 0.94, size * 0.13, 0);
+        group.add(this.createPolyline([pinStart, pinEnd], data, 'hinge-pin'));
 
-        const axisGuide = this.createAxisGuide(size * 1.85, data);
-        if (axisGuide) {
-            group.add(axisGuide);
+        const barrelHalfW = size * 0.13;
+        const barrelHalfH = size * 0.20;
+        for (const t of [0.11, 0.37, 0.63, 0.89]) {
+            const center = pinStart.clone().lerp(pinEnd, t);
+            const barrel = this.createLoop(
+                [
+                    new THREE.Vector3(center.x - barrelHalfW, center.y - barrelHalfH, 0),
+                    new THREE.Vector3(center.x + barrelHalfW, center.y - barrelHalfH, 0),
+                    new THREE.Vector3(center.x + barrelHalfW, center.y + barrelHalfH, 0),
+                    new THREE.Vector3(center.x - barrelHalfW, center.y + barrelHalfH, 0)
+                ],
+                data,
+                'hinge-knuckle'
+            );
+            group.add(barrel);
         }
+
+        const arcCenter = new THREE.Vector3(-size * 0.05, 0, 0);
+        const arcRadius = size * 0.62;
+        const arcStart = Math.PI / 3;
+        const arcEnd = Math.PI * 5 / 3;
+        const arcSegments = 48;
+        const arcPoints: THREE.Vector3[] = [];
+        for (let index = 0; index <= arcSegments; index += 1) {
+            const angle = arcStart + (arcEnd - arcStart) * (index / arcSegments);
+            arcPoints.push(
+                new THREE.Vector3(
+                    arcCenter.x + Math.cos(angle) * arcRadius,
+                    arcCenter.y + Math.sin(angle) * arcRadius,
+                    0
+                )
+            );
+        }
+        group.add(this.createPolyline(arcPoints, data, 'rotation'));
+
+        const tip = arcPoints[arcPoints.length - 1]!.clone();
+        const tangent = new THREE.Vector3(
+            -Math.sin(arcEnd),
+            Math.cos(arcEnd),
+            0
+        ).normalize();
+        const perp = new THREE.Vector3(-tangent.y, tangent.x, 0);
+        const headSize = size * 0.26;
+        group.add(
+            this.createPolyline(
+                [
+                    tip
+                        .clone()
+                        .addScaledVector(tangent, -headSize)
+                        .addScaledVector(perp, headSize * 0.5),
+                    tip,
+                    tip
+                        .clone()
+                        .addScaledVector(tangent, -headSize)
+                        .addScaledVector(perp, -headSize * 0.5)
+                ],
+                data,
+                'rotation-head'
+            )
+        );
 
         return group;
     }
