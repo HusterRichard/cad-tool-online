@@ -92,7 +92,7 @@
 | `ExplodedView.html` | WP-TOOL | 部分落地 | `isExploded` / `explodeDistance` | `WV-009` `WV-010` | 爆炸视图可用 |
 | `SurfaceThickening.html` | WP-TOOL | 部分落地 | `surfaceThicken` | `RIB-018` `RIB-019` | 只有目标选择与状态反馈 |
 | `SaveModel.html` | WP-EXP | 入口级 | 文件组按钮、配置导入导出 | - | 自动保存/另存为/打开保存文件待闭环 |
-| `ToModelicaModel.html` | WP-EXP | 未开始 | `plan.md` | - | 缺少生成与预览主链路 |
+| `ToModelicaModel.html` | WP-EXP | 部分落地 | `src/webview/main.ts` `src/panels/CadEditorPanel.ts` `packages/core/src/modelicaExport.ts` `docs/prd/scenarios/SC36_PRD_生成Modelica模型_2026-05-08.md` | `packages/core/test/modelica-export.spec.ts` `tests/unit/extension/cad-editor-panel.spec.ts` | 已补包名输入、模型包目录、`Visualizers`、`mb.json`；仍缺完整 `package.mo` 与快速预览 |
 
 ## 7. 迭代设计
 

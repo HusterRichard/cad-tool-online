@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
         createWebviewPanel: vi.fn(() => panel),
         showOpenDialog: vi.fn(),
         showSaveDialog: vi.fn(),
+        showInputBox: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
         showErrorMessage: vi.fn(),
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => {
         getConfiguration: vi.fn(),
         configurationGet: vi.fn(),
         existsSync: vi.fn(),
+        mkdirSync: vi.fn(),
         readFileSync: vi.fn(),
         writeFileSync: vi.fn(),
         generateCssVariables: vi.fn(() => ':root {}'),
@@ -67,6 +69,7 @@ vi.mock('vscode', () => ({
         createWebviewPanel: mocks.createWebviewPanel,
         showOpenDialog: mocks.showOpenDialog,
         showSaveDialog: mocks.showSaveDialog,
+        showInputBox: mocks.showInputBox,
         showInformationMessage: mocks.showInformationMessage,
         showWarningMessage: mocks.showWarningMessage,
         showErrorMessage: mocks.showErrorMessage
@@ -89,6 +92,7 @@ vi.mock('vscode', () => ({
 
 vi.mock('fs', () => ({
     existsSync: mocks.existsSync,
+    mkdirSync: mocks.mkdirSync,
     readFileSync: mocks.readFileSync,
     writeFileSync: mocks.writeFileSync
 }));
@@ -109,6 +113,7 @@ describe('CadEditorPanel', () => {
         CadEditorPanel.currentPanel = undefined;
         mocks.showOpenDialog.mockResolvedValue(undefined);
         mocks.showSaveDialog.mockResolvedValue(undefined);
+        mocks.showInputBox.mockResolvedValue(undefined);
         mocks.executeCommand.mockResolvedValue(undefined);
         mocks.getConfiguration.mockReturnValue({ get: mocks.configurationGet });
         mocks.configurationGet.mockImplementation((_key: string, fallback?: string) => fallback);
@@ -171,6 +176,100 @@ describe('CadEditorPanel', () => {
         expect(mocks.showInformationMessage).toHaveBeenCalledWith(
             'CADTool config exported successfully to cadtool.config.json'
         );
+    });
+
+    it('exports the SC36 Modelica package into a package folder with Visualizers assets', async () => {
+        mocks.showInputBox.mockResolvedValue('ExcavatorArm');
+        const packageDir = path.join('C:/workspace', 'ExcavatorArm');
+        const visualizersDir = path.join(packageDir, 'Visualizers');
+
+        await CadEditorPanel.createOrShow({ fsPath: 'C:/extension' } as never);
+        await (
+            CadEditorPanel.currentPanel as unknown as {
+                _handleExportModelicaPackage: (data: unknown) => Promise<void>;
+            }
+        )._handleExportModelicaPackage({
+            suggestedPackageName: 'ExcavatorArm',
+            mbJson: {
+                packageName: 'CadMbsModel',
+                group: [
+                    {
+                        name: 'Base',
+                        totalMass: 12.5,
+                        inertiaTensor: { m: [1, 0, 0, 0, 2, 0, 0, 0, 3] },
+                        imageFile: 'Visualizers/Base.png',
+                        dxfFile: 'Visualizers/Base.dxf'
+                    }
+                ],
+                marker: [],
+                connector: [],
+                motion: []
+            },
+            assets: [
+                {
+                    relativePath: 'Visualizers/Base.png',
+                    encoding: 'base64',
+                    content: Buffer.from('png-bytes').toString('base64')
+                },
+                {
+                    relativePath: 'Visualizers/Base.dxf',
+                    encoding: 'utf8',
+                    content: '0\nEOF\n'
+                }
+            ]
+        });
+
+        expect(mocks.showInputBox).toHaveBeenCalledWith(expect.objectContaining({
+            title: '导出多体模型包',
+            value: 'ExcavatorArm'
+        }));
+        expect(mocks.mkdirSync).toHaveBeenCalledWith(visualizersDir, {
+            recursive: true
+        });
+        expect(mocks.writeFileSync).toHaveBeenCalledWith(
+            path.join(visualizersDir, 'Base.png'),
+            Buffer.from('png-bytes')
+        );
+        expect(mocks.writeFileSync).toHaveBeenCalledWith(
+            path.join(visualizersDir, 'Base.dxf'),
+            '0\nEOF\n',
+            'utf-8'
+        );
+        expect(mocks.writeFileSync).toHaveBeenCalledWith(
+            path.join(packageDir, 'mb.json'),
+            '{\n' +
+                '  "packageName": "ExcavatorArm",\n' +
+                '  "group": [\n' +
+                '    {\n' +
+                '      "name": "Base",\n' +
+                '      "totalMass": 12.5,\n' +
+                '      "inertiaTensor": {\n' +
+                '        "m": [\n' +
+                '          1,\n' +
+                '          0,\n' +
+                '          0,\n' +
+                '          0,\n' +
+                '          2,\n' +
+                '          0,\n' +
+                '          0,\n' +
+                '          0,\n' +
+                '          3\n' +
+                '        ]\n' +
+                '      },\n' +
+                '      "imageFile": "Visualizers/Base.png",\n' +
+                '      "dxfFile": "Visualizers/Base.dxf"\n' +
+                '    }\n' +
+                '  ],\n' +
+                '  "marker": [],\n' +
+                '  "connector": [],\n' +
+                '  "motion": []\n' +
+                '}',
+            'utf-8'
+        );
+        expect(mocks.showInformationMessage).toHaveBeenCalledWith(
+            'Modelica package exported successfully to ExcavatorArm'
+        );
+        expect(mocks.panel.dispose).toHaveBeenCalledTimes(1);
     });
 
     it('loads STEP bytes from disk and forwards them to the webview', async () => {

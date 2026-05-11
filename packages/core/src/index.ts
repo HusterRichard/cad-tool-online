@@ -10,4 +10,5 @@ export * from './connectorDesign';
 export * from './markerSnapGeometry';
 export * from './groupDesign';
 export * from './massAggregation';
+export * from './modelicaExport';
 export * from './cadtoolErrors';

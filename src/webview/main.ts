@@ -11,6 +11,9 @@ import {
 } from '@cadtool-online/geo';
 import type { EdgeData, Mat3, MeshData, Vec3 } from '@cadtool-online/core';
 import {
+    aggregateMassProperties,
+    buildDxfDocument,
+    buildMbJsonDocument,
     buildModelBrowserTree,
     cleanEmptyGroups as cleanEmptyGroupsInState,
     DEFAULT_CONNECTOR_DIRECTION,
@@ -31,6 +34,7 @@ import {
     type CadtoolErrorCode,
     type CadtoolRuntimeNotification,
     type BrowserNamedEntityInput,
+    type MbJsonDocument,
     type MarkerOwnerRef,
     type MbsMarker,
     type ModelBrowserNode
@@ -5576,6 +5580,270 @@ function exportModel(): void {
             text: 'Failed to export model.',
             statusText: 'Export failed',
             statusInfo: 'Model export failed.'
+        });
+    }
+}
+
+interface ModelicaPackageExportAsset {
+    relativePath: string;
+    encoding: 'base64' | 'utf8';
+    content: string;
+}
+
+interface ModelicaPackageExportRequest {
+    suggestedPackageName: string;
+    mbJson: MbJsonDocument;
+    assets: ModelicaPackageExportAsset[];
+}
+
+const EMPTY_PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yF9kAAAAASUVORK5CYII=';
+
+function createZeroInertiaTensor(): Mat3 {
+    return { m: [0, 0, 0, 0, 0, 0, 0, 0, 0] };
+}
+
+function buildExportAssetBaseName(name: string, index: number): string {
+    const fallback = `Group_${index + 1}`;
+    return sanitizeGroupName(name, fallback);
+}
+
+function getSuggestedModelicaPackageName(): string {
+    const preferredRootName =
+        rootShapes[0]?.name ?? Array.from(loadedShapes.values())[0]?.name ?? 'CadMbsModel';
+    return sanitizeGroupName(preferredRootName, 'CadMbsModel');
+}
+
+function collectExportMassSummary(partIds: string[]): {
+    totalMass: number;
+    inertiaTensor: Mat3;
+} {
+    if (!occt || partIds.length === 0) {
+        return {
+            totalMass: 0,
+            inertiaTensor: createZeroInertiaTensor()
+        };
+    }
+
+    const items = partIds
+        .map(partId => {
+            const shape = loadedShapes.get(partId);
+            if (!shape?.shapeId) {
+                return null;
+            }
+            try {
+                if (!occt.hasShape(shape.shapeId)) {
+                    return null;
+                }
+                const massProperties = occt.getMassProperties(
+                    shape.shapeId,
+                    getMaterialDensity(partId)
+                );
+                if (!massProperties) {
+                    return null;
+                }
+                return {
+                    mass: massProperties.mass,
+                    volume: massProperties.volume,
+                    centerOfMass: massProperties.centerOfMass,
+                    inertiaMatrix: massProperties.inertiaMatrix
+                };
+            } catch (error) {
+                console.warn('Failed to collect export mass properties:', error);
+                return null;
+            }
+        })
+        .filter(
+            (
+                item
+            ): item is {
+                mass: number;
+                volume: number;
+                centerOfMass: Vec3;
+                inertiaMatrix: Mat3;
+            } => Boolean(item)
+        );
+
+    const aggregate = aggregateMassProperties(items);
+    if (!aggregate) {
+        return {
+            totalMass: 0,
+            inertiaTensor: createZeroInertiaTensor()
+        };
+    }
+
+    return {
+        totalMass: aggregate.mass,
+        inertiaTensor: aggregate.inertiaMatrix
+    };
+}
+
+function collectGroupEdgeData(partIds: string[]): EdgeData[] {
+    return partIds
+        .map(partId => loadedShapes.get(partId)?.edgeData ?? null)
+        .filter((edgeData): edgeData is EdgeData => Boolean(edgeData && edgeData.vertices.length >= 6));
+}
+
+function extractBase64FromDataUrl(dataUrl: string): string | null {
+    const match = /^data:[^;]+;base64,(.+)$/i.exec(dataUrl);
+    return match?.[1] ?? null;
+}
+
+function waitForAnimationFrames(count: number): Promise<void> {
+    return new Promise(resolve => {
+        const schedule = (remaining: number): void => {
+            if (remaining <= 0) {
+                resolve();
+                return;
+            }
+            requestAnimationFrame(() => schedule(remaining - 1));
+        };
+        schedule(count);
+    });
+}
+
+async function captureGroupPreviewBase64(partIds: string[]): Promise<string> {
+    if (!viewer || partIds.length === 0) {
+        return EMPTY_PNG_BASE64;
+    }
+
+    const targetPartIds = new Set(partIds);
+    const visibilitySnapshot = Array.from(loadedShapes.values())
+        .filter(shape => Boolean(shape.meshId))
+        .map(shape => ({
+            meshId: shape.meshId as string,
+            visible: shape.visible
+        }));
+
+    try {
+        visibilitySnapshot.forEach(entry => {
+            const shapeId = meshIdToShapeId.get(entry.meshId);
+            viewer?.setVisibility(entry.meshId, Boolean(shapeId && targetPartIds.has(shapeId)));
+        });
+        viewer.fitToView();
+        await waitForAnimationFrames(2);
+
+        const renderer = viewer.getRenderer();
+        renderer.render(viewer.getScene(), viewer.getCamera());
+        const base64 = extractBase64FromDataUrl(renderer.domElement.toDataURL('image/png'));
+        return base64 ?? EMPTY_PNG_BASE64;
+    } catch (error) {
+        console.warn('Failed to capture group preview:', error);
+        return EMPTY_PNG_BASE64;
+    } finally {
+        visibilitySnapshot.forEach(entry => {
+            viewer?.setVisibility(entry.meshId, entry.visible);
+        });
+        viewer.fitToView();
+        await waitForAnimationFrames(1);
+    }
+}
+
+async function buildModelicaPackageExportRequest(): Promise<ModelicaPackageExportRequest> {
+    const groups = listGroups();
+    const assets: ModelicaPackageExportAsset[] = [];
+
+    const groupRecords = [];
+    for (const [index, group] of groups.entries()) {
+        const partIds = Array.from(collectGroupPartIdsRecursive(group.id));
+        const assetBaseName = buildExportAssetBaseName(group.name, index);
+        const imageRelativePath = `Visualizers/${assetBaseName}.png`;
+        const dxfRelativePath = `Visualizers/${assetBaseName}.dxf`;
+        const massSummary = collectExportMassSummary(partIds);
+        const previewBase64 = await captureGroupPreviewBase64(partIds);
+        const dxfContent = buildDxfDocument(collectGroupEdgeData(partIds));
+
+        groupRecords.push({
+            name: group.name,
+            totalMass: massSummary.totalMass,
+            inertiaTensor: massSummary.inertiaTensor,
+            imageFile: imageRelativePath,
+            dxfFile: dxfRelativePath
+        });
+        assets.push({
+            relativePath: imageRelativePath,
+            encoding: 'base64',
+            content: previewBase64
+        });
+        assets.push({
+            relativePath: dxfRelativePath,
+            encoding: 'utf8',
+            content: dxfContent
+        });
+    }
+
+    const frameRecords = [
+        ...createdMarkers.map(marker => ({
+            name: marker.name,
+            groupRef: resolveGroupRefName(marker.groupId),
+            position: cloneVec3(marker.position),
+            direction: orientationToDirection(marker.orientation)
+        })),
+        ...Array.from(createdRefFrames.values()).map(refFrame => ({
+            name: refFrame.name,
+            groupRef: resolveGroupRefName(refFrame.groupId),
+            position: cloneVec3(refFrame.position),
+            direction: orientationToDirection(refFrame.orientation)
+        }))
+    ];
+
+    const partOwnerGroupMap = buildPartOwnerGroupMap();
+    const connectorRecords = Array.from(mbsJoints.values()).map(joint => ({
+        name: joint.name,
+        connectorType: normalizeConnectorType(joint.jointType),
+        groupRef1: resolveGroupRefName(partOwnerGroupMap.get(joint.part1) ?? joint.part1),
+        groupRef2: resolveGroupRefName(partOwnerGroupMap.get(joint.part2) ?? joint.part2),
+        position: cloneVec3(joint.position),
+        direction: cloneVec3(joint.direction)
+    }));
+
+    const motionRecords = Array.from(mbsMotions.values()).map(motion => ({
+        name: motion.name,
+        motionType: motion.motionType,
+        connectorRef: mbsJoints.get(motion.connectorRef)?.name ?? motion.connectorRef
+    }));
+
+    return {
+        suggestedPackageName: getSuggestedModelicaPackageName(),
+        mbJson: buildMbJsonDocument({
+            packageName: getSuggestedModelicaPackageName(),
+            group: groupRecords,
+            marker: frameRecords,
+            connector: connectorRecords,
+            motion: motionRecords
+        }),
+        assets
+    };
+}
+
+async function exportModelicaPackage(): Promise<void> {
+    if (rootShapes.length === 0) {
+        vscode.postMessage({
+            command: 'alert',
+            text: 'No model loaded to export.'
+        });
+        return;
+    }
+
+    setStatus('Preparing Modelica package export...');
+
+    try {
+        const exportRequest = await buildModelicaPackageExportRequest();
+        vscode.postMessage({
+            command: 'exportModelicaPackage',
+            data: exportRequest
+        });
+        setStatus('Ready');
+        setStatusInfo(
+            `Prepared SC36 export: groups=${exportRequest.mbJson.group.length}, markers=${exportRequest.mbJson.marker.length}, connectors=${exportRequest.mbJson.connector.length}, motions=${exportRequest.mbJson.motion.length}`
+        );
+    } catch (error) {
+        console.error('Failed to export Modelica package:', error);
+        const detail = error instanceof Error ? error.message : String(error);
+        notifyError('ERR_GENERATE_FILE_FAILED', detail, {
+            text: 'Failed to export Modelica package.',
+            statusText: 'Modelica package export failed',
+            statusInfo: 'Modelica package export failed.'
         });
     }
 }
@@ -11612,8 +11880,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-accept-exit')?.addEventListener('click', () => {
-        exportCadtoolConfig();
-        setStatusInfo('Accepted. You can close the editor.');
+        vscode.postMessage({
+            command: 'prepareModelicaPackageExport',
+            data: {
+                suggestedPackageName: getSuggestedModelicaPackageName()
+            }
+        });
+        void exportModelicaPackage();
     });
 
     document.getElementById('btn-about')?.addEventListener('click', () => {

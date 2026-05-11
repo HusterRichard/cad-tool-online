@@ -15,6 +15,56 @@ type VsCodeApi = {
     setState(state: unknown): void;
 };
 
+type DirectoryPicker = (
+    options?: { mode?: 'read' | 'readwrite' }
+) => Promise<StandaloneDirectoryHandle>;
+
+interface StandaloneWritableFile {
+    write(data: BlobPart): Promise<void>;
+    close(): Promise<void>;
+}
+
+interface StandaloneFileHandle {
+    createWritable(): Promise<StandaloneWritableFile>;
+}
+
+interface StandaloneDirectoryHandle {
+    getDirectoryHandle(
+        name: string,
+        options?: { create?: boolean }
+    ): Promise<StandaloneDirectoryHandle>;
+    getFileHandle(name: string, options?: { create?: boolean }): Promise<StandaloneFileHandle>;
+}
+
+interface ModelicaPackageExportAsset {
+    relativePath: string;
+    encoding: 'base64' | 'utf8';
+    content: string;
+}
+
+interface ModelicaPackageExportPayload {
+    suggestedPackageName: string;
+    mbJson: Record<string, unknown>;
+    assets: ModelicaPackageExportAsset[];
+}
+
+type PreparedStandaloneExportTarget = {
+    packageName: string;
+    exportRoot: StandaloneDirectoryHandle;
+};
+
+type ModelicaPackageExportPreparationResult =
+    | {
+          status: 'ready';
+          target: PreparedStandaloneExportTarget;
+      }
+    | {
+          status: 'cancelled';
+      }
+    | {
+          status: 'failed';
+      };
+
 declare global {
     interface Window {
         __cadtoolStandalone?: {
@@ -23,6 +73,7 @@ declare global {
             loadStepFile(fileName: string, fileContent: ArrayBuffer | Uint8Array): void;
         };
         acquireVsCodeApi?: () => VsCodeApi;
+        showDirectoryPicker?: DirectoryPicker;
     }
 }
 
@@ -33,6 +84,9 @@ let cachedState = readStoredState();
 let webviewReady = false;
 let autoLoadScheduled = false;
 const pendingMessages: Array<Record<string, unknown>> = [];
+let pendingModelicaPackageExportTarget: Promise<ModelicaPackageExportPreparationResult> | null =
+    null;
+let lastStandalonePackageName = 'CadMbsModel';
 const standaloneVsCodeApi = createVsCodeApi();
 
 function readStoredState(): unknown {
@@ -170,6 +224,190 @@ function downloadTextFile(fileName: string, content: string): void {
     anchor.download = fileName;
     anchor.click();
     URL.revokeObjectURL(url);
+}
+
+function sanitizePackageName(name: string, fallback = 'CadMbsModel'): string {
+    const normalized = name.trim().replace(/[^A-Za-z0-9_]/g, '_');
+    if (normalized.length === 0) {
+        return fallback;
+    }
+    return /^[A-Za-z_]/.test(normalized) ? normalized : `_${normalized}`;
+}
+
+function isModelicaPackageExportAsset(value: unknown): value is ModelicaPackageExportAsset {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<ModelicaPackageExportAsset>;
+    return typeof candidate.relativePath === 'string'
+        && (candidate.encoding === 'base64' || candidate.encoding === 'utf8')
+        && typeof candidate.content === 'string';
+}
+
+function isModelicaPackageExportPayload(value: unknown): value is ModelicaPackageExportPayload {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<ModelicaPackageExportPayload>;
+    return typeof candidate.suggestedPackageName === 'string'
+        && Boolean(
+            candidate.mbJson
+                && typeof candidate.mbJson === 'object'
+                && !Array.isArray(candidate.mbJson)
+        )
+        && Array.isArray(candidate.assets)
+        && candidate.assets.every(isModelicaPackageExportAsset);
+}
+
+function normalizeRelativePath(relativePath: string): string[] {
+    const segments = relativePath
+        .replace(/\\/g, '/')
+        .split('/')
+        .map(segment => segment.trim())
+        .filter(segment => segment.length > 0);
+
+    if (
+        segments.length === 0
+        || segments.some(segment => segment === '.' || segment === '..' || segment.includes(':'))
+    ) {
+        throw new Error(`Invalid export path: ${relativePath}`);
+    }
+
+    return segments;
+}
+
+function decodeBase64(base64: string): Uint8Array {
+    const binary = window.atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+}
+
+async function writeRelativeFile(
+    root: StandaloneDirectoryHandle,
+    relativePath: string,
+    content: string | Uint8Array
+): Promise<void> {
+    const segments = normalizeRelativePath(relativePath);
+    let directory = root;
+    for (const segment of segments.slice(0, -1)) {
+        directory = await directory.getDirectoryHandle(segment, { create: true });
+    }
+
+    const fileName = segments[segments.length - 1];
+    const fileHandle = await directory.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+}
+
+async function prepareModelicaPackageExportForStandalone(
+    data: unknown
+): Promise<ModelicaPackageExportPreparationResult> {
+    const defaultPackageName = sanitizePackageName(
+        data
+            && typeof data === 'object'
+            && typeof (data as { suggestedPackageName?: unknown }).suggestedPackageName === 'string'
+            ? (data as { suggestedPackageName: string }).suggestedPackageName
+            : lastStandalonePackageName,
+        'CadMbsModel'
+    );
+    const packageNameInput = window.prompt('请输入模型包名', defaultPackageName);
+    if (packageNameInput === null) {
+        return { status: 'cancelled' };
+    }
+
+    const packageName = sanitizePackageName(packageNameInput, defaultPackageName);
+    const showDirectoryPicker = window.showDirectoryPicker;
+    if (typeof showDirectoryPicker !== 'function') {
+        notify(
+            'error',
+            'Current browser does not support directory export.',
+            'Use a Chromium browser with File System Access API support.'
+        );
+        return { status: 'failed' };
+    }
+
+    try {
+        const exportRootPromise = showDirectoryPicker({ mode: 'readwrite' });
+        const exportRoot = await exportRootPromise;
+        lastStandalonePackageName = packageName;
+        return {
+            status: 'ready',
+            target: {
+                packageName,
+                exportRoot
+            }
+        };
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            return { status: 'cancelled' };
+        }
+
+        notify(
+            'error',
+            'SC36 export failed.',
+            error instanceof Error ? error.message : String(error)
+        );
+        return { status: 'failed' };
+    }
+}
+
+async function exportModelicaPackageFromStandalone(data: unknown): Promise<void> {
+    if (!isModelicaPackageExportPayload(data)) {
+        notify('error', 'SC36 export payload is invalid.');
+        return;
+    }
+
+    const preparedTargetPromise = pendingModelicaPackageExportTarget;
+    pendingModelicaPackageExportTarget = null;
+    if (!preparedTargetPromise) {
+        notify(
+            'error',
+            'SC36 export target is not prepared.',
+            'Click Ribbon > 接受并退出 again to retry.'
+        );
+        return;
+    }
+
+    const preparedTarget = await preparedTargetPromise;
+    if (preparedTarget.status === 'cancelled') {
+        notify('info', '已取消导出。');
+        return;
+    }
+    if (preparedTarget.status === 'failed') {
+        return;
+    }
+
+    try {
+        const { exportRoot, packageName } = preparedTarget.target;
+        const packageDir = await exportRoot.getDirectoryHandle(packageName, { create: true });
+        await packageDir.getDirectoryHandle('Visualizers', { create: true });
+
+        const mbJson = {
+            ...data.mbJson,
+            packageName
+        };
+        await writeRelativeFile(packageDir, 'mb.json', JSON.stringify(mbJson, null, 2));
+
+        for (const asset of data.assets) {
+            const content =
+                asset.encoding === 'base64' ? decodeBase64(asset.content) : asset.content;
+            await writeRelativeFile(packageDir, asset.relativePath, content);
+        }
+
+        notify('info', `SC36 export completed: ${packageName}`);
+    } catch (error) {
+        notify(
+            'error',
+            'SC36 export failed.',
+            error instanceof Error ? error.message : String(error)
+        );
+    }
 }
 
 function pickFile(options: { accept: string; readAs: 'arrayBuffer' | 'text' }): Promise<{
@@ -335,6 +573,14 @@ function handleVsCodeMessage(message: unknown): void {
                     : JSON.stringify(payload.data ?? {}, null, 2)
             );
             notify('info', 'CADTool 配置已导出到浏览器下载目录。');
+            return;
+        case 'prepareModelicaPackageExport':
+            pendingModelicaPackageExportTarget = prepareModelicaPackageExportForStandalone(
+                payload.data
+            );
+            return;
+        case 'exportModelicaPackage':
+            void exportModelicaPackageFromStandalone(payload.data);
             return;
         case 'requestCadtoolConfigImport':
             void importCadtoolConfigFromPicker();

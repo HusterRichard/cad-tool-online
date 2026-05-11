@@ -56,3 +56,23 @@ test('standalone web prepare emits a browser entry that wires the host stub and 
     assert.match(html, /window\.WASM_BASE_URL = "\/dist\/wasm";/);
     assert.match(html, /window\.ICONS_32_BASE = "\/dist\/webview\/icons\/svg\/32";/);
 });
+
+test('standalone SC36 export prepares the target during the click gesture', async () => {
+    const browserHostSourcePath = new URL('../src/standalone/browserHost.ts', import.meta.url);
+    const mainSourcePath = new URL('../src/webview/main.ts', import.meta.url);
+    const [browserHostSource, mainSource] = await Promise.all([
+        readFile(browserHostSourcePath, 'utf8'),
+        readFile(mainSourcePath, 'utf8')
+    ]);
+
+    assert.match(mainSource, /command: 'prepareModelicaPackageExport'/);
+    assert.match(mainSource, /void exportModelicaPackage\(\);/);
+
+    assert.match(browserHostSource, /case 'prepareModelicaPackageExport':/);
+    assert.match(browserHostSource, /pendingModelicaPackageExportTarget/);
+    assert.match(browserHostSource, /await preparedTargetPromise/);
+    assert.match(browserHostSource, /showDirectoryPicker/);
+    assert.match(browserHostSource, /getDirectoryHandle\('Visualizers', \{ create: true \}\)/);
+    assert.match(browserHostSource, /SC36 export completed:/);
+    assert.doesNotMatch(browserHostSource, /does not support SC36 package export yet/);
+});

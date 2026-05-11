@@ -7,12 +7,58 @@ import {
     createCadtoolErrorNotification,
     formatCadtoolNotificationMessage,
     isCadtoolErrorCode,
+    sanitizeGroupName,
     type CadtoolNotificationLevel,
     type CadtoolRuntimeNotification
 } from '@cadtool-online/core';
 
 const STEP_IMPORT_DIRECTORY_SETTING = 'stepImport.defaultDirectory';
 const DEFAULT_STEP_IMPORT_SUBDIRECTORY = path.join('syslab-server', 'sysplorer', 'model');
+
+interface ModelicaPackageExportAsset {
+    relativePath: string;
+    encoding: 'base64' | 'utf8';
+    content: string;
+}
+
+interface ModelicaPackageExportPayload {
+    suggestedPackageName: string;
+    mbJson: Record<string, unknown>;
+    assets: ModelicaPackageExportAsset[];
+}
+
+function isModelicaPackageExportAsset(value: unknown): value is ModelicaPackageExportAsset {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<ModelicaPackageExportAsset>;
+    return typeof candidate.relativePath === 'string'
+        && (candidate.encoding === 'base64' || candidate.encoding === 'utf8')
+        && typeof candidate.content === 'string';
+}
+
+function isModelicaPackageExportPayload(value: unknown): value is ModelicaPackageExportPayload {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<ModelicaPackageExportPayload>;
+    return typeof candidate.suggestedPackageName === 'string'
+        && Boolean(candidate.mbJson && typeof candidate.mbJson === 'object' && !Array.isArray(candidate.mbJson))
+        && Array.isArray(candidate.assets)
+        && candidate.assets.every(isModelicaPackageExportAsset);
+}
+
+function resolvePackageExportPath(packageDir: string, relativePath: string): string {
+    const normalized = path.normalize(relativePath).replace(/^([/\\])+/, '');
+    const baseDir = path.resolve(packageDir);
+    const targetPath = path.resolve(baseDir, normalized);
+    if (targetPath !== baseDir && !targetPath.startsWith(`${baseDir}${path.sep}`)) {
+        throw new Error(`Invalid export path: ${relativePath}`);
+    }
+    return targetPath;
+}
 
 export class CadEditorPanel {
     public static currentPanel: CadEditorPanel | undefined;
@@ -105,6 +151,9 @@ export class CadEditorPanel {
                         return;
                     case 'exportCadtoolConfig':
                         await this._handleExportCadtoolConfig(message.data);
+                        return;
+                    case 'exportModelicaPackage':
+                        await this._handleExportModelicaPackage(message.data);
                         return;
                     case 'requestCadtoolConfigImport':
                         await this._handleImportCadtoolConfig();
@@ -305,6 +354,86 @@ export class CadEditorPanel {
             this._showNotification(createCadtoolErrorNotification('ERR_GENERATE_FILE_FAILED', {
                 detail: error instanceof Error ? error.message : String(error),
                 text: 'Failed to export CADTool config.'
+            }));
+            this._setStatus('Ready');
+        }
+    }
+
+    private async _handleExportModelicaPackage(data: unknown): Promise<void> {
+        if (!isModelicaPackageExportPayload(data)) {
+            this._showNotification(createCadtoolErrorNotification('PARSE_FILE_FAILED', {
+                detail: 'Invalid SC36 export payload.',
+                text: 'Failed to export Modelica package.'
+            }));
+            this._setStatus('Ready');
+            return;
+        }
+
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
+        if (!workspaceRoot) {
+            this._showNotification(createCadtoolErrorNotification('ERR_GENERATE_FILE_FAILED', {
+                detail: 'No workspace folder is open.',
+                text: 'Failed to export Modelica package.'
+            }));
+            this._setStatus('Ready');
+            return;
+        }
+
+        const defaultPackageName = sanitizeGroupName(
+            data.suggestedPackageName,
+            'CadMbsModel'
+        );
+        const packageNameInput = await vscode.window.showInputBox({
+            title: '导出多体模型包',
+            prompt: '输入模型包名（将按 Modelica 命名规则保存）',
+            value: defaultPackageName,
+            validateInput: value => {
+                const normalized = sanitizeGroupName(value, '');
+                return normalized.length > 0 ? null : '请输入有效的模型包名。';
+            }
+        });
+
+        if (packageNameInput === undefined) {
+            this._setStatus('Ready');
+            return;
+        }
+
+        const packageName = sanitizeGroupName(packageNameInput, defaultPackageName);
+        const packageDir = path.join(workspaceRoot, packageName);
+        const visualizersDir = path.join(packageDir, 'Visualizers');
+
+        try {
+            fs.mkdirSync(visualizersDir, { recursive: true });
+
+            for (const asset of data.assets) {
+                const targetPath = resolvePackageExportPath(packageDir, asset.relativePath);
+                fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+                if (asset.encoding === 'base64') {
+                    fs.writeFileSync(targetPath, Buffer.from(asset.content, 'base64'));
+                } else {
+                    fs.writeFileSync(targetPath, asset.content, 'utf-8');
+                }
+            }
+
+            const mbJson = {
+                ...data.mbJson,
+                packageName
+            };
+            fs.writeFileSync(
+                path.join(packageDir, 'mb.json'),
+                JSON.stringify(mbJson, null, 2),
+                'utf-8'
+            );
+
+            vscode.window.showInformationMessage(
+                `Modelica package exported successfully to ${packageName}`
+            );
+            this._setStatus('Ready');
+            this._panel.dispose();
+        } catch (error) {
+            this._showNotification(createCadtoolErrorNotification('ERR_GENERATE_FILE_FAILED', {
+                detail: error instanceof Error ? error.message : String(error),
+                text: 'Failed to export Modelica package.'
             }));
             this._setStatus('Ready');
         }
