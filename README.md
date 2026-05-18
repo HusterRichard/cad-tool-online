@@ -119,6 +119,18 @@ pnpm package           # 生成 VSIX 包
 pnpm setup:git-rules   # 安装提交规则与 commit 模板
 ```
 
+## 开发自检（建议提交前执行）
+
+```bash
+pnpm lint && pnpm test && pnpm build
+```
+
+说明：
+
+- `pnpm lint`：检查 TypeScript / ESLint 规则，尽早发现风格与潜在错误。
+- `pnpm test`：运行包内单测与根目录集成测试。
+- `pnpm build`：验证多包产物可构建，避免提交后出现编译失败。
+
 ## 提交规范
 
 首次克隆仓库后执行一次：
